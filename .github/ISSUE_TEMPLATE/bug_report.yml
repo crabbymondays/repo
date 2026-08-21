@@ -1,0 +1,33 @@
+name: Beta bug report
+description: Report a reproducible curatr beta problem
+title: "[Beta] "
+labels: ["bug", "beta"]
+body:
+  - type: markdown
+    attributes:
+      value: "Please remove API keys, account tokens and device codes before posting logs."
+  - type: input
+    id: versions
+    attributes:
+      label: Kodi, curatr and platform versions
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+

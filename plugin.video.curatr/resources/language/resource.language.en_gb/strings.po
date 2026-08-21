@@ -1,0 +1,617 @@
+# Kodi language file for curatr
+msgid ""
+msgstr ""
+"Project-Id-Version: curatr\n"
+"Language: en_GB\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgctxt "#32010"
+msgid "Linked Accounts"
+msgstr ""
+
+msgctxt "#32011"
+msgid "Connect the accounts curatr can use for your taste, lists and optional movie sources."
+msgstr ""
+
+msgctxt "#32012"
+msgid "Trakt"
+msgstr ""
+
+msgctxt "#32013"
+msgid "Client ID from the Trakt application used by curatr. It is required for Trakt movie lookups."
+msgstr ""
+
+msgctxt "#32014"
+msgid "Trakt Client Secret"
+msgstr ""
+
+msgctxt "#32015"
+msgid "Only needed when curatr itself connects to Trakt for writing lists. Keep this private."
+msgstr ""
+
+msgctxt "#32016"
+msgid "Trakt Redirect URL"
+msgstr ""
+
+msgctxt "#32017"
+msgid "Redirect URI registered for your Trakt app. Leave the default unless your Trakt application uses another value."
+msgstr ""
+
+msgctxt "#32018"
+msgid "Taste data size"
+msgstr ""
+
+msgctxt "#32019"
+msgid "Maximum number of ratings and watched entries kept in the local taste cache. Higher values give more history but use more Trakt requests during a full refresh."
+msgstr ""
+
+msgctxt "#32020"
+msgid "Strong-like rating"
+msgstr ""
+
+msgctxt "#32021"
+msgid "Ratings at or above this value count as particularly strong positive taste signals."
+msgstr ""
+
+msgctxt "#32022"
+msgid "Refresh Trakt taste data after (hours)"
+msgstr ""
+
+msgctxt "#32023"
+msgid "How long the local ratings/watch-history cache can be reused before curatr refreshes it from Trakt when needed."
+msgstr ""
+
+msgctxt "#32024"
+msgid "Trakt connection"
+msgstr ""
+
+msgctxt "#32025"
+msgid "Shows whether curatr is using a linked Trakt account, a public profile, or neither."
+msgstr ""
+
+msgctxt "#32026"
+msgid "Public Trakt username"
+msgstr ""
+
+msgctxt "#32027"
+msgid "Use public ratings/watch data without connecting curatr as another Trakt Community App. Leave blank if you use a full Trakt connection instead."
+msgstr ""
+
+msgctxt "#32028"
+msgid "Save new lists to Trakt by default"
+msgstr ""
+
+msgctxt "#32029"
+msgid "When enabled, new lists start with Trakt copying turned on. Existing lists can be changed individually from List Settings. A linked Trakt account is required for writes."
+msgstr ""
+
+msgctxt "#32030"
+msgid "Connect / Reconnect Trakt"
+msgstr ""
+
+msgctxt "#32031"
+msgid "Link curatr to your Trakt account with the device-code / QR login, or reconnect if authorization has expired."
+msgstr ""
+
+msgctxt "#32040"
+msgid "New List Defaults"
+msgstr ""
+
+msgctxt "#32041"
+msgid "Starting choices for newly created lists. Every list can be adjusted later without affecting the others."
+msgstr ""
+
+msgctxt "#32042"
+msgid "Automatic AI refresh for new lists"
+msgstr ""
+
+msgctxt "#32043"
+msgid "When enabled, a new list periodically re-runs its saved prompt to get fresh movie picks. This works even for Kodi-only lists."
+msgstr ""
+
+msgctxt "#32044"
+msgid "Default AI refresh interval (hours)"
+msgstr ""
+
+msgctxt "#32045"
+msgid "How often new lists should re-run their saved AI prompt by default. Each list can have its own interval."
+msgstr ""
+
+msgctxt "#32046"
+msgid "Automatic Trakt update for new lists"
+msgstr ""
+
+msgctxt "#32047"
+msgid "For new lists saved to Trakt, periodically copy the latest local picks to Trakt. This does not call the AI."
+msgstr ""
+
+msgctxt "#32048"
+msgid "Default Trakt update interval (hours)"
+msgstr ""
+
+msgctxt "#32049"
+msgid "How often a new synced list checks whether its Trakt copy needs updating. Unchanged lists are skipped to save API calls."
+msgstr ""
+
+msgctxt "#32100"
+msgid "AI & Recommendations"
+msgstr ""
+
+msgctxt "#32101"
+msgid "Choose the AI service and model used for your taste profile and movie picks."
+msgstr ""
+
+msgctxt "#32102"
+msgid "AI service"
+msgstr ""
+
+msgctxt "#32103"
+msgid "Choose which supported AI service creates your taste profile and recommendations."
+msgstr ""
+
+msgctxt "#32104"
+msgid "OpenAI"
+msgstr ""
+
+msgctxt "#32105"
+msgid "Google Gemini"
+msgstr ""
+
+msgctxt "#32106"
+msgid "Active AI"
+msgstr ""
+
+msgctxt "#32107"
+msgid "The provider and model currently selected on this Kodi device."
+msgstr ""
+
+msgctxt "#32110"
+msgid "OpenAI API key"
+msgstr ""
+
+msgctxt "#32111"
+msgid "Your OpenAI API key. It is stored in Kodi's local addon settings on this device."
+msgstr ""
+
+msgctxt "#32112"
+msgid "OpenAI model"
+msgstr ""
+
+msgctxt "#32113"
+msgid "Model ID used for taste analysis and recommendations."
+msgstr ""
+
+msgctxt "#32120"
+msgid "Gemini API key"
+msgstr ""
+
+msgctxt "#32121"
+msgid "Your Google Gemini API key. It is stored in Kodi's local addon settings on this device."
+msgstr ""
+
+msgctxt "#32122"
+msgid "Gemini model"
+msgstr ""
+
+msgctxt "#32123"
+msgid "Gemini model ID used for taste analysis and recommendations."
+msgstr ""
+
+msgctxt "#32130"
+msgid "Taste profile status"
+msgstr ""
+
+msgctxt "#32131"
+msgid "Status of the compact AI taste summary reused with your prompts. Full watched/rated IDs remain local for exclusions."
+msgstr ""
+
+msgctxt "#32132"
+msgid "Rebuild taste profile after (hours)"
+msgstr ""
+
+msgctxt "#32133"
+msgid "How long the compact AI taste profile can be reused before it may be rebuilt. It is also rebuilt when the underlying taste data meaningfully changes."
+msgstr ""
+
+msgctxt "#32134"
+msgid "AI usage"
+msgstr ""
+
+msgctxt "#32135"
+msgid "Request and token usage reported by AI calls made by this Kodi profile."
+msgstr ""
+
+msgctxt "#32200"
+msgid "Notifications"
+msgstr ""
+
+msgctxt "#32201"
+msgid "Choose which useful status and error messages appear as Kodi pop-ups. Recent Activity is kept locally either way."
+msgstr ""
+
+msgctxt "#32202"
+msgid "Show notifications"
+msgstr ""
+
+msgctxt "#32203"
+msgid "Show Kodi pop-ups for useful events such as completed list refreshes and Trakt connections."
+msgstr ""
+
+msgctxt "#32204"
+msgid "Show automatic refresh notifications"
+msgstr ""
+
+msgctxt "#32205"
+msgid "Show a notification when scheduled AI refreshes or Trakt updates finish in the background."
+msgstr ""
+
+msgctxt "#32206"
+msgid "Show error notifications"
+msgstr ""
+
+msgctxt "#32207"
+msgid "Show a Kodi error pop-up as well as saving the details to Recent Activity."
+msgstr ""
+
+msgctxt "#32208"
+msgid "Notification duration (seconds)"
+msgstr ""
+
+msgctxt "#32209"
+msgid "How long normal curatr notifications stay visible."
+msgstr ""
+
+msgctxt "#32300"
+msgid "Taste & Data"
+msgstr ""
+
+msgctxt "#32301"
+msgid "Control how much Trakt taste data is cached and how often the reusable AI taste profile is refreshed."
+msgstr ""
+
+msgctxt "#32310"
+msgid "Quick Pick film count"
+msgstr ""
+
+msgctxt "#32311"
+msgid "How many films a Quick Pick mood should generate."
+msgstr ""
+
+msgctxt "#32320"
+msgid "AI refresh"
+msgstr ""
+
+msgctxt "#32321"
+msgid "Trakt copies"
+msgstr ""
+
+msgctxt "#32500"
+msgid "Anthropic Claude"
+msgstr ""
+
+msgctxt "#32501"
+msgid "OpenRouter"
+msgstr ""
+
+msgctxt "#32502"
+msgid "Custom / OpenAI-compatible"
+msgstr ""
+
+msgctxt "#32503"
+msgid "Anthropic API key"
+msgstr ""
+
+msgctxt "#32504"
+msgid "Your Anthropic API key, stored in Kodi's local addon settings on this device."
+msgstr ""
+
+msgctxt "#32505"
+msgid "Claude model"
+msgstr ""
+
+msgctxt "#32506"
+msgid "Anthropic model ID used for taste analysis and recommendations."
+msgstr ""
+
+msgctxt "#32507"
+msgid "OpenRouter API key"
+msgstr ""
+
+msgctxt "#32508"
+msgid "One OpenRouter key can access many supported model families. Charges and limits belong to your OpenRouter account."
+msgstr ""
+
+msgctxt "#32509"
+msgid "OpenRouter model"
+msgstr ""
+
+msgctxt "#32510"
+msgid "Enter the complete OpenRouter model ID, including its provider prefix."
+msgstr ""
+
+msgctxt "#32511"
+msgid "Compatible-provider API key"
+msgstr ""
+
+msgctxt "#32512"
+msgid "API key for an advanced OpenAI Chat Completions-compatible service. It remains local to this Kodi device."
+msgstr ""
+
+msgctxt "#32513"
+msgid "API base URL"
+msgstr ""
+
+msgctxt "#32514"
+msgid "Complete HTTP or HTTPS provider URL. Use only a service or local server you trust."
+msgstr ""
+
+msgctxt "#32515"
+msgid "Model ID"
+msgstr ""
+
+msgctxt "#32516"
+msgid "Exact model identifier expected by the compatible provider."
+msgstr ""
+
+msgctxt "#32520"
+msgid "Metadata"
+msgstr ""
+
+msgctxt "#32521"
+msgid "Optional movie information services that help curatr identify real films and improve matching."
+msgstr ""
+
+msgctxt "#32522"
+msgid "TMDB"
+msgstr ""
+
+msgctxt "#32523"
+msgid "Improve matching with TMDB"
+msgstr ""
+
+msgctxt "#32524"
+msgid "Lets curatr verify and enrich films related to your taste. If TMDB is unavailable, curatr continues normally."
+msgstr ""
+
+msgctxt "#32525"
+msgid "TMDB key or read token"
+msgstr ""
+
+msgctxt "#32526"
+msgid "Your personal TMDB v3 API key or v4 read-access token. It is excluded from curatr backups."
+msgstr ""
+
+msgctxt "#32527"
+msgid "Country / region"
+msgstr ""
+
+msgctxt "#32528"
+msgid "Two-letter region code used for regional TMDB results, for example GB or US."
+msgstr ""
+
+msgctxt "#32529"
+msgid "Check TMDB"
+msgstr ""
+
+msgctxt "#32530"
+msgid "Check the configured TMDB credential without creating or changing a list."
+msgstr ""
+
+msgctxt "#32531"
+msgid "MDBList"
+msgstr ""
+
+msgctxt "#32532"
+msgid "Use films from MDBList"
+msgstr ""
+
+msgctxt "#32533"
+msgid "Adds films from selected lists in your MDBList account as optional recommendation candidates."
+msgstr ""
+
+msgctxt "#32534"
+msgid "MDBList API key"
+msgstr ""
+
+msgctxt "#32535"
+msgid "Used to show movie lists from your MDBList account. It is excluded from curatr backups."
+msgstr ""
+
+msgctxt "#32536"
+msgid "Public MDBList link (optional)"
+msgstr ""
+
+msgctxt "#32537"
+msgid "Optional fallback for a public MDBList list that is not selected from your account."
+msgstr ""
+
+msgctxt "#32538"
+msgid "Check MDBList"
+msgstr ""
+
+msgctxt "#32539"
+msgid "Check that curatr can read your selected account lists or optional public list."
+msgstr ""
+
+msgctxt "#32540"
+msgid "Lists in use"
+msgstr ""
+
+msgctxt "#32541"
+msgid "Shows how many MDBList account lists curatr can currently use."
+msgstr ""
+
+msgctxt "#32542"
+msgid "Choose my MDBList lists"
+msgstr ""
+
+msgctxt "#32543"
+msgid "Select up to eight movie lists from your MDBList account. Results are cached and de-duplicated."
+msgstr ""
+
+# --- Main navigation and first-run UI ---
+
+msgctxt "#32400"
+msgid "Welcome to curatr"
+msgstr ""
+
+msgctxt "#32401"
+msgid "Welcome to curatr. Before creating your first list, choose an AI service and add your own API key. Trakt is optional: a public username can provide taste data, while a full Trakt connection is only needed if curatr should write list copies back to Trakt.\n\nOpen Settings now?"
+msgstr ""
+
+msgctxt "#32402"
+msgid "Open Settings"
+msgstr ""
+
+msgctxt "#32403"
+msgid "Later"
+msgstr ""
+
+msgctxt "#32410"
+msgid "My Lists"
+msgstr ""
+
+msgctxt "#32411"
+msgid "Explore"
+msgstr ""
+
+msgctxt "#32412"
+msgid "Taste & Activity"
+msgstr ""
+
+msgctxt "#32413"
+msgid "Settings"
+msgstr ""
+
+msgctxt "#32414"
+msgid "Create, browse and manage your personalised movie lists."
+msgstr ""
+
+msgctxt "#32415"
+msgid "Quick picks, saved prompts and ready-to-use recommendation views."
+msgstr ""
+
+msgctxt "#32416"
+msgid "Your taste profile, Trakt connection, AI usage and recent activity."
+msgstr ""
+
+msgctxt "#32417"
+msgid "Choose your AI provider, optional movie sources, Trakt setup, defaults and notifications."
+msgstr ""
+
+msgctxt "#32418"
+msgid "Browse My Lists"
+msgstr ""
+
+msgctxt "#32419"
+msgid "Open your saved curatr lists."
+msgstr ""
+
+msgctxt "#32420"
+msgid "Create a New List"
+msgstr ""
+
+msgctxt "#32421"
+msgid "Manage My Lists"
+msgstr ""
+
+msgctxt "#32422"
+msgid "Refresh All Lists with AI"
+msgstr ""
+
+msgctxt "#32423"
+msgid "Backup & Restore"
+msgstr ""
+
+msgctxt "#32424"
+msgid "Describe what you want in ordinary language."
+msgstr ""
+
+msgctxt "#32425"
+msgid "Edit prompts, names, film counts and per-list schedules."
+msgstr ""
+
+msgctxt "#32426"
+msgid "Re-run every saved prompt now and replace each local list with fresh picks."
+msgstr ""
+
+msgctxt "#32427"
+msgid "Back up local lists, saved prompts and hidden-movie choices. API keys and login tokens are excluded."
+msgstr ""
+
+msgctxt "#32430"
+msgid "Quick Pick"
+msgstr ""
+
+msgctxt "#32431"
+msgid "Saved Prompts"
+msgstr ""
+
+msgctxt "#32432"
+msgid "Hidden Movies"
+msgstr ""
+
+msgctxt "#32433"
+msgid "Choose a mood and get a fresh ready-made list without writing a prompt."
+msgstr ""
+
+msgctxt "#32434"
+msgid "Reuse and manage prompts you want to come back to."
+msgstr ""
+
+msgctxt "#32435"
+msgid "Review movies you told curatr never to recommend again."
+msgstr ""
+
+msgctxt "#32440"
+msgid "Update Taste Data from Trakt"
+msgstr ""
+
+msgctxt "#32441"
+msgid "View My Taste Profile"
+msgstr ""
+
+msgctxt "#32442"
+msgid "AI Usage"
+msgstr ""
+
+msgctxt "#32443"
+msgid "Recent Activity"
+msgstr ""
+
+msgctxt "#32444"
+msgid "Check Trakt Connection"
+msgstr ""
+
+msgctxt "#32445"
+msgid "Connect / Reconnect Trakt"
+msgstr ""
+
+msgctxt "#32446"
+msgid "Refresh the ratings and watch-history signals used by your recommendations."
+msgstr ""
+
+msgctxt "#32447"
+msgid "See the compact AI summary used alongside each prompt."
+msgstr ""
+
+msgctxt "#32448"
+msgid "See request and token totals reported by your AI provider."
+msgstr ""
+
+msgctxt "#32449"
+msgid "See recent list refreshes, Trakt updates and errors."
+msgstr ""
+
+msgctxt "#32450"
+msgid "Check the Trakt account or public profile currently in use."
+msgstr ""
+
+msgctxt "#32451"
+msgid "Link curatr to Trakt when you want it to write Trakt lists directly."
+msgstr ""
+
+msgctxt "#32490"
+msgid "Error"
+msgstr ""
