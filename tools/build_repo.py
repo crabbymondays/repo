@@ -41,6 +41,22 @@ def main():
     payload = b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(document, encoding="utf-8") + b"\n"
     (OUTPUT / "addons.xml").write_bytes(payload)
     (OUTPUT / "addons.xml.md5").write_text(hashlib.md5(payload).hexdigest(), encoding="ascii")
+    repository_zip = f"repository.curatr/repository.curatr-{version(ROOT / 'repository.curatr')}.zip"
+    (OUTPUT / "index.html").write_text(
+        "<!doctype html><html><head><meta charset='utf-8'><title>curatr repository</title></head>"
+        "<body><h1>curatr repository</h1>"
+        f"<a href='{repository_zip}'>repository.curatr-{version(ROOT / 'repository.curatr')}.zip</a>"
+        "</body></html>\n",
+        encoding="utf-8",
+    )
+    (OUTPUT / "repository.curatr" / "index.html").write_text(
+        "<!doctype html><html><head><meta charset='utf-8'><title>curatr repository</title></head>"
+        "<body>"
+        f"<a href='repository.curatr-{version(ROOT / 'repository.curatr')}.zip'>"
+        f"repository.curatr-{version(ROOT / 'repository.curatr')}.zip</a>"
+        "</body></html>\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":
