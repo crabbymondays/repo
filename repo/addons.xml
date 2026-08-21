@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addons>
+    <addon id="repository.curatr" name="curatr Repository" version="1.0.0" provider-name="crabbymondays">
+        <extension point="xbmc.addon.repository" name="curatr Repository">
+            <dir>
+                <info compressed="false">https://crabbymondays.github.io/curatr/repo/addons.xml</info>
+                <checksum>https://crabbymondays.github.io/curatr/repo/addons.xml.md5</checksum>
+                <datadir>https://crabbymondays.github.io/curatr/repo/</datadir>
+            </dir>
+        </extension>
+        <extension point="xbmc.addon.metadata">
+            <summary lang="en_GB">Install and update curatr</summary>
+            <description lang="en_GB">The official Kodi repository for curatr beta releases.</description>
+            <platform>all</platform>
+            <license>MIT</license>
+            <assets>
+                <icon>icon.png</icon>
+                <fanart>fanart.jpg</fanart>
+            </assets>
+            <source>https://github.com/crabbymondays/curatr</source>
+            <website>https://github.com/crabbymondays/curatr</website>
+        </extension>
+    </addon>
+    <addon id="plugin.video.curatr" name="curatr" version="0.16.0~beta1" provider-name="crabbymondays">
+        <requires>
+            <import addon="xbmc.python" version="3.0.0" />
+            <import addon="script.module.requests" />
+        </requires>
+        <extension point="xbmc.python.script" library="addon.py">
+            <provides>executable</provides>
+        </extension>
+        <extension point="xbmc.python.pluginsource" library="plugin.py">
+            <provides>video</provides>
+        </extension>
+        <extension point="xbmc.service" library="service.py" />
+        <extension point="xbmc.addon.metadata">
+            <summary lang="en_GB">Personalised AI movie lists for Kodi, shaped by your taste</summary>
+            <description lang="en_GB">Tell curatr what you feel like watching and it blends that request with a generated taste profile to build personalised lists. Refresh lists automatically, reuse saved prompts, hide unwanted recommendations, supports Trakt sync and connection of TMDB, MDBLists and compatible with OpenAI, Gemini, Claude and OpenRouter.</description>
+            <platform>all</platform>
+            <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
+            <license>MIT</license>
+            <assets>
+                <icon>icon.png</icon>
+                <fanart>fanart_centered_v2.jpg</fanart>
+            </assets>
+            <source>https://github.com/crabbymondays/test</source>
+            <website>https://github.com/crabbymondays/test</website>
+            <news>0.16.0~beta1 (2026-08-21)
+- Renames the canonical Kodi add-on ID to plugin.video.curatr.
+- Force-refreshes skin widgets after list creation, editing, refresh, restore or deletion.
+- Adds an optional user-facing description for each list and its widget entry.
+- Removes the curatr logo and wordmark from the in-menu background.
+
+0.15.2 (2026-08-21)
+- Replaces the earlier drawn list artwork with approved generated designs.
+- Adds 17 generated square icons and matching colour and monochrome fanarts.
+- Uses versioned artwork paths to prevent stale Kodi texture-cache results.
+
+0.15.1 (2026-08-21)
+- Keeps the centred branded artwork on Kodi's main add-on page.
+- Adds separate right-aligned in-menu fanart with clear space for Kodi labels.
+- Uses a new menu-art filename to avoid stale Kodi texture-cache results.
+
+0.15.0 (2026-08-21)
+- Adds independent per-list square icons and landscape fanart.
+- Adds bundled genre and person artwork in colour and monochrome styles.
+- Adds optional TMDB and MDBList enrichment plus Claude and OpenRouter support.
+- Organises Trakt/MDBList under Linked Accounts and TMDB under Metadata.
+
+0.14.1
+- Adds clearer settings wording and improved provider configuration guidance.
+
+0.13.3
+- Adds duplicate-aware backup restore and preserves restored-list safety.</news>
+        </extension>
+    </addon>
+</addons>
