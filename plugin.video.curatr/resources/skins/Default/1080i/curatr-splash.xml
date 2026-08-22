@@ -6,7 +6,7 @@
             <width>1920</width>
             <height>1080</height>
             <aspectratio>scale</aspectratio>
-            <texture background="true">special://home/addons/plugin.video.curatr/resources/media/splash_centered.png</texture>
+            <texture background="true">special://home/addons/plugin.video.curatr/resources/media/splash_centered_v2.png</texture>
             <animation effect="fade" time="140">WindowOpen</animation>
             <animation effect="fade" time="180">WindowClose</animation>
         </control>

@@ -137,6 +137,9 @@ plugin://plugin.video.curatr/?action=random&limit=10
 Individual saved lists are also exposed through the plugin interface. Playback is handed to the configured Kodi movie add-on when supported.
 
 Widget Folders are available at `plugin://plugin.video.curatr/?action=folders`.
+External shortcuts can be chosen by browsing installed video add-ons and
+selecting **Choose This Path** on the required page. Kodi Favourites and manual
+`plugin://` entry remain available when an add-on does not expose its folders.
 Each folder has a stable ID-based path suitable for a home-screen widget. Folder
 entries reference existing lists or point directly to an external `plugin://`
 path; curatr does not duplicate or poll the source content, and the feature uses

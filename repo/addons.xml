@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="0.17.0~beta5" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="0.18.0~beta8" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -45,7 +45,21 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>0.17.0~beta5 (2026-08-22)
+            <news>0.18.0~beta8 (2026-08-22)
+- Adds a choice between the original white menu icons and a consistent curatr colour theme.
+- Adds three optional abstract menu backgrounds while keeping the clean background as the default.
+- Updates the splash with the preferred centred curatr design and versioned artwork paths.
+
+0.17.2~beta7 (2026-08-22)
+- Adds an Xbox-friendly browser for choosing pages inside installed video add-ons.
+- Keeps Kodi Favourites and manual plugin paths as fallbacks.
+- Prevents duplicate folder rows by never racing a container refresh against a skin reload.
+
+0.17.1~beta6 (2026-08-22)
+- Adds dedicated Widget Folders and Add Folder menu icons.
+- Makes folder creation a visible one-click action in Widget Folders.
+
+0.17.0~beta5 (2026-08-22)
 - Adds lightweight Widget Folders containing references to existing curatr lists.
 - Adds direct external plugin shortcuts without copying or proxying their content.
 - Gives folders and external shortcuts independent icon, fanart and description choices.

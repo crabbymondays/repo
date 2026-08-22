@@ -615,3 +615,51 @@ msgstr ""
 msgctxt "#32490"
 msgid "Error"
 msgstr ""
+
+msgctxt "#32600"
+msgid "Appearance"
+msgstr ""
+
+msgctxt "#32601"
+msgid "Choose how curatr menus look. These options do not change artwork assigned to your lists."
+msgstr ""
+
+msgctxt "#32602"
+msgid "Menu Icons"
+msgstr ""
+
+msgctxt "#32603"
+msgid "Use the original clean white icons or the curatr colour theme."
+msgstr ""
+
+msgctxt "#32604"
+msgid "Clean White"
+msgstr ""
+
+msgctxt "#32605"
+msgid "curatr Colour"
+msgstr ""
+
+msgctxt "#32606"
+msgid "Menu Background"
+msgstr ""
+
+msgctxt "#32607"
+msgid "Choose the background shown while browsing curatr menus."
+msgstr ""
+
+msgctxt "#32608"
+msgid "Clean"
+msgstr ""
+
+msgctxt "#32609"
+msgid "Deep Blue"
+msgstr ""
+
+msgctxt "#32610"
+msgid "Purple Glow"
+msgstr ""
+
+msgctxt "#32611"
+msgid "Midnight Waves"
+msgstr ""

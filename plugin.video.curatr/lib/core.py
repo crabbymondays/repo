@@ -2207,19 +2207,127 @@ class Curator:
         path = str(value or "").strip()
         return path if path.startswith("plugin://") and "\n" not in path and "\r" not in path and len(path) <= 2048 else ""
 
+    @staticmethod
+    def _kodi_json_rpc(method, params=None):
+        request = {"jsonrpc": "2.0", "id": 1, "method": str(method)}
+        if isinstance(params, dict):
+            request["params"] = params
+        try:
+            response = json.loads(xbmc.executeJSONRPC(json.dumps(request)))
+        except Exception as exc:
+            raise RuntimeError("Kodi could not open the add-on browser: %s" % exc)
+        if not isinstance(response, dict) or response.get("error"):
+            message = ((response.get("error") or {}).get("message") if isinstance(response, dict) else "") or "Kodi returned an error."
+            raise RuntimeError(str(message))
+        return response.get("result") or {}
+
+    def _browse_external_plugin_path(self):
+        """Browse installed video plug-ins using Kodi's own directory API."""
+        result = self._kodi_json_rpc("Addons.GetAddons", {
+            "type": "xbmc.addon.video",
+            "enabled": True,
+            "properties": ["name", "thumbnail", "enabled"],
+        })
+        addons = []
+        for row in result.get("addons", []) if isinstance(result, dict) else []:
+            if not isinstance(row, dict) or row.get("enabled") is False:
+                continue
+            addon_id = str(row.get("addonid") or "").strip()
+            if not addon_id or addon_id == "plugin.video.curatr":
+                continue
+            addons.append({
+                "id": addon_id,
+                "name": str(row.get("name") or addon_id).strip() or addon_id,
+                "thumbnail": str(row.get("thumbnail") or ""),
+            })
+        addons.sort(key=lambda row: row["name"].casefold())
+        if not addons:
+            raise RuntimeError("Kodi did not return any installed video add-ons.")
+        selected = xbmcgui.Dialog().select("Choose a video add-on", [row["name"] for row in addons])
+        if selected < 0:
+            return None
+        chosen = addons[selected]
+        current_path = "plugin://%s/" % chosen["id"]
+        current_name = chosen["name"]
+        current_thumbnail = chosen["thumbnail"]
+        trail = []
+        while True:
+            try:
+                directory = self._kodi_json_rpc("Files.GetDirectory", {
+                    "directory": current_path,
+                    "media": "video",
+                    "properties": ["title", "thumbnail", "fanart"],
+                })
+                children = []
+                for row in directory.get("files", []) if isinstance(directory, dict) else []:
+                    if not isinstance(row, dict) or str(row.get("filetype") or "") != "directory":
+                        continue
+                    path = self._valid_external_plugin_path(row.get("file"))
+                    if not path:
+                        continue
+                    children.append({
+                        "path": path,
+                        "name": str(row.get("label") or row.get("title") or "Folder").strip() or "Folder",
+                        "thumbnail": str(row.get("thumbnail") or row.get("fanart") or ""),
+                    })
+            except Exception as exc:
+                xbmcgui.Dialog().ok(self.name, "This add-on did not make that page available to Kodi's browser.\n\n%s" % exc)
+                if trail:
+                    current_path, current_name, current_thumbnail = trail.pop()
+                    continue
+                return None
+            choices = ["[B]Choose This Path[/B]"] + [row["name"] for row in children]
+            selected = xbmcgui.Dialog().select(current_name, choices)
+            if selected == 0:
+                return current_path, current_name, current_thumbnail
+            if selected < 0:
+                if not trail:
+                    return None
+                current_path, current_name, current_thumbnail = trail.pop()
+                continue
+            child = children[selected - 1]
+            trail.append((current_path, current_name, current_thumbnail))
+            current_path = child["path"]
+            current_name = child["name"]
+            current_thumbnail = child["thumbnail"] or current_thumbnail
+
     def add_external_path_interactive(self, folder_id):
         folder = self.widget_folder_by_id(folder_id)
         if not folder:
             raise RuntimeError("That Widget Folder no longer exists.")
-        path = self._valid_external_plugin_path(xbmcgui.Dialog().input("External plugin path"))
+        method = xbmcgui.Dialog().select("Add an external shortcut", [
+            "Browse installed video add-ons", "Import from Kodi Favourites", "Enter a plugin path manually",
+        ])
+        if method < 0:
+            return folder
+        if method == 1:
+            return self.import_kodi_favourite_interactive(folder_id)
+        suggested_name = ""
+        suggested_thumbnail = ""
+        if method == 0:
+            selected = self._browse_external_plugin_path()
+            if not selected:
+                return folder
+            path, suggested_name, suggested_thumbnail = selected
+        else:
+            path = self._valid_external_plugin_path(xbmcgui.Dialog().input("External plugin path"))
         if not path:
             xbmcgui.Dialog().ok(self.name, "Enter a complete path beginning with plugin://")
             return folder
-        name = xbmcgui.Dialog().input("Shortcut name")
+        existing_paths = {
+            str(row.get("path") or "") for row in folder.get("entries", [])
+            if isinstance(row, dict) and row.get("type") == "external_path"
+        }
+        if path in existing_paths:
+            xbmcgui.Dialog().ok(self.name, "That page is already in this folder.")
+            return folder
+        name = xbmcgui.Dialog().input("Shortcut name", defaultt=suggested_name)
         if not name or not str(name).strip():
             return folder
         description = xbmcgui.Dialog().input("Shortcut description (optional)")
         artwork = normalise_list_art({"icon_mode": "default", "fanart_mode": "default"})
+        if suggested_thumbnail.startswith(("special://", "/", "image://", "http://", "https://")):
+            artwork.update({"icon_mode": "custom", "icon_source": suggested_thumbnail, "icon_label": str(name).strip()})
         if xbmcgui.Dialog().yesno(self.name, "Customise this shortcut's artwork now?"):
             artwork = self._edit_compact_artwork("Shortcut artwork", artwork)
         entry = {
@@ -2336,8 +2444,8 @@ class Curator:
             raise RuntimeError("That Widget Folder no longer exists.")
         while True:
             choices = [
-                "Add a curatr list", "Add an external plugin path", "Import from Kodi Favourites", "Manage folder items",
-                "Name", "Description", "Artwork", "Delete folder",
+                "Add a curatr list", "Add an external shortcut", "Import from Kodi Favourites", "Manage folder items",
+                "Folder Name", "Description", "Artwork", "Delete folder",
             ]
             choice = xbmcgui.Dialog().select(folder.get("name") or "Widget Folder", choices)
             if choice < 0:

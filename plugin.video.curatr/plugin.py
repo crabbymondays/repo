@@ -64,10 +64,24 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
     # Keep navigation glyphs as item icons while every menu entry uses the
     # same restrained global background. Never promote an icon or per-menu
     # image to fanart: many TV skins display that artwork full-screen.
-    icon = _existing_art(icon_name)
-    # Versioned filename prevents Kodi's texture cache from retaining the old
-    # unbranded menu background after the 0.15.1 artwork change.
-    fanart = _existing_art("fanart_menu_clean_v2.jpg")
+    icon_style = str(ADDON.getSetting("menu_icon_style") or "0")
+    background_style = str(ADDON.getSetting("menu_background_style") or "0")
+
+    # Colour icons reuse one fixed image-generated curatr tile and the existing
+    # white glyphs.  This prevents shape, glow and line-spacing drift between
+    # individual menu icons while keeping the original clean theme available.
+    themed_icon = os.path.join("theme_curatr", icon_name) if icon_name and icon_style == "1" else icon_name
+    icon = _existing_art(themed_icon)
+    if not icon and themed_icon != icon_name:
+        icon = _existing_art(icon_name)
+
+    background_names = {
+        "0": "fanart_menu_clean_v2.jpg",
+        "1": "background_1_v2.jpg",
+        "2": "background_2_v2.jpg",
+        "3": "background_3_v2.jpg",
+    }
+    fanart = _existing_art(background_names.get(background_style, background_names["0"]))
 
     if not icon:
         root_icon = os.path.join(ADDON_PATH, "icon.png")
@@ -183,7 +197,7 @@ def _my(curator):
     _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg")
     _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create.png", fanart_name="fanart_create.jpg")
     _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png", fanart_name="fanart_my_lists.jpg")
-    _add_folder("Widget Folders", "folders", "Group curatr lists and direct plugin shortcuts into lightweight, customisable widget folders.", icon_name="menu_templates.png")
+    _add_folder("Widget Folders", "folders", "Group curatr lists and direct plugin shortcuts into lightweight, customisable widget folders.", icon_name="menu_widget_folders.png")
     _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Find fresh recommendations for all your saved lists."), icon_name="menu_refresh.png", fanart_name="fanart_my_lists.jpg")
     _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden movies and Widget Folders."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
@@ -252,9 +266,8 @@ def _lists(curator):
 def _folders(curator):
     xbmcplugin.setPluginCategory(HANDLE, "Widget Folders")
     folders = curator.widget_folders()
-    if not folders:
-        _add_action("Create a Widget Folder", "folders_manage", "Create a lightweight folder for curatr lists and external plugin shortcuts.", icon_name="menu_create.png")
-    else:
+    _add_action("Create a Widget Folder", "folder_create", "Create a lightweight folder for curatr lists and external plugin shortcuts.", icon_name="menu_add_folder.png")
+    if folders:
         for folder in folders:
             folder_id = str(folder.get("id") or "")
             if not folder_id:
@@ -264,7 +277,7 @@ def _folders(curator):
             context = [
                 ("Manage folder", "RunScript(%s,manage_folder,%s)" % (ADDON_ID, folder_id)),
                 ("Add a curatr list", "RunScript(%s,folder_add_list_to,%s)" % (ADDON_ID, folder_id)),
-                ("Add an external path", "RunScript(%s,folder_add_path,%s)" % (ADDON_ID, folder_id)),
+                ("Add an external shortcut", "RunScript(%s,folder_add_path,%s)" % (ADDON_ID, folder_id)),
                 ("Import Kodi Favourite", "RunScript(%s,folder_import_favourite,%s)" % (ADDON_ID, folder_id)),
             ]
             _add_folder(
@@ -334,7 +347,7 @@ def _folder(curator, params):
         elif entry.get("type") == "external_path" and _add_external_shortcut(curator, folder, entry):
             added += 1
     if not added:
-        _add_folder("Manage this folder", "folder_manage", "Add a curatr list or an external plugin path.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
+        _add_folder("Manage this folder", "folder_manage", "Add a curatr list or browse an external add-on path.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -714,6 +727,7 @@ def _run_command(curator, command):
         "update": curator.update_all,
         "manage": curator.manage_lists_interactive,
         "folders_manage": curator.manage_widget_folders_interactive,
+        "folder_create": curator.create_widget_folder_interactive,
         "sync": curator.sync_profile,
         "taste": curator.view_taste_fingerprint,
         "usage": curator.show_ai_usage,
