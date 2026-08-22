@@ -25,6 +25,22 @@ def zip_addon(addon_dir):
                 archive.write(path, Path(addon_dir.name) / path.relative_to(addon_dir))
 
 
+def publish_assets(addon_dir):
+    """Publish metadata artwork beside the ZIP for Kodi repository browsing."""
+    root = ET.parse(addon_dir / "addon.xml").getroot()
+    target_dir = OUTPUT / addon_dir.name
+    for node in root.findall("./extension[@point='xbmc.addon.metadata']/assets/*"):
+        relative = Path((node.text or "").strip())
+        if not relative.parts or relative.is_absolute() or ".." in relative.parts:
+            continue
+        source = addon_dir / relative
+        if not source.is_file():
+            raise FileNotFoundError(f"Missing metadata asset: {source}")
+        destination = target_dir / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+
 def main():
     if OUTPUT.exists():
         shutil.rmtree(OUTPUT)
@@ -33,6 +49,7 @@ def main():
     for addon_dir in ADDONS:
         ET.parse(addon_dir / "addon.xml")
         zip_addon(addon_dir)
+        publish_assets(addon_dir)
         roots.append(ET.parse(addon_dir / "addon.xml").getroot())
     repository_filename = f"repository.curatr-{version(ROOT / 'repository.curatr')}.zip"
     shutil.copy2(

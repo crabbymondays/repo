@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.curatr" name="curatr" version="0.16.0~beta1" provider-name="crabbymondays">
+<addon id="plugin.video.curatr" name="curatr" version="0.16.0~beta2" provider-name="crabbymondays">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.requests"/>
@@ -13,10 +13,13 @@
         <platform>all</platform>
         <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
         <license>MIT</license>
-        <assets><icon>icon.png</icon><fanart>fanart_centered_v2.jpg</fanart></assets>
+        <assets><icon>icon_addon_v2.png</icon><fanart>fanart_addon_v2.jpg</fanart></assets>
         <source>https://github.com/crabbymondays/repo</source>
         <website>https://crabbymondays.github.io/repo/</website>
-        <news>0.16.0~beta1 (2026-08-21)
+        <news>0.16.0~beta2 (2026-08-22)
+- Publishes versioned add-on icon and fanart files for Kodi repository browsing.
+
+0.16.0~beta1 (2026-08-21)
 - Renames the canonical Kodi add-on ID to plugin.video.curatr.
 - Force-refreshes skin widgets after list creation, editing, refresh, restore or deletion.
 - Adds an optional user-facing description for each list and its widget entry.
