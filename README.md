@@ -5,8 +5,8 @@ using the AI provider and optional catalogue accounts selected by the user.
 
 ## Beta installation
 
-1. In Kodi File Manager, add `https://crabbymondays.github.io/curatr/repo/` as a source.
-2. Choose **Add-ons → Install from ZIP file**, open that source and install `repository.curatr-1.0.0.zip`.
+1. In Kodi File Manager, add `https://crabbymondays.github.io/repo/` as a source.
+2. Choose **Add-ons → Install from ZIP file**, open that source and install `repository.curatr-1.0.1.zip`.
 3. Choose **Install from repository → curatr Repository → Video add-ons → curatr**.
 4. Open curatr Settings, select an AI provider and enter its API key.
 5. Add a public Trakt username or connect a Trakt account.
