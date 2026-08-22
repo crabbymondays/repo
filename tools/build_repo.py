@@ -34,6 +34,11 @@ def main():
         ET.parse(addon_dir / "addon.xml")
         zip_addon(addon_dir)
         roots.append(ET.parse(addon_dir / "addon.xml").getroot())
+    repository_filename = f"repository.curatr-{version(ROOT / 'repository.curatr')}.zip"
+    shutil.copy2(
+        OUTPUT / "repository.curatr" / repository_filename,
+        OUTPUT / repository_filename,
+    )
     document = ET.Element("addons")
     for root in roots:
         document.append(root)
@@ -41,11 +46,10 @@ def main():
     payload = b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(document, encoding="utf-8") + b"\n"
     (OUTPUT / "addons.xml").write_bytes(payload)
     (OUTPUT / "addons.xml.md5").write_text(hashlib.md5(payload).hexdigest(), encoding="ascii")
-    repository_zip = f"repository.curatr/repository.curatr-{version(ROOT / 'repository.curatr')}.zip"
     (OUTPUT / "index.html").write_text(
         "<!doctype html><html><head><meta charset='utf-8'><title>curatr repository</title></head>"
         "<body><h1>curatr repository</h1>"
-        f"<a href='{repository_zip}'>repository.curatr-{version(ROOT / 'repository.curatr')}.zip</a>"
+        f"<a href='{repository_filename}'>{repository_filename}</a>"
         "</body></html>\n",
         encoding="utf-8",
     )
