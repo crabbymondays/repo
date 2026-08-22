@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="0.16.1~beta3" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="0.17.0~beta5" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -35,7 +35,7 @@
         <extension point="xbmc.service" library="service.py" />
         <extension point="xbmc.addon.metadata">
             <summary lang="en_GB">Personalised watchlists made from whatever you're in the mood for</summary>
-            <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around your preferences. Create and refresh lists, hide recommendations you do not want, and optionally connect Trakt, TMDB and MDBList. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
+            <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around your preferences. Create and refresh lists, organise lightweight Widget Folders, hide recommendations you do not want, and optionally connect Trakt, TMDB and MDBList. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
             <platform>all</platform>
             <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
             <license>MIT</license>
@@ -45,7 +45,26 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>0.16.1~beta3 (2026-08-22)
+            <news>0.17.0~beta5 (2026-08-22)
+- Adds lightweight Widget Folders containing references to existing curatr lists.
+- Adds direct external plugin shortcuts without copying or proxying their content.
+- Gives folders and external shortcuts independent icon, fanart and description choices.
+- Adds stable per-folder widget paths, ordering, safe stale-reference handling and backup support.
+- Uses no AI, Trakt, TMDB or background polling for Widget Folders.
+
+0.16.0~beta4 (2026-08-22)
+- Keeps every AI provider visible while greying out settings for providers that are not selected.
+- Accepts copied TMDB read tokens with optional Bearer text, quotes or line wrapping.
+- Clarifies that Settings must be saved before checking a newly entered TMDB credential.
+- Shows Fanart Style only when Automatic or bundled curatr fanart is selected.
+- Shows the selected film or person name instead of technical Item/Person artwork labels.
+- Adds one-time matching between corresponding icon and fanart selections, including custom images.
+- Stops list creation cleanly when required dialogs are cancelled and confirms before spending AI tokens.
+- Completes Kodi directory handling before refreshing widgets to reduce skin flicker and instability.
+- Prevents background updates or active dialogs from forcing a full skin reload.
+- Ensures generated repository ZIPs are not excluded from Git commits.
+
+0.16.0~beta3 (2026-08-22)
 - Makes menus, settings, descriptions and setup messages clearer and more consistent.
 - Uses Preferences throughout the interface while leaving stable internal state unchanged.
 - Adds friendly per-list refresh and Trakt sync interval choices.

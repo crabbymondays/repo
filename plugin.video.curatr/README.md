@@ -20,6 +20,7 @@ Kodi's main add-on page keeps the centred curatr artwork. Inside the add-on, all
 - Use Quick Pick moods and Saved Prompts.
 - Browse All Picks, Latest Picks and a stable daily Surprise Me selection.
 - Expose widget-friendly Kodi plugin views.
+- Group existing lists and direct external plugin shortcuts into lightweight Widget Folders.
 - Give each saved list independent square-icon and landscape-fanart choices.
 - Back up local lists, prompts and hidden-movie choices.
 
@@ -113,6 +114,10 @@ AI refresh and Trakt update schedules are independent: an AI refresh changes the
 
 curatr stores its state in Kodi's addon profile. AI API keys and Trakt login tokens live in Kodi settings/state on the device. The backup feature deliberately excludes AI API keys, Trakt login tokens and remote Trakt list IDs.
 
+Widget Folder backups include direct external plugin paths. These normally
+contain navigation parameters rather than credentials, but users should review
+a backup before sharing it publicly.
+
 When curatr calls the AI provider you configured, it sends the recommendation prompt together with compact preference information and optional grounded candidate records needed to create recommendations. Your selected provider's terms and privacy policy apply. API keys for every AI and movie-source service are excluded from curatr backups and activity messages.
 
 ## Backup and restore
@@ -130,6 +135,13 @@ plugin://plugin.video.curatr/?action=random&limit=10
 ```
 
 Individual saved lists are also exposed through the plugin interface. Playback is handed to the configured Kodi movie add-on when supported.
+
+Widget Folders are available at `plugin://plugin.video.curatr/?action=folders`.
+Each folder has a stable ID-based path suitable for a home-screen widget. Folder
+entries reference existing lists or point directly to an external `plugin://`
+path; curatr does not duplicate or poll the source content, and the feature uses
+no AI tokens. External plugin pages can be entered directly or imported from
+Kodi Favourites.
 
 ## Troubleshooting
 

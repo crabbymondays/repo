@@ -33,6 +33,23 @@ def main():
             curator.update_all()
         elif action == "manage":
             curator.manage_lists_interactive()
+        elif action == "folders":
+            curator.manage_widget_folders_interactive()
+        elif action == "manage_folder":
+            curator.manage_widget_folder_interactive(argument)
+        elif action == "folder_add_list":
+            curator.add_list_to_widget_folder_interactive(list_id=argument)
+        elif action == "folder_add_list_to":
+            curator.add_list_to_widget_folder_interactive(folder_id=argument)
+        elif action == "folder_add_path":
+            curator.add_external_path_interactive(argument)
+        elif action == "folder_import_favourite":
+            curator.import_kodi_favourite_interactive(argument)
+        elif action == "folder_edit_entry":
+            folder_id, separator, entry_id = argument.partition("|")
+            if not separator or not folder_id or not entry_id:
+                raise RuntimeError("That Widget Folder item is not valid.")
+            curator.edit_widget_folder_entry_interactive(folder_id, entry_id)
         elif action == "refresh_list":
             curator.refresh_list(argument)
         elif action == "edit_list":

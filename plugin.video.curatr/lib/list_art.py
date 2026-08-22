@@ -3,6 +3,8 @@ import re
 
 import xbmcvfs
 
+from .art_cache import ArtworkCache
+
 
 CHOICES = (
     ("action", "Action"), ("comedy", "Comedy"), ("crime", "Crime"),
@@ -54,9 +56,11 @@ def default_state():
         "icon_mode": "auto",
         "icon_key": "",
         "icon_source": "",
+        "icon_label": "",
         "fanart_mode": "auto",
         "fanart_key": "",
         "fanart_source": "",
+        "fanart_label": "",
         "fanart_style": "colour",
     }
 
@@ -116,10 +120,36 @@ def summary(record):
     record = record if isinstance(record, dict) else {}
     state = normalise_state(record.get("artwork"))
     automatic = suggest_key(record.get("name"), record.get("prompt"))
-    icon = "Automatic (%s)" % label(automatic) if state["icon_mode"] == "auto" else (
-        label(state["icon_key"]) if state["icon_mode"] == "bundled" else state["icon_mode"].title()
-    )
-    fanart = "Automatic (%s)" % label(automatic) if state["fanart_mode"] == "auto" else (
-        label(state["fanart_key"]) if state["fanart_mode"] == "bundled" else state["fanart_mode"].replace("_", " ").title()
-    )
+    if state["icon_mode"] == "auto":
+        icon = "Automatic (%s)" % label(automatic)
+    elif state["icon_mode"] == "bundled":
+        icon = label(state["icon_key"])
+    elif state["icon_mode"] == "custom" and state["icon_label"]:
+        icon = state["icon_label"]
+    else:
+        icon = state["icon_mode"].title()
+    if state["fanart_mode"] == "auto":
+        fanart = "Automatic (%s)" % label(automatic)
+    elif state["fanart_mode"] == "bundled":
+        fanart = label(state["fanart_key"])
+    elif state["fanart_mode"] in ("item", "person", "custom") and state["fanart_label"]:
+        fanart = state["fanart_label"]
+    elif state["fanart_mode"] == "item":
+        # Older saved lists predate fanart_label. Recover the film name by
+        # matching the stored source against artwork already in the record.
+        fanart = "Film artwork"
+        for movie in record.get("movies", []) if isinstance(record.get("movies"), list) else []:
+            if not isinstance(movie, dict):
+                continue
+            if ArtworkCache._first_image(movie, "fanart") != state["fanart_source"]:
+                continue
+            fanart = "%s%s" % (
+                movie.get("title") or "Film artwork",
+                " (%s)" % movie.get("year") if movie.get("year") else "",
+            )
+            break
+    elif state["fanart_mode"] == "person":
+        fanart = "Person artwork"
+    else:
+        fanart = state["fanart_mode"].replace("_", " ").title()
     return icon, fanart, state["fanart_style"].title()

@@ -34,7 +34,10 @@ while not monitor.abortRequested():
             worker = Curator(addon, update_status=False)
             before = list_signature(worker.state)
             worker.run_auto_update()
-            refresh_if_changed(before, worker.state)
+            # Never reload a user's skin from the background service. Kodi and
+            # the skin can update widgets on their normal cycle; interactive
+            # list changes still request an immediate guarded reload.
+            refresh_if_changed(before, worker.state, reload_skin=False)
     except Exception as exc:
         xbmc.log("curatr service error: %s" % exc, xbmc.LOGERROR)
         try:

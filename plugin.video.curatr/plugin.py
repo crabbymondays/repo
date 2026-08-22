@@ -145,7 +145,7 @@ def _record_art(curator, record):
                 continue
             if source.startswith("https://") or source.startswith("http://"):
                 source = cache._download(source)
-            if source and (source.startswith("special://") or xbmcvfs.exists(source)):
+            if source and (source.startswith(("special://", "image://")) or xbmcvfs.exists(source)):
                 resolved[key] = source
         return resolved
     except Exception as exc:
@@ -183,8 +183,9 @@ def _my(curator):
     _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg")
     _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create.png", fanart_name="fanart_create.jpg")
     _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png", fanart_name="fanart_my_lists.jpg")
+    _add_folder("Widget Folders", "folders", "Group curatr lists and direct plugin shortcuts into lightweight, customisable widget folders.", icon_name="menu_templates.png")
     _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Find fresh recommendations for all your saved lists."), icon_name="menu_refresh.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts and hidden movies."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
+    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden movies and Widget Folders."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -233,6 +234,7 @@ def _lists(curator):
                 ("Refresh this list", "RunPlugin(%s)" % refresh_url),
                 ("List settings", "RunPlugin(%s)" % edit_url),
                 ("Artwork", "RunPlugin(%s)" % artwork_url),
+                ("Add to Widget Folder", "RunScript(%s,folder_add_list,%s)" % (ADDON_ID, local_id)),
                 ("Delete this list", "RunPlugin(%s)" % delete_url),
             ]
             if record.get("sync_to_trakt"):
@@ -244,6 +246,95 @@ def _lists(curator):
                 art=_record_art(curator, record),
                 list_id=local_id, name=name
             )
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+
+
+def _folders(curator):
+    xbmcplugin.setPluginCategory(HANDLE, "Widget Folders")
+    folders = curator.widget_folders()
+    if not folders:
+        _add_action("Create a Widget Folder", "folders_manage", "Create a lightweight folder for curatr lists and external plugin shortcuts.", icon_name="menu_create.png")
+    else:
+        for folder in folders:
+            folder_id = str(folder.get("id") or "")
+            if not folder_id:
+                continue
+            name = str(folder.get("name") or "Widget Folder")
+            plot = str(folder.get("description") or "").strip() or "A custom curatr Widget Folder."
+            context = [
+                ("Manage folder", "RunScript(%s,manage_folder,%s)" % (ADDON_ID, folder_id)),
+                ("Add a curatr list", "RunScript(%s,folder_add_list_to,%s)" % (ADDON_ID, folder_id)),
+                ("Add an external path", "RunScript(%s,folder_add_path,%s)" % (ADDON_ID, folder_id)),
+                ("Import Kodi Favourite", "RunScript(%s,folder_import_favourite,%s)" % (ADDON_ID, folder_id)),
+            ]
+            _add_folder(
+                name, "folder", plot=plot, context_items=context,
+                art=_record_art(curator, folder), folder_id=folder_id,
+            )
+        _add_action("Manage Widget Folders", "folders_manage", "Create, edit, reorder or delete Widget Folders.", icon_name="menu_manage.png")
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+
+
+def _add_external_shortcut(curator, folder, entry):
+    path = curator._valid_external_plugin_path(entry.get("path"))
+    if not path:
+        return False
+    name = str(entry.get("name") or "External Shortcut")
+    plot = str(entry.get("description") or "").strip() or "Opens the original Kodi add-on path directly."
+    item = xbmcgui.ListItem(label=name, offscreen=True)
+    try:
+        item.setInfo("video", {"title": name, "plot": plot})
+    except Exception:
+        pass
+    try:
+        item.setArt(_record_art(curator, entry))
+    except Exception:
+        pass
+    folder_id = str(folder.get("id") or "")
+    entry_id = str(entry.get("id") or "")
+    external_addon_id = path[len("plugin://"):].split("/", 1)[0].split("?", 1)[0]
+    try:
+        available = bool(external_addon_id and xbmc.getCondVisibility("System.HasAddon(%s)" % external_addon_id))
+    except Exception:
+        available = True
+    try:
+        item.addContextMenuItems([
+            ("Edit shortcut", "RunScript(%s,folder_edit_entry,%s|%s)" % (ADDON_ID, folder_id, entry_id)),
+            ("Manage folder", "RunScript(%s,manage_folder,%s)" % (ADDON_ID, folder_id)),
+        ])
+    except Exception:
+        pass
+    target = path if available else _url(action="external_missing", addon_id=external_addon_id, name=name)
+    return bool(xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=True))
+
+
+def _folder(curator, params):
+    folder = curator.widget_folder_by_id(params.get("folder_id"))
+    if not folder:
+        raise RuntimeError("That Widget Folder no longer exists.")
+    xbmcplugin.setPluginCategory(HANDLE, str(folder.get("name") or "Widget Folder"))
+    added = 0
+    for entry in folder.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") == "curatr_list":
+            record = curator._managed_record_by_id(entry.get("list_id"))
+            if not record:
+                continue
+            local_id = curator._record_key(record)
+            name = str(record.get("name") or "curatr list")
+            plot = str(record.get("description") or "").strip() or "A personalised curatr list."
+            edit_argument = "%s|%s" % (folder.get("id"), entry.get("id"))
+            context = [
+                ("List settings", "RunPlugin(%s)" % _url(action="edit_list", list_id=local_id)),
+                ("Manage folder item", "RunScript(%s,folder_edit_entry,%s)" % (ADDON_ID, edit_argument)),
+            ]
+            _add_folder(name, "list", plot=plot, context_items=context, art=_record_art(curator, record), list_id=local_id, name=name)
+            added += 1
+        elif entry.get("type") == "external_path" and _add_external_shortcut(curator, folder, entry):
+            added += 1
+    if not added:
+        _add_folder("Manage this folder", "folder_manage", "Add a curatr list or an external plugin path.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -622,6 +713,7 @@ def _run_command(curator, command):
         "backup": curator.backup_menu_interactive,
         "update": curator.update_all,
         "manage": curator.manage_lists_interactive,
+        "folders_manage": curator.manage_widget_folders_interactive,
         "sync": curator.sync_profile,
         "taste": curator.view_taste_fingerprint,
         "usage": curator.show_ai_usage,
@@ -634,8 +726,8 @@ def _run_command(curator, command):
         raise RuntimeError("Unknown addon action: %s" % command)
     before = list_signature(curator.state)
     function()
-    refresh_if_changed(before, curator.state)
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+    refresh_if_changed(before, curator.state)
 
 
 def _info(curator, params):
@@ -682,6 +774,19 @@ def main():
             _taste_activity(curator)
         elif action == "lists":
             _lists(curator)
+        elif action == "folders":
+            _folders(curator)
+        elif action == "folder":
+            _folder(curator, params)
+        elif action == "folder_manage":
+            curator.manage_widget_folder_interactive(params.get("folder_id") or "")
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
+        elif action == "external_missing":
+            xbmcgui.Dialog().ok(NAME, "The add-on used by '%s' is not currently installed or enabled.\n\n%s" % (
+                params.get("name") or "this shortcut", params.get("addon_id") or "Unknown add-on",
+            ))
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "list":
             _single_list(curator, params)
         elif action == "all":
@@ -695,35 +800,35 @@ def main():
         elif action == "refresh_list":
             list_id = params.get("list_id") or params.get("trakt_id") or ""
             curator.refresh_list(list_id, silent=False)
-            refresh_if_changed(before, curator.state)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "edit_list":
             list_id = params.get("list_id") or params.get("trakt_id") or ""
             curator.edit_list_interactive(list_id)
-            refresh_if_changed(before, curator.state)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "artwork_list":
             list_id = params.get("list_id") or params.get("trakt_id") or ""
             curator.list_artwork_interactive(list_id)
-            refresh_if_changed(before, curator.state)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "sync_list":
             list_id = params.get("list_id") or params.get("trakt_id") or ""
             curator.sync_list_to_trakt(list_id, silent=False)
-            refresh_if_changed(before, curator.state)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "delete_list":
             list_id = params.get("list_id") or params.get("trakt_id") or ""
             curator.delete_list_interactive(list_id)
-            refresh_if_changed(before, curator.state)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "why":
             curator.why_recommended(params.get("list_id") or "", params.get("trakt_id") or "", params.get("title") or "", _safe_int(params.get("year"), 0))
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "hide":
             curator.hide_movie(params.get("trakt_id") or "", params.get("title") or "", _safe_int(params.get("year"), 0), confirm=True)
-            refresh_if_changed(before, curator.state)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "info":
             _info(curator, params)
         else:

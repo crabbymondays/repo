@@ -379,7 +379,7 @@ msgid "TMDB key or read token"
 msgstr ""
 
 msgctxt "#32526"
-msgid "Your personal TMDB v3 API key or v4 read-access token. It is excluded from curatr backups."
+msgid "Enter either one TMDB v3 API key or one API Read Access Token, without the word Bearer. Press OK to save Settings before using Check TMDB."
 msgstr ""
 
 msgctxt "#32527"
@@ -395,7 +395,7 @@ msgid "Check TMDB"
 msgstr ""
 
 msgctxt "#32530"
-msgid "Check the configured TMDB credential without creating or changing a list."
+msgid "Check the saved TMDB credential without creating or changing a list. Save and reopen Settings first if you have just entered it."
 msgstr ""
 
 msgctxt "#32531"
@@ -537,7 +537,7 @@ msgid "Find fresh recommendations for all your saved lists."
 msgstr ""
 
 msgctxt "#32427"
-msgid "Save or restore a backup of your lists, prompts and hidden movies."
+msgid "Save or restore a backup of your lists, prompts, hidden movies and Widget Folders."
 msgstr ""
 
 msgctxt "#32430"

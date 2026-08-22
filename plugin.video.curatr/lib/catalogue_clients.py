@@ -11,17 +11,26 @@ class TMDBClient:
     BASE_URL = "https://api.themoviedb.org/3"
 
     def __init__(self, api_key, region="GB", session=None, user_agent=None):
-        self.api_key = str(api_key or "").strip()
+        self.api_key = self._normalise_credential(api_key)
         self.region = (str(region or "GB").strip().upper() or "GB")[:2]
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": user_agent or "curatr"})
+
+    @staticmethod
+    def _normalise_credential(value):
+        """Accept copied v3 keys and v4 read tokens without storing auth syntax."""
+        credential = str(value or "").strip().strip('"\'')
+        if credential.lower().startswith("bearer "):
+            credential = credential[7:].strip()
+        # Copying from a wrapped browser field can introduce harmless line breaks.
+        return "".join(credential.split())
 
     def _get(self, path, params=None):
         if not self.api_key:
             raise CatalogueError("Add your TMDB API key under Metadata in Settings first.")
         query = dict(params or {})
         headers = {"Accept": "application/json"}
-        if self.api_key.startswith("eyJ"):
+        if self.api_key.startswith("eyJ") or self.api_key.count(".") == 2 or len(self.api_key) > 80:
             headers["Authorization"] = "Bearer " + self.api_key
         else:
             query["api_key"] = self.api_key
@@ -33,7 +42,10 @@ class TMDBClient:
             raise CatalogueError("Could not contact TMDB: %s" % exc)
         if response.status_code >= 400:
             if response.status_code in (401, 403):
-                raise CatalogueError("TMDB rejected the API credential.")
+                raise CatalogueError(
+                    "TMDB rejected the credential. Enter either one v3 API key or one API Read Access Token, "
+                    "press OK to save Settings, then try again."
+                )
             if response.status_code == 429:
                 raise CatalogueError("TMDB request limit reached. curatr will use its normal recommendation path.")
             raise CatalogueError("TMDB request failed (HTTP %s)." % response.status_code)

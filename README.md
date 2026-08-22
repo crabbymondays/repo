@@ -20,7 +20,12 @@ plugin://plugin.video.curatr/?action=lists
 plugin://plugin.video.curatr/?action=all
 plugin://plugin.video.curatr/?action=fresh
 plugin://plugin.video.curatr/?action=random&limit=10
+plugin://plugin.video.curatr/?action=folders
 ```
+
+Each Widget Folder also exposes a stable path using its folder ID. Widget
+Folders reference existing curatr lists and direct external `plugin://` paths;
+they do not duplicate movie data or use AI tokens.
 
 ## Privacy and attribution
 

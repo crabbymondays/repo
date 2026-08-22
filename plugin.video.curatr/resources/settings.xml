@@ -33,6 +33,7 @@
                 <setting id="openai_api_key" type="string" label="32110" help="32111">
                     <level>0</level>
                     <default />
+                    <dependencies><dependency type="enable" setting="ai_provider">openai</dependency></dependencies>
                     <constraints>
                         <allowempty>true</allowempty>
                     </constraints>
@@ -44,6 +45,7 @@
                 <setting id="openai_model" type="string" label="32112" help="32113">
                     <level>0</level>
                     <default>gpt-5-mini</default>
+                    <dependencies><dependency type="enable" setting="ai_provider">openai</dependency></dependencies>
                     <constraints>
                         <allowempty>false</allowempty>
                     </constraints>
@@ -56,6 +58,7 @@
                 <setting id="gemini_api_key" type="string" label="32120" help="32121">
                     <level>0</level>
                     <default />
+                    <dependencies><dependency type="enable" setting="ai_provider">gemini</dependency></dependencies>
                     <constraints>
                         <allowempty>true</allowempty>
                     </constraints>
@@ -67,6 +70,7 @@
                 <setting id="gemini_model" type="string" label="32122" help="32123">
                     <level>0</level>
                     <default>gemini-3.5-flash-lite</default>
+                    <dependencies><dependency type="enable" setting="ai_provider">gemini</dependency></dependencies>
                     <constraints>
                         <allowempty>false</allowempty>
                     </constraints>
@@ -78,34 +82,41 @@
             <group id="4" label="32500">
                 <setting id="anthropic_api_key" type="string" label="32503" help="32504">
                     <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
+                    <dependencies><dependency type="enable" setting="ai_provider">anthropic</dependency></dependencies>
                     <control type="edit" format="string"><heading>32503</heading><hidden>true</hidden></control>
                 </setting>
                 <setting id="anthropic_model" type="string" label="32505" help="32506">
                     <level>0</level><default>claude-sonnet-5</default><constraints><allowempty>false</allowempty></constraints>
+                    <dependencies><dependency type="enable" setting="ai_provider">anthropic</dependency></dependencies>
                     <control type="edit" format="string"><heading>32505</heading></control>
                 </setting>
             </group>
             <group id="5" label="32501">
                 <setting id="openrouter_api_key" type="string" label="32507" help="32508">
                     <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
+                    <dependencies><dependency type="enable" setting="ai_provider">openrouter</dependency></dependencies>
                     <control type="edit" format="string"><heading>32507</heading><hidden>true</hidden></control>
                 </setting>
                 <setting id="openrouter_model" type="string" label="32509" help="32510">
                     <level>0</level><default>openai/gpt-5-mini</default><constraints><allowempty>false</allowempty></constraints>
+                    <dependencies><dependency type="enable" setting="ai_provider">openrouter</dependency></dependencies>
                     <control type="edit" format="string"><heading>32509</heading></control>
                 </setting>
             </group>
             <group id="6" label="32502">
                 <setting id="compatible_api_key" type="string" label="32511" help="32512">
                     <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
+                    <dependencies><dependency type="enable" setting="ai_provider">compatible</dependency></dependencies>
                     <control type="edit" format="string"><heading>32511</heading><hidden>true</hidden></control>
                 </setting>
                 <setting id="compatible_base_url" type="string" label="32513" help="32514">
                     <level>0</level><default /><constraints><allowempty>false</allowempty></constraints>
+                    <dependencies><dependency type="enable" setting="ai_provider">compatible</dependency></dependencies>
                     <control type="edit" format="string"><heading>32513</heading></control>
                 </setting>
                 <setting id="compatible_model" type="string" label="32515" help="32516">
                     <level>0</level><default /><constraints><allowempty>false</allowempty></constraints>
+                    <dependencies><dependency type="enable" setting="ai_provider">compatible</dependency></dependencies>
                     <control type="edit" format="string"><heading>32515</heading></control>
                 </setting>
             </group>
