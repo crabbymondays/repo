@@ -3101,7 +3101,7 @@ class Curator:
         while True:
             choice = xbmcgui.Dialog().select(self.name, [
                 self._loc(32410, "My Lists"),
-                self._loc(32411, "Find Something to Watch"),
+                self._loc(32411, "Explore"),
                 self._loc(32412, "Preferences & Activity"),
                 self._loc(32413, "Settings"),
             ])
@@ -3119,7 +3119,7 @@ class Curator:
                 elif sub == 2: self.update_all()
                 elif sub == 3: self.backup_menu_interactive()
             elif choice == 1:
-                sub = xbmcgui.Dialog().select(self._loc(32411, "Find Something to Watch"), [
+                sub = xbmcgui.Dialog().select(self._loc(32411, "Explore"), [
                     self._loc(32430, "Quick Pick"),
                     self._loc(32431, "Saved Prompts"),
                     self._loc(32432, "Hidden Movies"),

@@ -473,7 +473,7 @@ msgid "My Lists"
 msgstr ""
 
 msgctxt "#32411"
-msgid "Find Something to Watch"
+msgid "Explore"
 msgstr ""
 
 msgctxt "#32412"

@@ -161,7 +161,7 @@ def _root(curator):
         icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg",
     )
     _add_folder(
-        _loc(32411, "Find Something to Watch"), "explore",
+        _loc(32411, "Explore"), "explore",
         _loc(32415, "Quick picks, saved prompts and more ways to browse recommendations."),
         icon_name="menu_explore.png", fanart_name="fanart_explore.jpg",
     )
@@ -189,7 +189,7 @@ def _my(curator):
 
 
 def _explore(curator):
-    xbmcplugin.setPluginCategory(HANDLE, _loc(32411, "Find Something to Watch"))
+    xbmcplugin.setPluginCategory(HANDLE, _loc(32411, "Explore"))
     _add_action(_loc(32430, "Quick Pick"), "quick", _loc(32433, "Choose a mood and quickly create a personalised list."), icon_name="menu_quick.png", fanart_name="fanart_explore.jpg")
     _add_action(_loc(32431, "Saved Prompts"), "templates", _loc(32434, "Reuse and manage prompts you have saved for later."), icon_name="menu_templates.png", fanart_name="fanart_explore.jpg")
     _add_folder("All Picks", "all", "Browse recommendations from all your current lists.", icon_name="menu_all.png", fanart_name="fanart_explore.jpg")
