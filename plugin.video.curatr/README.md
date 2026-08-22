@@ -1,6 +1,6 @@
 # curatr
 
-**curatr** is a Kodi movie-list curator that turns natural-language prompts into personalised recommendations shaped by your Trakt taste data. Lists live locally in Kodi by default and can optionally be copied to Trakt.
+**curatr** is a Kodi movie-list curator that turns natural-language prompts into personalised recommendations shaped by your preferences. Lists live locally in Kodi by default and can optionally be copied to Trakt.
 
 ## 0.15.2 generated artwork update
 
@@ -13,12 +13,12 @@ Kodi's main add-on page keeps the centred curatr artwork. Inside the add-on, all
 ## What it does
 
 - Create movie lists from prompts such as “smart 90s thrillers with great direction, no obvious blockbusters”.
-- Blend each prompt with a reusable AI taste profile built from your Trakt ratings/watch history.
+- Blend each prompt with a reusable preference summary built from your Trakt ratings and watch history.
 - Exclude watched, rated and manually hidden movies.
 - Refresh each list with AI on its own schedule.
 - Optionally update a copy of a list on Trakt on a separate schedule.
 - Use Quick Pick moods and Saved Prompts.
-- Browse All Picks, Fresh Picks and stable daily Random Picks.
+- Browse All Picks, Latest Picks and a stable daily Surprise Me selection.
 - Expose widget-friendly Kodi plugin views.
 - Give each saved list independent square-icon and landscape-fanart choices.
 - Back up local lists, prompts and hidden-movie choices.
@@ -27,7 +27,7 @@ Kodi's main add-on page keeps the centred curatr artwork. Inside the add-on, all
 
 - Kodi 21 (Omega) or newer is the primary target.
 - Your own API key for at least one supported AI service: OpenAI, Google Gemini, Anthropic Claude, OpenRouter, or an advanced OpenAI-compatible endpoint.
-- Trakt is optional. A public Trakt username can provide read-only taste data. Full Trakt authorisation is only needed if curatr itself should write list copies to Trakt.
+- Trakt is optional. A public Trakt username can provide read-only preference data. Full Trakt authorisation is only needed if curatr itself should write list copies to Trakt.
 
 curatr does **not** ship with an AI-provider API key. Its Trakt application credentials are bundled so users can link their own Trakt account with the Device Code flow.
 
@@ -43,7 +43,7 @@ On a new installation curatr offers to open Settings once.
 
 1. Choose an AI service. **OpenAI**, **Gemini** and **Claude** are the simplest direct options; **OpenRouter** provides many model families through one account.
 2. Enter your own API key and model ID.
-3. For personalised taste data, either enter a public Trakt username or configure a full Trakt connection.
+3. For personalised recommendations, either enter a public Trakt username or configure a full Trakt connection.
 4. Leave **Save new lists to Trakt by default** off if you only want Kodi-local lists.
 5. Create your first list from **My Lists → Create a New List**.
 
@@ -57,7 +57,7 @@ Existing users upgrading from an older curatr build are not shown the onboarding
 - **OpenRouter:** enter an OpenRouter API key and a complete model ID such as `anthropic/claude-sonnet-5`. OpenRouter billing and availability apply.
 - **Custom / OpenAI-compatible:** advanced option for a trusted hosted provider or local server. Enter its API base URL, API key and exact model ID. The server must support non-streaming Chat Completions and JSON-schema structured output.
 
-Only the selected AI service is contacted. Switching service does not delete lists or taste data, although curatr may rebuild the compact taste fingerprint with the newly selected model when needed.
+Only the selected AI service is contacted. Switching service does not delete lists or preference data, although curatr may rebuild its compact preference summary with the newly selected model when needed.
 
 All provider key/model sections remain visible in Settings. This is intentional: some Kodi platforms do not refresh conditionally hidden settings immediately after the provider selector changes. Configure the section for the service you selected; credentials entered for the other services are left unused.
 
@@ -72,7 +72,7 @@ These services are optional. Trakt and MDBList appear under **Linked Accounts**;
 3. Paste either a TMDB v3 API key or v4 read-access token.
 4. Set a two-letter region such as `GB` and choose **Check TMDB**.
 
-curatr caches a compact candidate pool related to strong films in your taste profile. Cache reuse keeps requests low. If TMDB is temporarily unavailable, curatr records a warning in Kodi's log and continues with the normal AI + Trakt workflow.
+curatr caches a compact candidate pool related to films that fit your preferences. Cache reuse keeps requests low. If TMDB is temporarily unavailable, curatr records a warning in Kodi's log and continues with the normal AI + Trakt workflow.
 
 ### MDBList account lists
 
@@ -102,7 +102,7 @@ Manual choices survive list regeneration. Automatic artwork follows later name o
 No Trakt write connection is needed. curatr stores its generated lists locally.
 
 ### Public profile (read-only)
-Enter a public Trakt username. curatr can use public ratings/watch signals for taste data without writing anything to the account.
+Enter a public Trakt username. curatr can use public ratings and watch history as preference data without writing anything to the account.
 
 ### Full Trakt connection
 Choose **Connect / Reconnect Trakt** and authorize curatr with the QR/device code if you want curatr to create or update Trakt list copies.
@@ -113,7 +113,7 @@ AI refresh and Trakt update schedules are independent: an AI refresh changes the
 
 curatr stores its state in Kodi's addon profile. AI API keys and Trakt login tokens live in Kodi settings/state on the device. The backup feature deliberately excludes AI API keys, Trakt login tokens and remote Trakt list IDs.
 
-When curatr calls the AI provider you configured, it sends the recommendation prompt together with the compact taste information and optional grounded candidate records needed to create recommendations. Your selected provider's terms and privacy policy apply. API keys for every AI and movie-source service are excluded from curatr backups and activity messages.
+When curatr calls the AI provider you configured, it sends the recommendation prompt together with compact preference information and optional grounded candidate records needed to create recommendations. Your selected provider's terms and privacy policy apply. API keys for every AI and movie-source service are excluded from curatr backups and activity messages.
 
 ## Backup and restore
 
@@ -133,10 +133,10 @@ Individual saved lists are also exposed through the plugin interface. Playback i
 
 ## Troubleshooting
 
-- **No recommendations:** verify the selected AI provider/key and make sure a Trakt profile source is configured if your workflow requires taste data.
+- **No recommendations:** verify the selected AI provider and key, and make sure a Trakt profile source is configured if you want personalised results.
 - **Trakt list copy will not update:** full Trakt authorisation is required for writes. A public username is read-only.
 - **Artwork seems stale after an update:** restart Kodi once so the skin can refresh cached artwork references.
-- **Background update failed:** check **Taste & Activity → Recent Activity** for the stored error.
+- **Background update failed:** check **Preferences & Activity → Recent Activity** for the stored error.
 - **TMDB or MDBList check fails:** check the relevant key and selected lists, then try again. Leaving either service disabled returns curatr to its normal recommendation path.
 - **Custom AI endpoint fails:** confirm that the URL includes `http://` or `https://`, the model ID is exact, and the server supports OpenAI-style structured Chat Completions.
 

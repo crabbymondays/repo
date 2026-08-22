@@ -17,7 +17,7 @@ class BaseAIClient:
 
     def _require_api_key(self):
         if not self.api_key:
-            raise AIError("%s API key is not configured." % self.provider_name)
+            raise AIError("Add your %s API key in Settings before creating a list." % self.provider_name)
 
     def build_taste_fingerprint(self, profile):
         self._require_api_key()

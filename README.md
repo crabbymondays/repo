@@ -24,7 +24,7 @@ plugin://plugin.video.curatr/?action=random&limit=10
 
 ## Privacy and attribution
 
-curatr sends prompts and taste information to services explicitly enabled by
+curatr sends prompts and preference information to services explicitly enabled by
 the user. Keys and account tokens are stored in Kodi's local add-on data and are
 excluded from curatr backups.
 

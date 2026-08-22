@@ -67,7 +67,7 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
     icon = _existing_art(icon_name)
     # Versioned filename prevents Kodi's texture cache from retaining the old
     # unbranded menu background after the 0.15.1 artwork change.
-    fanart = _existing_art("fanart_menu_clean_v2.jpg") or _existing_art("fanart_global.jpg")
+    fanart = _existing_art("fanart_menu_clean_v2.jpg")
 
     if not icon:
         root_icon = os.path.join(ADDON_PATH, "icon.png")
@@ -161,13 +161,13 @@ def _root(curator):
         icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg",
     )
     _add_folder(
-        _loc(32411, "Explore"), "explore",
-        _loc(32415, "Quick picks, saved prompts and ready-to-use recommendation views."),
+        _loc(32411, "Find Something to Watch"), "explore",
+        _loc(32415, "Quick picks, saved prompts and more ways to browse recommendations."),
         icon_name="menu_explore.png", fanart_name="fanart_explore.jpg",
     )
     _add_folder(
-        _loc(32412, "Taste & Activity"), "taste_activity",
-        _loc(32416, "Your taste profile, Trakt connection, AI usage and recent activity."),
+        _loc(32412, "Preferences & Activity"), "taste_activity",
+        _loc(32416, "Your preferences, Trakt connection, AI usage and recent activity."),
         icon_name="menu_taste.png", fanart_name="fanart_taste.jpg",
     )
     _add_action(
@@ -180,29 +180,29 @@ def _root(curator):
 
 def _my(curator):
     xbmcplugin.setPluginCategory(HANDLE, _loc(32410, "My Lists"))
-    _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open your saved curatr lists."), icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want in ordinary language."), icon_name="menu_create.png", fanart_name="fanart_create.jpg")
-    _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Edit prompts, names, film counts and per-list schedules."), icon_name="menu_manage.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32422, "Refresh All Lists with AI"), "update", _loc(32426, "Re-run every saved prompt now and replace each local list with fresh picks."), icon_name="menu_refresh.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Back up local lists, saved prompts and hidden-movie choices. API keys and login tokens are excluded."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
+    _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg")
+    _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create.png", fanart_name="fanart_create.jpg")
+    _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png", fanart_name="fanart_my_lists.jpg")
+    _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Find fresh recommendations for all your saved lists."), icon_name="menu_refresh.png", fanart_name="fanart_my_lists.jpg")
+    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts and hidden movies."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
 def _explore(curator):
-    xbmcplugin.setPluginCategory(HANDLE, _loc(32411, "Explore"))
-    _add_action(_loc(32430, "Quick Pick"), "quick", _loc(32433, "Choose a mood and get a fresh ready-made list without writing a prompt."), icon_name="menu_quick.png", fanart_name="fanart_explore.jpg")
-    _add_action(_loc(32431, "Saved Prompts"), "templates", _loc(32434, "Reuse and manage prompts you want to come back to."), icon_name="menu_templates.png", fanart_name="fanart_explore.jpg")
-    _add_folder("All Picks", "all", "A de-duplicated view of every movie currently in your lists.", icon_name="menu_all.png", fanart_name="fanart_explore.jpg")
-    _add_folder("Fresh Picks", "fresh", "Movies from the list you refreshed most recently.", icon_name="menu_fresh.png", fanart_name="fanart_explore.jpg")
-    _add_folder("Random Picks", "random", "A stable daily shuffle of movies from all your current lists.", icon_name="menu_random.png", fanart_name="fanart_explore.jpg", limit="10")
-    _add_action(_loc(32432, "Hidden Movies"), "hidden", _loc(32435, "Review movies you told curatr never to recommend again."), icon_name="menu_hidden.png", fanart_name="fanart_explore.jpg")
+    xbmcplugin.setPluginCategory(HANDLE, _loc(32411, "Find Something to Watch"))
+    _add_action(_loc(32430, "Quick Pick"), "quick", _loc(32433, "Choose a mood and quickly create a personalised list."), icon_name="menu_quick.png", fanart_name="fanart_explore.jpg")
+    _add_action(_loc(32431, "Saved Prompts"), "templates", _loc(32434, "Reuse and manage prompts you have saved for later."), icon_name="menu_templates.png", fanart_name="fanart_explore.jpg")
+    _add_folder("All Picks", "all", "Browse recommendations from all your current lists.", icon_name="menu_all.png", fanart_name="fanart_explore.jpg")
+    _add_folder("Latest Picks", "fresh", "See recommendations from the list refreshed most recently.", icon_name="menu_fresh.png", fanart_name="fanart_explore.jpg")
+    _add_folder("Surprise Me", "random", "Browse a different selection from your current lists.", icon_name="menu_random.png", fanart_name="fanart_explore.jpg", limit="10")
+    _add_action(_loc(32432, "Hidden Movies"), "hidden", _loc(32435, "Review movies you have asked curatr not to recommend."), icon_name="menu_hidden.png", fanart_name="fanart_explore.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
 def _taste_activity(curator):
-    xbmcplugin.setPluginCategory(HANDLE, _loc(32412, "Taste & Activity"))
-    _add_action(_loc(32440, "Update Taste Data from Trakt"), "sync", _loc(32446, "Refresh the ratings and watch-history signals used by your recommendations."), icon_name="menu_sync.png", fanart_name="fanart_taste.jpg")
-    _add_action(_loc(32441, "View My Taste Profile"), "taste", _loc(32447, "See the compact AI summary used alongside each prompt."), icon_name="menu_taste.png", fanart_name="fanart_taste.jpg")
+    xbmcplugin.setPluginCategory(HANDLE, _loc(32412, "Preferences & Activity"))
+    _add_action(_loc(32440, "Refresh Preferences from Trakt"), "sync", _loc(32446, "Update the ratings and watch history curatr uses."), icon_name="menu_sync.png", fanart_name="fanart_taste.jpg")
+    _add_action(_loc(32441, "View My Preferences"), "taste", _loc(32447, "See the information curatr uses when choosing recommendations."), icon_name="menu_taste.png", fanart_name="fanart_taste.jpg")
     _add_action(_loc(32442, "AI Usage"), "usage", _loc(32448, "See request and token totals reported by your AI provider."), icon_name="menu_usage.png", fanart_name="fanart_info.jpg")
     _add_action(_loc(32443, "Recent Activity"), "activity", _loc(32449, "See recent list refreshes, Trakt updates and errors."), icon_name="menu_activity.png", fanart_name="fanart_info.jpg")
     _add_action(_loc(32444, "Check Trakt Connection"), "status", _loc(32450, "Check the Trakt account or public profile currently in use."), icon_name="menu_trakt.png", fanart_name="fanart_trakt.jpg")
@@ -230,14 +230,14 @@ def _lists(curator):
             sync_url = _url(action="sync_list", list_id=local_id)
             delete_url = _url(action="delete_list", list_id=local_id)
             context = [
-                ("Refresh this list with AI", "RunPlugin(%s)" % refresh_url),
+                ("Refresh this list", "RunPlugin(%s)" % refresh_url),
                 ("List settings", "RunPlugin(%s)" % edit_url),
                 ("Artwork", "RunPlugin(%s)" % artwork_url),
                 ("Delete this list", "RunPlugin(%s)" % delete_url),
             ]
             if record.get("sync_to_trakt"):
                 context.append(("Update Trakt copy now", "RunPlugin(%s)" % sync_url))
-            context.append(("Refresh all lists with AI", "RunScript(%s,update)" % ADDON_ID))
+            context.append(("Refresh all lists", "RunScript(%s,update)" % ADDON_ID))
             _add_folder(
                 name, "list", plot=plot, context_items=context,
                 icon_name="menu_list.png", fanart_name="fanart_my_lists.jpg",
@@ -496,7 +496,7 @@ def _add_movie(movie, artwork, list_name="", list_id=""):
         ]
         if list_id:
             refresh_url = _url(action="refresh_list", list_id=str(list_id))
-            context.append(("Refresh this list with AI", "RunPlugin(%s)" % refresh_url))
+            context.append(("Refresh this list", "RunPlugin(%s)" % refresh_url))
         context.extend([
             ("Movie details", "RunPlugin(%s)" % info_url),
             ("curatr settings", "RunScript(%s,settings)" % ADDON_ID),
@@ -605,11 +605,11 @@ def _all(curator):
 
 
 def _fresh(curator):
-    _render_movies(curator, _movie_rows_fresh(curator), "Fresh Picks")
+    _render_movies(curator, _movie_rows_fresh(curator), "Latest Picks")
 
 
 def _random_picks(curator, params):
-    _render_movies(curator, _movie_rows_random(curator, params.get("limit") or 10), "Random Picks")
+    _render_movies(curator, _movie_rows_random(curator, params.get("limit") or 10), "Surprise Me")
 
 
 def _run_command(curator, command):
@@ -722,7 +722,7 @@ def main():
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "hide":
             curator.hide_movie(params.get("trakt_id") or "", params.get("title") or "", _safe_int(params.get("year"), 0), confirm=True)
-            xbmc.executebuiltin("Container.Refresh")
+            refresh_if_changed(before, curator.state)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "info":
             _info(curator, params)

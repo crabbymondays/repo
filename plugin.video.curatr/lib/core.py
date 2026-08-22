@@ -143,8 +143,8 @@ class Curator:
             pass
 
         message = self._loc(32401,
-            "Welcome to curatr. Before creating your first list, choose an AI service and add your own API key. "
-            "Trakt is optional: a public username can provide taste data, while a full Trakt connection is only needed if curatr should write list copies back to Trakt.\n\nOpen Settings now?")
+            "Welcome to curatr. Choose an AI service and add its API key before creating your first list. "
+            "Trakt is optional: add a public username for personalised recommendations, or connect your account if curatr should save lists to Trakt.\n\nOpen Settings now?")
         try:
             open_now = xbmcgui.Dialog().yesno(
                 self._loc(32400, "Welcome to curatr"),
@@ -971,15 +971,15 @@ class Curator:
                 xbmc.log("curatr taste fingerprint refresh failed: %s" % exc, xbmc.LOGWARNING)
                 xbmcgui.Dialog().ok(
                     self.name,
-                    "Your Trakt taste data was refreshed, but the AI taste profile could not be rebuilt.\n\n%s"
+                    "Your Trakt preferences were refreshed, but curatr could not rebuild the AI summary.\n\n%s"
                     % exc,
                 )
 
         if not silent:
             source_label = "linked Trakt" if source == "oauth" else "public Trakt profile"
-            message = "%s taste data refreshed" % source_label
+            message = "%s preferences refreshed" % source_label
             if fingerprint_updated:
-                message += " + AI taste profile rebuilt"
+                message += " + AI preference summary rebuilt"
             self.record_activity(message, notify=True)
         return self.state["profile"]
 
@@ -1019,10 +1019,6 @@ class Curator:
         result = self._generate_and_write(
             name, prompt, count, managed_record=managed, description=description
         )
-        try:
-            xbmc.executebuiltin("Container.Refresh")
-        except Exception:
-            pass
         return result
 
     @staticmethod
@@ -1064,7 +1060,7 @@ class Curator:
     def refresh_list(self, list_id, silent=False):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
 
         name = record.get("name") or "AI - My Picks"
         if not silent:
@@ -1091,7 +1087,7 @@ class Curator:
     def _edit_list_name(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         current_name = str(record.get("name") or "AI - My Picks")
         new_name = xbmcgui.Dialog().input("List name", defaultt=current_name)
         if not new_name or not new_name.strip():
@@ -1125,7 +1121,7 @@ class Curator:
     def _edit_list_prompt(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         current_prompt = str(record.get("prompt") or "Recommend films for me.")
         new_prompt = xbmcgui.Dialog().input("List prompt", defaultt=current_prompt)
         if not new_prompt or not new_prompt.strip():
@@ -1141,7 +1137,7 @@ class Curator:
     def _edit_list_description(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         current = str(record.get("description") or "")
         value = xbmcgui.Dialog().input("List description (optional)", defaultt=current)
         value = str(value or "").strip()
@@ -1161,7 +1157,7 @@ class Curator:
     def _edit_list_count(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         current_count = max(5, min(50, self._safe_int(record.get("count"), 20)))
         count_text = xbmcgui.Dialog().numeric(0, "Number of films (5-50)", defaultt=str(current_count))
         if not count_text:
@@ -1181,7 +1177,7 @@ class Curator:
     def _toggle_list_trakt_sync(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         key = self._record_key(record)
         if record.get("sync_to_trakt"):
             if not xbmcgui.Dialog().yesno(
@@ -1216,7 +1212,7 @@ class Curator:
     def _toggle_list_regeneration(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         updated = dict(record)
         enabled = not bool(record.get("regeneration_enabled"))
         updated["regeneration_enabled"] = enabled
@@ -1234,16 +1230,12 @@ class Curator:
     def _edit_list_regeneration_interval(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         current = self._safe_int(record.get("regeneration_interval_hours"), self._default_regeneration_interval())
         current = max(1, min(720, current))
-        value = xbmcgui.Dialog().numeric(0, "AI refresh interval in hours (1-720)", defaultt=str(current))
-        if not value:
+        hours = self._choose_interval_hours("Refresh Every", current)
+        if hours is None:
             return record
-        try:
-            hours = max(1, min(720, int(value)))
-        except (TypeError, ValueError):
-            hours = current
         updated = dict(record)
         updated["regeneration_interval_hours"] = hours
         updated["regeneration_last_attempt_at"] = 0
@@ -1258,7 +1250,7 @@ class Curator:
     def _toggle_list_trakt_refresh(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         if not record.get("sync_to_trakt"):
             xbmcgui.Dialog().ok(
                 self.name,
@@ -1293,16 +1285,12 @@ class Curator:
     def _edit_list_trakt_refresh_interval(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         current = self._safe_int(record.get("trakt_refresh_interval_hours"), self._default_trakt_refresh_interval())
         current = max(1, min(720, current))
-        value = xbmcgui.Dialog().numeric(0, "Trakt update interval in hours (1-720)", defaultt=str(current))
-        if not value:
+        hours = self._choose_interval_hours("Sync Every", current)
+        if hours is None:
             return record
-        try:
-            hours = max(1, min(720, int(value)))
-        except (TypeError, ValueError):
-            hours = current
         updated = dict(record)
         updated["trakt_refresh_interval_hours"] = hours
         updated["trakt_last_attempt_at"] = 0
@@ -1331,7 +1319,7 @@ class Curator:
     def _change_list_icon(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         art = normalise_list_art(record.get("artwork"))
         choice = xbmcgui.Dialog().select("Change list icon", [
             "Automatic — match the list name and prompt",
@@ -1398,7 +1386,7 @@ class Curator:
     def _change_list_fanart(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         art = normalise_list_art(record.get("artwork"))
         choice = xbmcgui.Dialog().select("Change list fanart", [
             "Automatic — match the list name and prompt",
@@ -1441,7 +1429,7 @@ class Curator:
     def _change_list_fanart_style(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         art = normalise_list_art(record.get("artwork"))
         choice = xbmcgui.Dialog().select("Fanart style", ["Genre colours", "Monochrome"])
         if choice < 0:
@@ -1452,7 +1440,7 @@ class Curator:
     def _suggest_list_artwork(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         suggestions = []
         if self.tmdb and self.tmdb.api_key:
             try:
@@ -1496,7 +1484,7 @@ class Curator:
         while True:
             record = self._managed_record_by_id(list_id)
             if not record:
-                raise RuntimeError("This list is no longer available.")
+                raise RuntimeError("That list has already been removed.")
             icon, fanart, style = list_art_summary(record)
             choice = xbmcgui.Dialog().select("Artwork — %s" % (record.get("name") or "curatr list"), [
                 "Icon: %s" % icon,
@@ -1524,7 +1512,7 @@ class Curator:
     def _view_list_settings(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
 
         def when(value):
             stamp = self._safe_int(value, 0)
@@ -1547,8 +1535,8 @@ class Curator:
         icon_art, fanart_art, fanart_style = list_art_summary(record)
         text = (
             "List: %s\n\nDescription:\n%s\n\nFilms requested: %d\nSaved: %s\n\nIcon: %s\nFanart: %s\nFanart style: %s\n\n"
-            "Grounded candidates considered: %d\n\nAutomatic AI refresh: %s\nLast AI refresh: %s\n\n"
-            "Automatic Trakt update: %s\nLast Trakt update: %s\n\nPrompt:\n%s"
+            "Grounded candidates considered: %d\n\nAuto Refresh: %s\nLast refresh: %s\n\n"
+            "Trakt Sync: %s\nLast sync: %s\n\nPrompt:\n%s"
             % (
                 record.get("name") or "curatr list",
                 record.get("description") or "Not set",
@@ -1571,7 +1559,7 @@ class Curator:
     def save_list_prompt_as_template(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         return self._save_prompt_template(
             record.get("name") or "Saved Prompt",
             record.get("prompt") or "",
@@ -1582,7 +1570,7 @@ class Curator:
         """Delete a managed curatr list locally, with an optional Trakt deletion."""
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
 
         key = self._record_key(record)
         name = str(record.get("name") or "curatr list")
@@ -1642,7 +1630,7 @@ class Curator:
         while True:
             record = self._managed_record_by_id(list_id)
             if not record:
-                raise RuntimeError("This list is no longer available.")
+                raise RuntimeError("That list has already been removed.")
 
             regen_enabled = bool(record.get("regeneration_enabled"))
             regen_interval = self._safe_int(record.get("regeneration_interval_hours"), self._default_regeneration_interval())
@@ -1658,12 +1646,12 @@ class Curator:
                 "Number of films: %d" % self._safe_int(record.get("count"), 20),
                 "Artwork",
                 "Save a copy to Trakt: %s" % sync_state,
-                "Automatic AI refresh: %s" % ("ON" if regen_enabled else "OFF"),
-                "AI refresh interval: %d hour(s)" % regen_interval,
-                "Automatic Trakt update: %s" % trakt_refresh_label,
-                "Trakt update interval: %d hour(s)" % trakt_interval,
-                "Refresh this list with AI now",
-                "Update the Trakt copy now",
+                "Auto Refresh: %s" % ("ON" if regen_enabled else "OFF"),
+                "Refresh Every: %s" % self._format_interval(regen_interval),
+                "Trakt Sync: %s" % trakt_refresh_label,
+                "Sync Every: %s" % self._format_interval(trakt_interval),
+                "Refresh this list",
+                "Sync to Trakt",
                 "Save this prompt as a template",
                 "View list details",
                 "Delete this list",
@@ -1716,6 +1704,29 @@ class Curator:
         if len(text) <= limit:
             return text
         return text[: max(1, limit - 1)].rstrip() + "…"
+
+    @staticmethod
+    def _format_interval(hours):
+        hours = max(1, int(hours or 1))
+        labels = {6: "Every 6 hours", 12: "Every 12 hours", 24: "Every day", 72: "Every 3 days", 168: "Every week"}
+        return labels.get(hours, "Every %d hours" % hours)
+
+    def _choose_interval_hours(self, heading, current):
+        values = [6, 12, 24, 72, 168]
+        labels = [self._format_interval(value) for value in values] + ["Custom"]
+        preselect = values.index(current) if current in values else len(labels) - 1
+        choice = xbmcgui.Dialog().select(heading, labels, preselect=preselect)
+        if choice < 0:
+            return None
+        if choice < len(values):
+            return values[choice]
+        value = xbmcgui.Dialog().numeric(0, "%s (hours, 1-720)" % heading, defaultt=str(current))
+        if not value:
+            return None
+        try:
+            return max(1, min(720, int(value)))
+        except (TypeError, ValueError):
+            return current
 
     # ---------- Saved prompts / hide list / backup ----------
 
@@ -2156,7 +2167,7 @@ class Curator:
     def sync_list_to_trakt(self, list_id, silent=False):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         self._require_trakt_write()
         movies = [m for m in (record.get("movies") or []) if isinstance(m, dict)]
         desired_ids = []
@@ -2166,7 +2177,7 @@ class Curator:
             except (TypeError, ValueError):
                 continue
         if not desired_ids:
-            raise RuntimeError("Refresh this list with AI first so it has local movie recommendations to copy to Trakt.")
+            raise RuntimeError("Find some recommendations for this list before syncing it to Trakt.")
 
         target = self._resolve_target_list(
             record.get("name") or "AI - My Picks",
@@ -2194,7 +2205,7 @@ class Curator:
     def set_list_trakt_sync(self, list_id, enabled):
         record = self._managed_record_by_id(list_id)
         if not record:
-            raise RuntimeError("This list is no longer available.")
+            raise RuntimeError("That list has already been removed.")
         updated = dict(record)
         updated["sync_to_trakt"] = bool(enabled)
         if not enabled:
@@ -2208,12 +2219,12 @@ class Curator:
         while True:
             record = self._managed_record_by_id(list_id)
             if not record:
-                raise RuntimeError("This list is no longer available.")
+                raise RuntimeError("That list has already been removed.")
             choice = xbmcgui.Dialog().select(
                 record.get("name") or "curatr list",
                 [
                     "List settings",
-                    "Refresh this list with AI now",
+                    "Refresh this list",
                     "View list details",
                 ],
             )
@@ -2449,7 +2460,7 @@ class Curator:
 
         if not candidates:
             raise RuntimeError(
-                "No AI recommendations could be verified as unseen, unrated Trakt movies. Try a broader prompt."
+                "curatr couldn't find enough new matches this time. Try a broader prompt or ask for fewer films."
             )
 
         previous = managed_record or {}
@@ -2841,7 +2852,7 @@ class Curator:
                 "%s / %s" % (fingerprint.get("provider_name") or self.ai.provider_name, fingerprint.get("model") or self.ai.model),
             )
         )
-        xbmcgui.Dialog().textviewer("My Taste Profile", text)
+        xbmcgui.Dialog().textviewer("My Preferences", text)
 
     def show_ai_usage(self):
         usage = self.state.get("ai_usage") or {}
@@ -2858,7 +2869,7 @@ class Curator:
         for kind in ("taste_fingerprint", "recommendation"):
             bucket = kinds.get(kind) or {}
             if bucket.get("requests"):
-                label = "Taste profile builds" if kind == "taste_fingerprint" else "Recommendation calls"
+                label = "Preference summary builds" if kind == "taste_fingerprint" else "Recommendation calls"
                 lines.append(
                     "%s: %s request(s), %s total tokens"
                     % (label, self._format_int(bucket.get("requests", 0)), self._format_int(bucket.get("total_tokens", 0)))
@@ -3057,7 +3068,7 @@ class Curator:
 
     def _require_ai(self):
         if not self.ai.api_key:
-            raise RuntimeError("%s API key is not configured." % getattr(self.ai, "provider_name", "AI"))
+            raise RuntimeError("Add your %s API key in Settings before creating a list." % getattr(self.ai, "provider_name", "AI"))
 
     def _profile_is_stale(self):
         profile = self.state.get("profile") or {}
@@ -3090,8 +3101,8 @@ class Curator:
         while True:
             choice = xbmcgui.Dialog().select(self.name, [
                 self._loc(32410, "My Lists"),
-                self._loc(32411, "Explore"),
-                self._loc(32412, "Taste & Activity"),
+                self._loc(32411, "Find Something to Watch"),
+                self._loc(32412, "Preferences & Activity"),
                 self._loc(32413, "Settings"),
             ])
             if choice < 0:
@@ -3100,7 +3111,7 @@ class Curator:
                 sub = xbmcgui.Dialog().select(self._loc(32410, "My Lists"), [
                     self._loc(32420, "Create a new list"),
                     self._loc(32421, "Manage my lists"),
-                    self._loc(32422, "Refresh all lists with AI now"),
+                    self._loc(32422, "Refresh All Lists"),
                     self._loc(32423, "Backup & Restore"),
                 ])
                 if sub == 0: self.create_list_interactive()
@@ -3108,7 +3119,7 @@ class Curator:
                 elif sub == 2: self.update_all()
                 elif sub == 3: self.backup_menu_interactive()
             elif choice == 1:
-                sub = xbmcgui.Dialog().select(self._loc(32411, "Explore"), [
+                sub = xbmcgui.Dialog().select(self._loc(32411, "Find Something to Watch"), [
                     self._loc(32430, "Quick Pick"),
                     self._loc(32431, "Saved Prompts"),
                     self._loc(32432, "Hidden Movies"),
@@ -3117,13 +3128,13 @@ class Curator:
                 elif sub == 1: self.prompt_templates_interactive()
                 elif sub == 2: self.manage_hidden_interactive()
             elif choice == 2:
-                sub = xbmcgui.Dialog().select(self._loc(32412, "Taste & Activity"), [
-                    self._loc(32440, "Update taste data from Trakt"),
-                    self._loc(32441, "View my taste profile"),
-                    self._loc(32442, "AI usage"),
-                    self._loc(32443, "Recent activity"),
-                    self._loc(32444, "Check Trakt connection"),
-                    self._loc(32445, "Connect / reconnect Trakt"),
+                sub = xbmcgui.Dialog().select(self._loc(32412, "Preferences & Activity"), [
+                    self._loc(32440, "Refresh Preferences from Trakt"),
+                    self._loc(32441, "View My Preferences"),
+                    self._loc(32442, "AI Usage"),
+                    self._loc(32443, "Recent Activity"),
+                    self._loc(32444, "Check Trakt Connection"),
+                    self._loc(32445, "Connect / Reconnect Trakt"),
                 ])
                 if sub == 0: self.sync_profile()
                 elif sub == 1: self.view_taste_fingerprint()

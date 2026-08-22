@@ -7,7 +7,10 @@ import xbmc
 
 
 def list_signature(state):
-    records = state.get("ai_lists", []) if isinstance(state, dict) else []
+    records = {
+        "ai_lists": state.get("ai_lists", []),
+        "hidden_movies": state.get("hidden_movies", []),
+    } if isinstance(state, dict) else {}
     try:
         payload = json.dumps(records, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     except (TypeError, ValueError):

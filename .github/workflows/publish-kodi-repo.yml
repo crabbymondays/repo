@@ -9,11 +9,15 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: publish-kodi-repository
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Build repository
@@ -22,6 +26,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f repo repository.curatr-*.zip
+          git add -A
           git diff --cached --quiet || git commit -m "Build Kodi repository"
+          git pull --rebase origin main
           git push

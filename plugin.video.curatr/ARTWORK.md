@@ -5,6 +5,7 @@ Artwork is bundled with the add-on. The user-facing name and canonical Kodi add-
 ## Addon artwork
 - `icon.png` — 512×512 PNG.
 - `fanart.jpg` — branded 1920×1080 artwork for Kodi's add-on information view.
+- `icon_addon_v2.png` and `fanart_addon_v2.jpg` — versioned metadata copies published separately for repository browsing.
 - `resources/media/fanart_menu_clean_v2.jpg` — 1920×1080 unbranded in-menu fanart with clear space for Kodi labels.
 - `resources/media/splash_centered.png` — bright centred 1920×1080 curatr splash artwork matching the main add-on fanart.
 
@@ -34,7 +35,7 @@ Files include:
 
 ## Global menu fanart
 All navigation items use the same `fanart_menu_clean_v2.jpg`. The abstract
-lockup leaves the normal Kodi label area clear. Menu icons remain separate and
+background leaves the normal Kodi label area clear. Menu icons remain separate and
 are never assigned as `thumb` or fanart, preventing skins from enlarging an
 individual glyph into a full-screen background.
 

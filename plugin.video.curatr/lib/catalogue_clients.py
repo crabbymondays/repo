@@ -18,7 +18,7 @@ class TMDBClient:
 
     def _get(self, path, params=None):
         if not self.api_key:
-            raise CatalogueError("TMDB API key is not configured.")
+            raise CatalogueError("Add your TMDB API key under Metadata in Settings first.")
         query = dict(params or {})
         headers = {"Accept": "application/json"}
         if self.api_key.startswith("eyJ"):

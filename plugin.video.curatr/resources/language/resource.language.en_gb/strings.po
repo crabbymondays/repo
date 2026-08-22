@@ -7,11 +7,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 
 msgctxt "#32010"
-msgid "Linked Accounts"
+msgid "Connected Accounts"
 msgstr ""
 
 msgctxt "#32011"
-msgid "Connect the accounts curatr can use for your taste, lists and optional movie sources."
+msgid "Connect the accounts curatr can use for preferences, lists and optional movie sources."
 msgstr ""
 
 msgctxt "#32012"
@@ -39,11 +39,11 @@ msgid "Redirect URI registered for your Trakt app. Leave the default unless your
 msgstr ""
 
 msgctxt "#32018"
-msgid "Taste data size"
+msgid "Preference data size"
 msgstr ""
 
 msgctxt "#32019"
-msgid "Maximum number of ratings and watched entries kept in the local taste cache. Higher values give more history but use more Trakt requests during a full refresh."
+msgid "Maximum number of ratings and watched entries kept locally. Higher values provide more history but use more Trakt requests during a full refresh."
 msgstr ""
 
 msgctxt "#32020"
@@ -51,11 +51,11 @@ msgid "Strong-like rating"
 msgstr ""
 
 msgctxt "#32021"
-msgid "Ratings at or above this value count as particularly strong positive taste signals."
+msgid "Ratings at or above this value count as particularly strong positive preferences."
 msgstr ""
 
 msgctxt "#32022"
-msgid "Refresh Trakt taste data after (hours)"
+msgid "Refresh Trakt preferences after (hours)"
 msgstr ""
 
 msgctxt "#32023"
@@ -95,7 +95,7 @@ msgid "Link curatr to your Trakt account with the device-code / QR login, or rec
 msgstr ""
 
 msgctxt "#32040"
-msgid "New List Defaults"
+msgid "Automatic Refresh"
 msgstr ""
 
 msgctxt "#32041"
@@ -103,7 +103,7 @@ msgid "Starting choices for newly created lists. Every list can be adjusted late
 msgstr ""
 
 msgctxt "#32042"
-msgid "Automatic AI refresh for new lists"
+msgid "Auto Refresh for new lists"
 msgstr ""
 
 msgctxt "#32043"
@@ -111,7 +111,7 @@ msgid "When enabled, a new list periodically re-runs its saved prompt to get fre
 msgstr ""
 
 msgctxt "#32044"
-msgid "Default AI refresh interval (hours)"
+msgid "Refresh Every (hours)"
 msgstr ""
 
 msgctxt "#32045"
@@ -119,7 +119,7 @@ msgid "How often new lists should re-run their saved AI prompt by default. Each 
 msgstr ""
 
 msgctxt "#32046"
-msgid "Automatic Trakt update for new lists"
+msgid "Trakt Sync for new lists"
 msgstr ""
 
 msgctxt "#32047"
@@ -127,7 +127,7 @@ msgid "For new lists saved to Trakt, periodically copy the latest local picks to
 msgstr ""
 
 msgctxt "#32048"
-msgid "Default Trakt update interval (hours)"
+msgid "Sync Every (hours)"
 msgstr ""
 
 msgctxt "#32049"
@@ -135,11 +135,11 @@ msgid "How often a new synced list checks whether its Trakt copy needs updating.
 msgstr ""
 
 msgctxt "#32100"
-msgid "AI & Recommendations"
+msgid "AI Service"
 msgstr ""
 
 msgctxt "#32101"
-msgid "Choose the AI service and model used for your taste profile and movie picks."
+msgid "Choose the AI service and model used for your preferences and recommendations."
 msgstr ""
 
 msgctxt "#32102"
@@ -147,7 +147,7 @@ msgid "AI service"
 msgstr ""
 
 msgctxt "#32103"
-msgid "Choose which supported AI service creates your taste profile and recommendations."
+msgid "Choose which supported AI service creates your preference summary and recommendations."
 msgstr ""
 
 msgctxt "#32104"
@@ -179,7 +179,7 @@ msgid "OpenAI model"
 msgstr ""
 
 msgctxt "#32113"
-msgid "Model ID used for taste analysis and recommendations."
+msgid "Model ID used for preference analysis and recommendations."
 msgstr ""
 
 msgctxt "#32120"
@@ -195,23 +195,23 @@ msgid "Gemini model"
 msgstr ""
 
 msgctxt "#32123"
-msgid "Gemini model ID used for taste analysis and recommendations."
+msgid "Gemini model ID used for preference analysis and recommendations."
 msgstr ""
 
 msgctxt "#32130"
-msgid "Taste profile status"
+msgid "Preference summary status"
 msgstr ""
 
 msgctxt "#32131"
-msgid "Status of the compact AI taste summary reused with your prompts. Full watched/rated IDs remain local for exclusions."
+msgid "Status of the compact preference summary reused with your prompts. Full watched and rated IDs remain local for exclusions."
 msgstr ""
 
 msgctxt "#32132"
-msgid "Rebuild taste profile after (hours)"
+msgid "Rebuild preference summary after (hours)"
 msgstr ""
 
 msgctxt "#32133"
-msgid "How long the compact AI taste profile can be reused before it may be rebuilt. It is also rebuilt when the underlying taste data meaningfully changes."
+msgid "How long the compact preference summary can be reused. It is also rebuilt when the underlying preference data meaningfully changes."
 msgstr ""
 
 msgctxt "#32134"
@@ -263,11 +263,11 @@ msgid "How long normal curatr notifications stay visible."
 msgstr ""
 
 msgctxt "#32300"
-msgid "Taste & Data"
+msgid "Preferences & Data"
 msgstr ""
 
 msgctxt "#32301"
-msgid "Control how much Trakt taste data is cached and how often the reusable AI taste profile is refreshed."
+msgid "Control how much Trakt preference data is kept and how often the reusable AI summary is refreshed."
 msgstr ""
 
 msgctxt "#32310"
@@ -311,7 +311,7 @@ msgid "Claude model"
 msgstr ""
 
 msgctxt "#32506"
-msgid "Anthropic model ID used for taste analysis and recommendations."
+msgid "Anthropic model ID used for preference analysis and recommendations."
 msgstr ""
 
 msgctxt "#32507"
@@ -371,7 +371,7 @@ msgid "Improve matching with TMDB"
 msgstr ""
 
 msgctxt "#32524"
-msgid "Lets curatr verify and enrich films related to your taste. If TMDB is unavailable, curatr continues normally."
+msgid "Lets curatr verify and enrich films related to your preferences. If TMDB is unavailable, curatr continues normally."
 msgstr ""
 
 msgctxt "#32525"
@@ -457,7 +457,7 @@ msgid "Welcome to curatr"
 msgstr ""
 
 msgctxt "#32401"
-msgid "Welcome to curatr. Before creating your first list, choose an AI service and add your own API key. Trakt is optional: a public username can provide taste data, while a full Trakt connection is only needed if curatr should write list copies back to Trakt.\n\nOpen Settings now?"
+msgid "Welcome to curatr. Choose an AI service and add its API key before creating your first list. Trakt is optional: add a public username for personalised recommendations, or connect your account if curatr should save lists to Trakt.\n\nOpen Settings now?"
 msgstr ""
 
 msgctxt "#32402"
@@ -473,11 +473,11 @@ msgid "My Lists"
 msgstr ""
 
 msgctxt "#32411"
-msgid "Explore"
+msgid "Find Something to Watch"
 msgstr ""
 
 msgctxt "#32412"
-msgid "Taste & Activity"
+msgid "Preferences & Activity"
 msgstr ""
 
 msgctxt "#32413"
@@ -489,11 +489,11 @@ msgid "Create, browse and manage your personalised movie lists."
 msgstr ""
 
 msgctxt "#32415"
-msgid "Quick picks, saved prompts and ready-to-use recommendation views."
+msgid "Quick picks, saved prompts and more ways to browse recommendations."
 msgstr ""
 
 msgctxt "#32416"
-msgid "Your taste profile, Trakt connection, AI usage and recent activity."
+msgid "Your preferences, Trakt connection, AI usage and recent activity."
 msgstr ""
 
 msgctxt "#32417"
@@ -505,7 +505,7 @@ msgid "Browse My Lists"
 msgstr ""
 
 msgctxt "#32419"
-msgid "Open your saved curatr lists."
+msgid "Open and browse your saved lists."
 msgstr ""
 
 msgctxt "#32420"
@@ -517,7 +517,7 @@ msgid "Manage My Lists"
 msgstr ""
 
 msgctxt "#32422"
-msgid "Refresh All Lists with AI"
+msgid "Refresh All Lists"
 msgstr ""
 
 msgctxt "#32423"
@@ -525,19 +525,19 @@ msgid "Backup & Restore"
 msgstr ""
 
 msgctxt "#32424"
-msgid "Describe what you want in ordinary language."
+msgid "Describe what you want to watch and create a personalised list."
 msgstr ""
 
 msgctxt "#32425"
-msgid "Edit prompts, names, film counts and per-list schedules."
+msgid "Change list names, prompts, artwork and refresh settings."
 msgstr ""
 
 msgctxt "#32426"
-msgid "Re-run every saved prompt now and replace each local list with fresh picks."
+msgid "Find fresh recommendations for all your saved lists."
 msgstr ""
 
 msgctxt "#32427"
-msgid "Back up local lists, saved prompts and hidden-movie choices. API keys and login tokens are excluded."
+msgid "Save or restore a backup of your lists, prompts and hidden movies."
 msgstr ""
 
 msgctxt "#32430"
@@ -553,23 +553,23 @@ msgid "Hidden Movies"
 msgstr ""
 
 msgctxt "#32433"
-msgid "Choose a mood and get a fresh ready-made list without writing a prompt."
+msgid "Choose a mood and quickly create a personalised list."
 msgstr ""
 
 msgctxt "#32434"
-msgid "Reuse and manage prompts you want to come back to."
+msgid "Reuse and manage prompts you have saved for later."
 msgstr ""
 
 msgctxt "#32435"
-msgid "Review movies you told curatr never to recommend again."
+msgid "Review movies you have asked curatr not to recommend."
 msgstr ""
 
 msgctxt "#32440"
-msgid "Update Taste Data from Trakt"
+msgid "Refresh Preferences from Trakt"
 msgstr ""
 
 msgctxt "#32441"
-msgid "View My Taste Profile"
+msgid "View My Preferences"
 msgstr ""
 
 msgctxt "#32442"
@@ -589,23 +589,23 @@ msgid "Connect / Reconnect Trakt"
 msgstr ""
 
 msgctxt "#32446"
-msgid "Refresh the ratings and watch-history signals used by your recommendations."
+msgid "Update the ratings and watch history curatr uses."
 msgstr ""
 
 msgctxt "#32447"
-msgid "See the compact AI summary used alongside each prompt."
+msgid "See the information curatr uses when choosing recommendations."
 msgstr ""
 
 msgctxt "#32448"
-msgid "See request and token totals reported by your AI provider."
+msgid "See how many AI requests and tokens curatr has used."
 msgstr ""
 
 msgctxt "#32449"
-msgid "See recent list refreshes, Trakt updates and errors."
+msgid "See recent list updates and any problems."
 msgstr ""
 
 msgctxt "#32450"
-msgid "Check the Trakt account or public profile currently in use."
+msgid "Check which Trakt account is connected."
 msgstr ""
 
 msgctxt "#32451"

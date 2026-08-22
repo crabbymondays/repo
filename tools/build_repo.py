@@ -9,6 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "repo"
 ADDONS = (ROOT / "repository.curatr", ROOT / "plugin.video.curatr")
+PACKAGE_EXCLUDES = {
+    "plugin.video.curatr": {"ARTWORK.md", "README.md", "tools"},
+}
 
 
 def version(addon_dir):
@@ -21,8 +24,13 @@ def zip_addon(addon_dir):
     target = target_dir / f"{addon_dir.name}-{version(addon_dir)}.zip"
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(addon_dir.rglob("*")):
-            if path.is_file() and "__pycache__" not in path.parts and path.suffix not in (".pyc", ".pyo"):
-                archive.write(path, Path(addon_dir.name) / path.relative_to(addon_dir))
+            relative = path.relative_to(addon_dir)
+            excluded = PACKAGE_EXCLUDES.get(addon_dir.name, set())
+            if not path.is_file() or relative.parts[0] in excluded:
+                continue
+            if "__pycache__" in relative.parts or path.suffix in (".pyc", ".pyo"):
+                continue
+            archive.write(path, Path(addon_dir.name) / relative)
 
 
 def publish_assets(addon_dir):
@@ -45,6 +53,8 @@ def main():
     if OUTPUT.exists():
         shutil.rmtree(OUTPUT)
     OUTPUT.mkdir()
+    for old_installer in ROOT.glob("repository.curatr-*.zip"):
+        old_installer.unlink()
     roots = []
     for addon_dir in ADDONS:
         ET.parse(addon_dir / "addon.xml")

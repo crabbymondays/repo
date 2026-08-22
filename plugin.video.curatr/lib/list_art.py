@@ -100,7 +100,7 @@ def resolved_sources(addon, record):
 
     fanart = ""
     if state["fanart_mode"] == "default":
-        fanart = _media(addon, "fanart_global.jpg")
+        fanart = _media(addon, "fanart_menu_clean_v2.jpg")
     elif state["fanart_mode"] in ("item", "person", "custom"):
         fanart = state["fanart_source"]
     else:
