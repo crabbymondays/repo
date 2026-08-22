@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="0.16.0~beta3" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="0.16.1~beta3" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -45,7 +45,7 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>0.16.0~beta3 (2026-08-22)
+            <news>0.16.1~beta3 (2026-08-22)
 - Makes menus, settings, descriptions and setup messages clearer and more consistent.
 - Uses Preferences throughout the interface while leaving stable internal state unchanged.
 - Adds friendly per-list refresh and Trakt sync interval choices.
