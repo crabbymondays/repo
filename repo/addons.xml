@@ -3,9 +3,9 @@
     <addon id="repository.curatr" name="curatr Repository" version="1.0.1" provider-name="crabbymondays">
         <extension point="xbmc.addon.repository" name="curatr Repository">
             <dir>
-                <info compressed="false">https://crabbymondays.github.io/repo/addons.xml</info>
-                <checksum>https://crabbymondays.github.io/repo/addons.xml.md5</checksum>
-                <datadir>https://crabbymondays.github.io/repo/</datadir>
+                <info compressed="false">https://crabbymondays.github.io/repo/repo/addons.xml</info>
+                <checksum>https://crabbymondays.github.io/repo/repo/addons.xml.md5</checksum>
+                <datadir>https://crabbymondays.github.io/repo/repo/</datadir>
             </dir>
         </extension>
         <extension point="xbmc.addon.metadata">
@@ -17,8 +17,8 @@
                 <icon>icon.png</icon>
                 <fanart>fanart.jpg</fanart>
             </assets>
-            <source>https://github.com/crabbymondays/crabbymondays.github.io</source>
-            <website>https://crabbymondays.github.io/</website>
+            <source>https://github.com/crabbymondays/repo</source>
+            <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
     <addon id="plugin.video.curatr" name="curatr" version="0.16.0~beta1" provider-name="crabbymondays">
@@ -43,8 +43,8 @@
                 <icon>icon.png</icon>
                 <fanart>fanart_centered_v2.jpg</fanart>
             </assets>
-            <source>https://github.com/crabbymondays/crabbymondays.github.io</source>
-            <website>https://crabbymondays.github.io/</website>
+            <source>https://github.com/crabbymondays/repo</source>
+            <website>https://crabbymondays.github.io/repo/</website>
             <news>0.16.0~beta1 (2026-08-21)
 - Renames the canonical Kodi add-on ID to plugin.video.curatr.
 - Force-refreshes skin widgets after list creation, editing, refresh, restore or deletion.
