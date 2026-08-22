@@ -2,9 +2,9 @@
 <addon id="repository.curatr" name="curatr Repository" version="1.0.1" provider-name="crabbymondays">
     <extension point="xbmc.addon.repository" name="curatr Repository">
         <dir>
-            <info compressed="false">https://crabbymondays.github.io/repo/addons.xml</info>
-            <checksum>https://crabbymondays.github.io/repo/addons.xml.md5</checksum>
-            <datadir>https://crabbymondays.github.io/repo/</datadir>
+            <info compressed="false">https://crabbymondays.github.io/repo/repo/addons.xml</info>
+            <checksum>https://crabbymondays.github.io/repo/repo/addons.xml.md5</checksum>
+            <datadir>https://crabbymondays.github.io/repo/repo/</datadir>
         </dir>
     </extension>
     <extension point="xbmc.addon.metadata">
@@ -13,7 +13,7 @@
         <platform>all</platform>
         <license>MIT</license>
         <assets><icon>icon.png</icon><fanart>fanart.jpg</fanart></assets>
-        <source>https://github.com/crabbymondays/crabbymondays.github.io</source>
-        <website>https://crabbymondays.github.io/</website>
+        <source>https://github.com/crabbymondays/repo</source>
+        <website>https://crabbymondays.github.io/repo/</website>
     </extension>
 </addon>

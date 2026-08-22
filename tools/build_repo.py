@@ -39,6 +39,12 @@ def main():
         OUTPUT / "repository.curatr" / repository_filename,
         OUTPUT / repository_filename,
     )
+    # Kodi's HTTP ZIP browser expects the bootstrap installer beside the
+    # project's root index, matching established GitHub Pages Kodi repos.
+    shutil.copy2(
+        OUTPUT / "repository.curatr" / repository_filename,
+        ROOT / repository_filename,
+    )
     document = ET.Element("addons")
     for root in roots:
         document.append(root)

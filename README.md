@@ -32,6 +32,6 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ## Development
 
-Push the unpacked source tree to GitHub. The included workflow validates and
+Push the unpacked source tree to `crabbymondays/repo`. The included workflow validates and
 builds the Kodi repository into `repo/`, commits it to `main`, and creates ZIPs
 that Kodi can install.
