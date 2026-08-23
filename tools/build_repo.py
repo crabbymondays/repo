@@ -28,7 +28,7 @@ def zip_addon(addon_dir):
             excluded = PACKAGE_EXCLUDES.get(addon_dir.name, set())
             if not path.is_file() or relative.parts[0] in excluded:
                 continue
-            if "__pycache__" in relative.parts or path.suffix in (".pyc", ".pyo", ".tmp"):
+            if "__pycache__" in relative.parts or path.suffix in (".pyc", ".pyo"):
                 continue
             archive.write(path, Path(addon_dir.name) / relative)
 

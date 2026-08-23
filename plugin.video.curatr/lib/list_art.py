@@ -57,7 +57,6 @@ def default_state():
         "icon_key": "",
         "icon_source": "",
         "icon_label": "",
-        "icon_style": "white",
         "fanart_mode": "auto",
         "fanart_key": "",
         "fanart_source": "",
@@ -74,8 +73,6 @@ def normalise_state(value):
                 result[key] = str(value.get(key) or "")
     if result["icon_mode"] not in ("auto", "bundled", "custom", "default"):
         result["icon_mode"] = "auto"
-    if result["icon_style"] not in ("white", "colour"):
-        result["icon_style"] = "white"
     if result["fanart_mode"] not in ("auto", "bundled", "item", "person", "custom", "default"):
         result["fanart_mode"] = "auto"
     if result["fanart_style"] not in ("colour", "monochrome"):
@@ -102,8 +99,8 @@ def resolved_sources(addon, record):
         key = automatic if state["icon_mode"] == "auto" else state["icon_key"]
         if key not in LABELS:
             key = automatic
-        folder = "icons_colour_v1" if state["icon_style"] == "colour" else "icons_v3"
-        icon = _media(addon, "list_art", folder, key + ".png")
+        # Versioned path avoids Kodi reusing the earlier drawn icon cache.
+        icon = _media(addon, "list_art", "icons_v2", key + ".png")
 
     fanart = ""
     if state["fanart_mode"] == "default":

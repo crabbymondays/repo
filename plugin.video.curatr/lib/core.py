@@ -4,7 +4,6 @@ import os
 import time
 import unicodedata
 import uuid
-from contextlib import contextmanager
 
 import xbmc
 import xbmcgui
@@ -12,6 +11,7 @@ import xbmcvfs
 
 from .ai_factory import create_ai_client
 from .art_cache import ArtworkCache
+from .artwork_preview import ArtworkPreviewWindow
 from .catalogue_clients import CatalogueError, MDBListClient, TMDBClient
 from .list_art import CHOICES as LIST_ART_CHOICES
 from .list_art import label as list_art_label
@@ -41,11 +41,6 @@ class Curator:
         self.state_path = os.path.join(self.profile_dir, "state.json")
         self._had_state_file = xbmcvfs.exists(self.state_path)
         self.state = self._load_state()
-        # Keep the exact snapshot this process loaded. Kodi can run the plugin,
-        # script and background service in separate Python processes, so a
-        # later save must apply only this process's changes to the newest file
-        # rather than replacing it with a stale full-state snapshot.
-        self._state_baseline = self._clone_state(self.state)
         if not self.state.get("install_origin"):
             self.state["install_origin"] = "pre-0.13" if self._had_state_file else (addon.getAddonInfo("version") or "0.13.0")
         self._had_existing_configuration = self._detect_existing_configuration()
@@ -190,197 +185,33 @@ class Curator:
                 handle.close()
 
     def _load_state(self):
-        candidates = [self.state_path] + [self.state_path + ".backup.%d" % index for index in (1, 2, 3)]
-        last_error = None
-        for index, path in enumerate(candidates):
-            if not xbmcvfs.exists(path):
-                continue
-            try:
-                raw = self._read_text(path)
-                data = json.loads(raw) if raw else {}
-                if not isinstance(data, dict):
-                    raise ValueError("state root is not an object")
-                if index:
-                    xbmc.log("curatr recovered local data from backup %d" % index, xbmc.LOGWARNING)
-                return data
-            except Exception as exc:
-                last_error = exc
-        if last_error is not None:
-            xbmc.log("curatr could not read state or backups: %s" % last_error, xbmc.LOGWARNING)
-        return {}
-
-    @staticmethod
-    def _clone_state(value):
+        if not xbmcvfs.exists(self.state_path):
+            return {}
         try:
-            return json.loads(json.dumps(value, ensure_ascii=False))
-        except Exception:
-            return dict(value) if isinstance(value, dict) else {}
-
-    @contextmanager
-    def _state_write_lock(self, timeout_seconds=8, stale_seconds=120):
-        """Serialise state commits across Kodi's independent Python processes."""
-        lock_path = self.state_path + ".lock"
-        deadline = time.time() + max(1, int(timeout_seconds))
-        acquired = False
-        while time.time() < deadline:
-            try:
-                os.mkdir(lock_path)
-                acquired = True
-                break
-            except FileExistsError:
-                try:
-                    if time.time() - os.path.getmtime(lock_path) > stale_seconds:
-                        os.rmdir(lock_path)
-                        continue
-                except OSError:
-                    pass
-                xbmc.sleep(100)
-            except OSError as exc:
-                raise RuntimeError("curatr could not lock its local data: %s" % exc)
-        if not acquired:
-            raise RuntimeError("curatr is busy saving another change. Please try again.")
-        try:
-            yield
-        finally:
-            try:
-                os.rmdir(lock_path)
-            except OSError:
-                pass
-
-    @contextmanager
-    def _ai_operation_lock(self, stale_seconds=3600):
-        """Prevent overlapping AI work from spending tokens or racing state."""
-        lock_path = os.path.join(self.profile_dir, "ai-operation.lock")
-        try:
-            os.mkdir(lock_path)
-        except FileExistsError:
-            try:
-                if time.time() - os.path.getmtime(lock_path) > stale_seconds:
-                    os.rmdir(lock_path)
-                    os.mkdir(lock_path)
-                else:
-                    raise RuntimeError(
-                        "curatr is already working on another list. Wait for it to finish before starting another."
-                    )
-            except RuntimeError:
-                raise
-            except OSError:
-                raise RuntimeError(
-                    "curatr is already working on another list. Wait for it to finish before starting another."
-                )
-        except OSError as exc:
-            raise RuntimeError("curatr could not start the list operation: %s" % exc)
-        try:
-            yield
-        finally:
-            try:
-                os.rmdir(lock_path)
-            except OSError:
-                pass
-
-    def _ai_operation_active(self, stale_seconds=3600):
-        lock_path = os.path.join(self.profile_dir, "ai-operation.lock")
-        if not os.path.isdir(lock_path):
-            return False
-        try:
-            if time.time() - os.path.getmtime(lock_path) > stale_seconds:
-                os.rmdir(lock_path)
-                return False
-        except OSError:
-            pass
-        return True
-
-    @staticmethod
-    def _records_by_key(records):
-        result = {}
-        order = []
-        for row in records if isinstance(records, list) else []:
-            if not isinstance(row, dict):
-                continue
-            key = str(row.get("local_id") or row.get("trakt_id") or "")
-            if not key:
-                continue
-            if key not in result:
-                order.append(key)
-            result[key] = row
-        return result, order
-
-    def _merge_latest_state(self, latest):
-        """Apply this process's delta onto the newest state stored on disk."""
-        baseline = self._state_baseline if isinstance(self._state_baseline, dict) else {}
-        pending = self.state if isinstance(self.state, dict) else {}
-        merged = self._clone_state(latest if isinstance(latest, dict) else {})
-
-        for key in set(baseline) | set(pending):
-            if key == "ai_lists":
-                continue
-            before_present = key in baseline
-            after_present = key in pending
-            if before_present == after_present and baseline.get(key) == pending.get(key):
-                continue
-            if after_present:
-                merged[key] = self._clone_state(pending[key]) if isinstance(pending[key], dict) else self._clone_state({"value": pending[key]}).get("value")
-            else:
-                merged.pop(key, None)
-
-        disk_rows, disk_order = self._records_by_key(merged.get("ai_lists", []))
-        base_rows, _ = self._records_by_key(baseline.get("ai_lists", []))
-        pending_rows, pending_order = self._records_by_key(pending.get("ai_lists", []))
-        changed_ids = {
-            key for key in set(base_rows) | set(pending_rows)
-            if base_rows.get(key) != pending_rows.get(key)
-        }
-        for key in changed_ids:
-            if key in pending_rows:
-                disk_rows[key] = self._clone_state(pending_rows[key])
-                if key not in disk_order:
-                    disk_order.append(key)
-            else:
-                disk_rows.pop(key, None)
-                if key in disk_order:
-                    disk_order.remove(key)
-        # Preserve deterministic append order when several new records were
-        # created by this process.
-        for key in pending_order:
-            if key in disk_rows and key not in disk_order:
-                disk_order.append(key)
-        merged["ai_lists"] = [disk_rows[key] for key in disk_order if key in disk_rows]
-        return merged
-
-    def _rotate_state_backups(self):
-        """Keep three recoverable snapshots without including credentials in exports."""
-        for index in (3, 2, 1):
-            source = self.state_path if index == 1 else self.state_path + ".backup.%d" % (index - 1)
-            target = self.state_path + ".backup.%d" % index
-            if not xbmcvfs.exists(source):
-                continue
-            if xbmcvfs.exists(target):
-                xbmcvfs.delete(target)
-            xbmcvfs.copy(source, target)
+            raw = self._read_text(self.state_path)
+            data = json.loads(raw) if raw else {}
+            return data if isinstance(data, dict) else {}
+        except Exception as exc:
+            xbmc.log("curatr could not read state: %s" % exc, xbmc.LOGWARNING)
+            return {}
 
     def _save_state(self):
+        payload = json.dumps(self.state, ensure_ascii=False, separators=(",", ":"))
         temp_path = self.state_path + ".tmp"
-        with self._state_write_lock():
-            latest = self._load_state() if xbmcvfs.exists(self.state_path) else {}
-            merged = self._merge_latest_state(latest)
-            payload = json.dumps(merged, ensure_ascii=False, separators=(",", ":"))
-            try:
+        try:
+            if xbmcvfs.exists(temp_path):
+                xbmcvfs.delete(temp_path)
+            self._write_text(temp_path, payload)
+            if xbmcvfs.exists(self.state_path):
+                xbmcvfs.delete(self.state_path)
+            if not xbmcvfs.rename(temp_path, self.state_path):
+                self._write_text(self.state_path, payload)
                 if xbmcvfs.exists(temp_path):
                     xbmcvfs.delete(temp_path)
-                self._write_text(temp_path, payload)
-                self._rotate_state_backups()
-                if xbmcvfs.exists(self.state_path):
-                    xbmcvfs.delete(self.state_path)
-                if not xbmcvfs.rename(temp_path, self.state_path):
-                    self._write_text(self.state_path, payload)
-                    if xbmcvfs.exists(temp_path):
-                        xbmcvfs.delete(temp_path)
-            except Exception:
-                if xbmcvfs.exists(temp_path):
-                    xbmcvfs.delete(temp_path)
-                raise
-            self.state = merged
-            self._state_baseline = self._clone_state(merged)
+        except Exception:
+            if xbmcvfs.exists(temp_path):
+                xbmcvfs.delete(temp_path)
+            raise
 
     def _migrate_local_list_state(self):
         """Keep list definitions backward compatible while separating AI regeneration from Trakt refresh.
@@ -404,9 +235,6 @@ class Curator:
             changed = True
         if not isinstance(self.state.get("widget_folders"), list):
             self.state["widget_folders"] = []
-            changed = True
-        if not isinstance(self.state.get("provider_list_cache"), dict):
-            self.state["provider_list_cache"] = {}
             changed = True
 
         folders = []
@@ -434,17 +262,6 @@ class Curator:
                         "name": str(item.get("name") or "External Shortcut").strip() or "External Shortcut",
                         "description": str(item.get("description") or "").strip(),
                         "path": self._valid_external_plugin_path(item.get("path")),
-                        "artwork": normalise_list_art(item.get("artwork")),
-                    })
-                elif item.get("type") == "provider_list" and item.get("provider") in ("trakt", "mdblist") and item.get("provider_list_id"):
-                    item.update({
-                        "type": "provider_list",
-                        "provider": str(item.get("provider")),
-                        "provider_list_id": str(item.get("provider_list_id")),
-                        "name": str(item.get("name") or "Linked list").strip() or "Linked list",
-                        "description": str(item.get("description") or "").strip(),
-                        "username": str(item.get("username") or "").strip(),
-                        "item_count": self._safe_int(item.get("item_count"), 0),
                         "artwork": normalise_list_art(item.get("artwork")),
                     })
                 else:
@@ -483,9 +300,6 @@ class Curator:
                 changed = True
             if "local_changed_at" not in record:
                 record["local_changed_at"] = self._safe_int(record.get("updated_at"), 0)
-                changed = True
-            if "created_at" not in record:
-                record["created_at"] = self._safe_int(record.get("updated_at"), 0) or int(time.time())
                 changed = True
 
             # Migrate the v0.8 auto-refresh settings into AI regeneration.
@@ -702,24 +516,11 @@ class Curator:
             return
         if level == "error" and not self._bool_setting("notify_errors", True):
             return
-        icon_names = {
-            "info": "information_v1.png",
-            "working": "working_v1.png",
-            "success": "success_v1.png",
-            "warning": "error_v1.png",
-            "error": "error_v1.png",
-        }
-        icon = os.path.join(
-            xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
-            "resources", "media", "notifications",
-            icon_names.get(str(level or "info"), "information_v1.png"),
-        )
-        if not xbmcvfs.exists(icon):
-            icon = xbmcgui.NOTIFICATION_INFO
-            if level == "warning":
-                icon = xbmcgui.NOTIFICATION_WARNING
-            elif level == "error":
-                icon = getattr(xbmcgui, "NOTIFICATION_ERROR", xbmcgui.NOTIFICATION_WARNING)
+        icon = xbmcgui.NOTIFICATION_INFO
+        if level == "warning":
+            icon = xbmcgui.NOTIFICATION_WARNING
+        elif level == "error":
+            icon = getattr(xbmcgui, "NOTIFICATION_ERROR", xbmcgui.NOTIFICATION_WARNING)
         duration = self._setting_int("notification_duration", 5, 2, 15) * 1000
         xbmcgui.Dialog().notification(self.name, str(message), icon, duration)
 
@@ -736,8 +537,7 @@ class Curator:
         self.state["activity"] = history[-50:]
         self._save_state()
         if notify:
-            notification_level = "success" if level == "info" else level
-            self._notify(message, level=notification_level, background=background)
+            self._notify(message, level=level, background=background)
         return event
 
     def report_error(self, message, detail="", background=False):
@@ -1245,7 +1045,6 @@ class Curator:
 
     def create_list_interactive(self, preset_prompt=None, preset_name=None, preset_count=None):
         """Create a saved list from a free-form prompt or a supplied preset."""
-        self._require_profile_source()
         self._require_ai()
 
         prompt = preset_prompt
@@ -1291,7 +1090,7 @@ class Curator:
         if not confirmed:
             return None
 
-        self._notify("Finding %d films for %s…" % (count, name), level="working")
+        self._notify("Finding %d films for %s…" % (count, name))
         result = self._generate_and_write(
             name, prompt, count, managed_record=managed, description=description
         )
@@ -1309,7 +1108,6 @@ class Curator:
         ]
 
     def quick_pick_interactive(self):
-        self._require_profile_source()
         self._require_ai()
         presets = self.quick_pick_presets()
         choice = xbmcgui.Dialog().select("Quick Pick", [row[0] for row in presets])
@@ -1319,7 +1117,7 @@ class Curator:
         count = self._setting_int("quick_pick_count", 15, 5, 50)
         name = "Quick Pick — %s" % label
         managed = self._managed_record_by_name(name)
-        self._notify("Finding fresh picks for %s…" % label, level="working")
+        self._notify("Finding fresh picks for %s…" % label)
         result = self._generate_and_write(name, prompt, count, managed_record=managed)
         self.record_activity("Quick Pick refreshed: %s" % label, notify=False)
         return result
@@ -1340,7 +1138,7 @@ class Curator:
 
         name = record.get("name") or "AI - My Picks"
         if not silent:
-            self._notify("Regenerating %s with AI…" % name, level="working")
+            self._notify("Regenerating %s with AI…" % name)
         result = self._generate_and_write(
             name,
             record.get("prompt") or "Recommend films for me.",
@@ -1587,10 +1385,41 @@ class Curator:
         self._save_state()
         return updated
 
-    def _choose_bundled_art(self, heading):
+    def _preview_artwork(self, source, label, heading="Artwork preview"):
+        source = str(source or "").strip()
+        if not source:
+            return False
+        display_source = source
+        if source.startswith(("https://", "http://")):
+            try:
+                display_source = ArtworkCache(self.addon, workers=1)._download(source) or source
+            except Exception as exc:
+                xbmc.log("curatr artwork preview cache skipped: %s" % exc, xbmc.LOGDEBUG)
+        addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
+        backdrop = os.path.join(addon_path, "resources", "media", "pixel.png")
+        window = ArtworkPreviewWindow(display_source, backdrop, heading, label)
+        try:
+            window.doModal()
+            return bool(window.accepted)
+        finally:
+            window.close()
+
+    def _bundled_art_source(self, key, kind):
+        addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
+        folder = "icons_v2" if kind == "icon" else "fanart_v2"
+        extension = ".png" if kind == "icon" else ".jpg"
+        return os.path.join(addon_path, "resources", "media", "list_art", folder, key + extension)
+
+    def _choose_bundled_art(self, heading, kind):
         labels = [label for _key, label in LIST_ART_CHOICES]
-        choice = xbmcgui.Dialog().select(heading, labels)
-        return LIST_ART_CHOICES[choice][0] if 0 <= choice < len(LIST_ART_CHOICES) else ""
+        while True:
+            choice = xbmcgui.Dialog().select(heading, labels)
+            if not 0 <= choice < len(LIST_ART_CHOICES):
+                return ""
+            key, label = LIST_ART_CHOICES[choice]
+            source = self._bundled_art_source(key, kind)
+            if self._preview_artwork(source, label, "Preview %s" % kind):
+                return key
 
     def _change_list_icon(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -1609,7 +1438,7 @@ class Curator:
         if choice == 0:
             art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": ""})
         elif choice == 1:
-            key = self._choose_bundled_art("Choose list icon")
+            key = self._choose_bundled_art("Choose list icon", "icon")
             if not key:
                 return record
             art.update({"icon_mode": "bundled", "icon_key": key, "icon_source": "", "icon_label": ""})
@@ -1634,6 +1463,8 @@ class Curator:
             path = xbmcgui.Dialog().browseSingle(2, "Choose a square icon", "files", ".png|.jpg|.jpeg|.webp")
             if not path:
                 return record
+            if not self._preview_artwork(path, "Custom icon", "Preview icon"):
+                return record
             art.update({"icon_mode": "custom", "icon_source": str(path), "icon_key": "", "icon_label": "Custom"})
         else:
             art.update({"icon_mode": "default", "icon_key": "", "icon_source": "", "icon_label": ""})
@@ -1652,15 +1483,17 @@ class Curator:
             xbmcgui.Dialog().ok(self.name, "No landscape artwork is available in this list yet. Refresh the list first, or choose another fanart option.")
             return "", ""
         labels = ["%s%s" % (row.get("title") or "Untitled", " (%s)" % row.get("year") if row.get("year") else "") for row, _url in choices]
-        selected = xbmcgui.Dialog().select("Use fanart from a list item", labels)
-        if not 0 <= selected < len(choices):
-            return "", ""
-        movie, source = choices[selected]
-        label = "%s%s" % (
-            movie.get("title") or "Film artwork",
-            " (%s)" % movie.get("year") if movie.get("year") else "",
-        )
-        return source, label
+        while True:
+            selected = xbmcgui.Dialog().select("Use fanart from a list item", labels)
+            if not 0 <= selected < len(choices):
+                return "", ""
+            movie, source = choices[selected]
+            label = "%s%s" % (
+                movie.get("title") or "Film artwork",
+                " (%s)" % movie.get("year") if movie.get("year") else "",
+            )
+            if self._preview_artwork(source, label, "Preview movie fanart"):
+                return source, label
 
     def _fanart_from_person(self):
         if not self.tmdb or not self.tmdb.api_key:
@@ -1679,11 +1512,15 @@ class Curator:
             known = [str(row.get("title") or row.get("name") or "") for row in person.get("known_for", []) if isinstance(row, dict)]
             suffix = " — %s" % ", ".join([value for value in known if value][:2]) if known else ""
             labels.append("%s%s" % (person.get("name"), suffix))
-        selected = xbmcgui.Dialog().select("Choose a person", labels)
-        if selected < 0:
-            return "", ""
-        person = people[selected]
-        return self.tmdb.image_url(person.get("profile_path"), "h632"), str(person.get("name") or "Person artwork")
+        while True:
+            selected = xbmcgui.Dialog().select("Choose a person", labels)
+            if selected < 0:
+                return "", ""
+            person = people[selected]
+            source = self.tmdb.image_url(person.get("profile_path"), "h632")
+            label = str(person.get("name") or "Person artwork")
+            if self._preview_artwork(source, label, "Preview person artwork"):
+                return source, label
 
     def _change_list_fanart(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -1704,7 +1541,7 @@ class Curator:
         if choice == 0:
             art.update({"fanart_mode": "auto", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
         elif choice == 1:
-            key = self._choose_bundled_art("Choose list fanart")
+            key = self._choose_bundled_art("Choose list fanart", "fanart")
             if not key:
                 return record
             art.update({"fanart_mode": "bundled", "fanart_key": key, "fanart_source": "", "fanart_label": ""})
@@ -1739,6 +1576,8 @@ class Curator:
             source = xbmcgui.Dialog().browseSingle(2, "Choose landscape fanart", "files", ".png|.jpg|.jpeg|.webp")
             if not source:
                 return record
+            if not self._preview_artwork(source, "Custom fanart", "Preview fanart"):
+                return record
             art.update({"fanart_mode": "custom", "fanart_source": str(source), "fanart_key": "", "fanart_label": ""})
         else:
             art.update({"fanart_mode": "default", "fanart_source": "", "fanart_key": "", "fanart_label": ""})
@@ -1757,19 +1596,6 @@ class Curator:
         if choice < 0:
             return record
         art["fanart_style"] = "monochrome" if choice == 1 else "colour"
-        return self._store_list_artwork(record, art)
-
-    def _change_list_icon_style(self, list_id):
-        record = self._managed_record_by_id(list_id)
-        if not record:
-            raise RuntimeError("That list has already been removed.")
-        art = normalise_list_art(record.get("artwork"))
-        if art.get("icon_mode") not in ("auto", "bundled"):
-            return record
-        choice = xbmcgui.Dialog().select("Icon style", ["White", "Colour square"])
-        if choice < 0:
-            return record
-        art["icon_style"] = "colour" if choice == 1 else "white"
         return self._store_list_artwork(record, art)
 
     def _suggest_list_artwork(self, list_id):
@@ -1808,10 +1634,13 @@ class Curator:
         if not suggestions:
             xbmcgui.Dialog().ok(self.name, "No person or list-item artwork suggestions are available yet. Enable TMDB or refresh this list first.")
             return record
-        choice = xbmcgui.Dialog().select("Suggested artwork", [row["label"] for row in suggestions])
-        if choice < 0:
-            return record
-        selected = suggestions[choice]
+        while True:
+            choice = xbmcgui.Dialog().select("Suggested artwork", [row["label"] for row in suggestions])
+            if choice < 0:
+                return record
+            selected = suggestions[choice]
+            if self._preview_artwork(selected["source"], selected.get("art_label") or selected["label"], "Preview suggested artwork"):
+                break
         art = normalise_list_art(record.get("artwork"))
         art.update({
             "fanart_mode": selected["mode"],
@@ -1836,8 +1665,6 @@ class Curator:
                 ("icon", "Icon: %s" % icon),
                 ("fanart", "Fanart: %s" % fanart),
             ]
-            if art.get("icon_mode") in ("auto", "bundled"):
-                actions.append(("icon_style", "Icon style: %s" % ("Colour square" if art.get("icon_style") == "colour" else "White")))
             # Colour/monochrome variants only exist for curatr's generated
             # fanart. Remote and custom images are displayed unmodified.
             if art.get("fanart_mode") in ("auto", "bundled"):
@@ -1858,8 +1685,6 @@ class Curator:
                 self._change_list_icon(key)
             elif action == "fanart":
                 self._change_list_fanart(key)
-            elif action == "icon_style":
-                self._change_list_icon_style(key)
             elif action == "style":
                 self._change_list_fanart_style(key)
             elif action == "suggest":
@@ -2068,8 +1893,8 @@ class Curator:
     @staticmethod
     def _format_interval(hours):
         hours = max(1, int(hours or 1))
-        labels = {6: "6 hours", 12: "12 hours", 24: "1 day", 72: "3 days", 168: "1 week"}
-        return labels.get(hours, "%d hour%s" % (hours, "" if hours == 1 else "s"))
+        labels = {6: "Every 6 hours", 12: "Every 12 hours", 24: "Every day", 72: "Every 3 days", 168: "Every week"}
+        return labels.get(hours, "Every %d hours" % hours)
 
     def _choose_interval_hours(self, heading, current):
         values = [6, 12, 24, 72, 168]
@@ -2276,134 +2101,13 @@ class Curator:
         if entry.get("type") == "curatr_list":
             record = self._managed_record_by_id(entry.get("list_id"))
             return str((record or {}).get("name") or "Missing curatr list")
-        if entry.get("type") == "provider_list":
-            return "%s — %s" % (entry.get("name") or "Linked list", str(entry.get("provider") or "").upper())
         return str(entry.get("name") or "External Shortcut")
-
-    @staticmethod
-    def _provider_cache_key(provider, list_id):
-        return "%s:%s" % (str(provider or "").lower(), str(list_id or ""))
-
-    def provider_list_cached_metadata(self, entry):
-        key = self._provider_cache_key(entry.get("provider"), entry.get("provider_list_id"))
-        cached = (self.state.get("provider_list_cache") or {}).get(key) or {}
-        return {
-            "item_count": self._safe_int(cached.get("item_count"), self._safe_int(entry.get("item_count"), 0)),
-            "checked_at": self._safe_int(cached.get("checked_at"), 0),
-        }
-
-    def _available_provider_lists(self, provider):
-        provider = str(provider or "").lower()
-        if provider == "trakt":
-            if not self._has_oauth():
-                raise RuntimeError("Connect Trakt first to browse your Trakt lists.")
-            rows = self.trakt.lists()
-            curatr_trakt_ids = {
-                str(row.get("trakt_id")) for row in self.state.get("ai_lists", [])
-                if isinstance(row, dict) and row.get("trakt_id") not in (None, "")
-            }
-            output = []
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                ids = row.get("ids") if isinstance(row.get("ids"), dict) else {}
-                list_id = ids.get("trakt") or ids.get("slug") or row.get("id")
-                if list_id in (None, ""):
-                    continue
-                if str(list_id) in curatr_trakt_ids:
-                    continue
-                owner = row.get("user") if isinstance(row.get("user"), dict) else {}
-                output.append({
-                    "id": str(list_id), "name": str(row.get("name") or "Trakt list"),
-                    "description": str(row.get("description") or "").strip(),
-                    "username": str(owner.get("username") or self.state.get("trakt_username") or "").strip(),
-                    "items": self._safe_int(row.get("item_count"), 0),
-                })
-            return sorted(output, key=lambda row: row["name"].casefold())
-        if provider == "mdblist":
-            if not self.mdblist or not self.mdblist.api_key:
-                raise RuntimeError("Turn on MDBList and enter your API key first.")
-            return self.mdblist.user_lists()
-        raise RuntimeError("That list provider is not supported.")
-
-    def add_provider_list_to_widget_folder_interactive(self, folder_id, provider):
-        folder = self.widget_folder_by_id(folder_id)
-        if not folder:
-            raise RuntimeError("That Widget Folder no longer exists.")
-        provider = str(provider or "").lower()
-        rows = self._available_provider_lists(provider)
-        existing = {
-            self._provider_cache_key(row.get("provider"), row.get("provider_list_id"))
-            for row in folder.get("entries", []) if isinstance(row, dict) and row.get("type") == "provider_list"
-        }
-        rows = [row for row in rows if self._provider_cache_key(provider, row.get("id")) not in existing]
-        if not rows:
-            xbmcgui.Dialog().ok(self.name, "All available %s lists are already in this folder." % ("Trakt" if provider == "trakt" else "MDBList"))
-            return folder
-        labels = [
-            "%s%s" % (row.get("name") or "Linked list", " (%d items)" % self._safe_int(row.get("items"), 0) if self._safe_int(row.get("items"), 0) else "")
-            for row in rows
-        ]
-        selected = xbmcgui.Dialog().multiselect("Add from %s" % ("Trakt Lists" if provider == "trakt" else "MDBList"), labels)
-        if selected is None:
-            return folder
-        entries = [dict(row) for row in folder.get("entries", []) if isinstance(row, dict)]
-        for index in selected:
-            row = rows[index]
-            entries.append({
-                "id": uuid.uuid4().hex, "type": "provider_list", "provider": provider,
-                "provider_list_id": str(row.get("id")), "name": str(row.get("name") or "Linked list"),
-                "description": str(row.get("description") or "").strip(),
-                "username": str(row.get("username") or (self.state.get("trakt_username") if provider == "trakt" else "")).strip(),
-                "item_count": self._safe_int(row.get("items"), 0), "artwork": normalise_list_art({}),
-            })
-        updated = dict(folder); updated["entries"] = entries; updated["updated_at"] = int(time.time())
-        self._store_widget_folder(updated, folder)
-        self.record_activity("Added %d %s list%s to %s" % (len(selected), provider, "" if len(selected) == 1 else "s", updated.get("name")), notify=True)
-        return updated
-
-    def provider_list_movies(self, provider, list_id, force=False):
-        provider = str(provider or "").lower()
-        list_id = str(list_id or "")
-        key = self._provider_cache_key(provider, list_id)
-        cache = self.state.get("provider_list_cache") or {}
-        cached = cache.get(key) if isinstance(cache.get(key), dict) else {}
-        now = int(time.time())
-        if not force and cached.get("movies") and now - self._safe_int(cached.get("checked_at"), 0) < 6 * 3600:
-            return [row for row in cached.get("movies", []) if isinstance(row, dict)]
-        try:
-            if provider == "trakt":
-                if not self._has_oauth():
-                    raise RuntimeError("Connect Trakt to open this linked list.")
-                raw = self.trakt.list_items(list_id, limit=1000, extended=True)
-                movies = [row.get("movie") for row in raw if isinstance(row, dict) and isinstance(row.get("movie"), dict)]
-            elif provider == "mdblist":
-                if not self.mdblist or not self.mdblist.api_key:
-                    raise RuntimeError("Turn on MDBList and enter your API key to open this linked list.")
-                movies = self.mdblist.fetch_list_id(list_id, limit=1000)
-            else:
-                raise RuntimeError("That list provider is not supported.")
-            movies = [row for row in movies if isinstance(row, dict)]
-            cache[key] = {"movies": movies, "item_count": len(movies), "checked_at": now}
-            if len(cache) > 50:
-                cache = dict(sorted(
-                    cache.items(), key=lambda pair: self._safe_int((pair[1] or {}).get("checked_at"), 0), reverse=True,
-                )[:40])
-            self.state["provider_list_cache"] = cache
-            self._save_state()
-            return movies
-        except Exception:
-            if cached.get("movies"):
-                return [row for row in cached.get("movies", []) if isinstance(row, dict)]
-            raise
 
     def _edit_compact_artwork(self, heading, value):
         art = normalise_list_art(value)
         while True:
             icon, fanart, style = list_art_summary({"artwork": art})
             actions = [("icon", "Icon: %s" % icon), ("fanart", "Fanart: %s" % fanart)]
-            if art.get("icon_mode") in ("auto", "bundled"):
-                actions.append(("icon_style", "Icon style: %s" % ("Colour square" if art.get("icon_style") == "colour" else "White")))
             if art.get("fanart_mode") in ("auto", "bundled"):
                 actions.append(("style", "Fanart style: %s" % style))
             actions.extend([("reset", "Reset to Automatic"), ("done", "Done")])
@@ -2419,11 +2123,6 @@ class Curator:
                 if selected >= 0:
                     art["fanart_style"] = "monochrome" if selected == 1 else "colour"
                 continue
-            if action == "icon_style":
-                selected = xbmcgui.Dialog().select("Icon style", ["White", "Colour square"])
-                if selected >= 0:
-                    art["icon_style"] = "colour" if selected == 1 else "white"
-                continue
             if action == "icon":
                 selected = xbmcgui.Dialog().select("Change icon", [
                     "Automatic", "Choose a curatr icon", "Match current fanart",
@@ -2432,7 +2131,7 @@ class Curator:
                 if selected == 0:
                     art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": ""})
                 elif selected == 1:
-                    key = self._choose_bundled_art("Choose icon")
+                    key = self._choose_bundled_art("Choose icon", "icon")
                     if key:
                         art.update({"icon_mode": "bundled", "icon_key": key, "icon_source": "", "icon_label": ""})
                 elif selected == 2:
@@ -2447,7 +2146,7 @@ class Curator:
                         art.update({"icon_mode": "default", "icon_key": "", "icon_source": "", "icon_label": ""})
                 elif selected == 3:
                     source = xbmcgui.Dialog().browseSingle(2, "Choose a square icon", "files", ".png|.jpg|.jpeg|.webp")
-                    if source:
+                    if source and self._preview_artwork(source, "Custom icon", "Preview icon"):
                         art.update({"icon_mode": "custom", "icon_key": "", "icon_source": str(source), "icon_label": "Custom"})
                 elif selected == 4:
                     art.update({"icon_mode": "default", "icon_key": "", "icon_source": "", "icon_label": ""})
@@ -2459,7 +2158,7 @@ class Curator:
             if selected == 0:
                 art.update({"fanart_mode": "auto", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
             elif selected == 1:
-                key = self._choose_bundled_art("Choose fanart")
+                key = self._choose_bundled_art("Choose fanart", "fanart")
                 if key:
                     art.update({"fanart_mode": "bundled", "fanart_key": key, "fanart_source": "", "fanart_label": ""})
             elif selected == 2:
@@ -2474,7 +2173,7 @@ class Curator:
                     art.update({"fanart_mode": "default", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
             elif selected == 3:
                 source = xbmcgui.Dialog().browseSingle(2, "Choose landscape fanart", "files", ".png|.jpg|.jpeg|.webp")
-                if source:
+                if source and self._preview_artwork(source, "Custom fanart", "Preview fanart"):
                     art.update({"fanart_mode": "custom", "fanart_key": "", "fanart_source": str(source), "fanart_label": "Custom"})
             elif selected == 4:
                 art.update({"fanart_mode": "default", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
@@ -2741,16 +2440,8 @@ class Curator:
             raise RuntimeError("That folder item no longer exists.")
         while True:
             actions = ["Move up", "Move down", "Remove from folder"]
-            if entry.get("type") in ("external_path", "provider_list"):
-                actions = [
-                    "Rename Shortcut", "Edit Description",
-                ]
-                if entry.get("type") == "external_path":
-                    actions.append("Choose Plugin Path")
-                actions.append("Change Icon & Fanart")
-                if entry.get("type") == "provider_list":
-                    actions.append("Refresh linked list")
-                actions += ["Move up", "Move down", "Remove from folder"]
+            if entry.get("type") == "external_path":
+                actions = ["Name", "Description", "Plugin path", "Artwork"] + actions
             choice = xbmcgui.Dialog().select(self._folder_entry_label(entry), actions)
             if choice < 0:
                 return folder
@@ -2758,8 +2449,7 @@ class Curator:
             index = next((i for i, row in enumerate(entries) if str(row.get("id")) == str(entry_id)), -1)
             if index < 0:
                 return folder
-            editable_count = 4 if entry.get("type") == "external_path" else (4 if entry.get("type") == "provider_list" else 0)
-            if entry.get("type") in ("external_path", "provider_list") and choice < editable_count:
+            if entry.get("type") == "external_path" and choice < 4:
                 updated_entry = dict(entry)
                 if choice == 0:
                     value = xbmcgui.Dialog().input("Shortcut name", defaultt=str(entry.get("name") or ""))
@@ -2767,18 +2457,16 @@ class Curator:
                 elif choice == 1:
                     value = xbmcgui.Dialog().input("Shortcut description", defaultt=str(entry.get("description") or ""))
                     updated_entry["description"] = str(value or "").strip()
-                elif choice == 2 and entry.get("type") == "external_path":
+                elif choice == 2:
                     value = self._valid_external_plugin_path(xbmcgui.Dialog().input("Plugin path", defaultt=str(entry.get("path") or "")))
                     if value: updated_entry["path"] = value
                     else: xbmcgui.Dialog().ok(self.name, "Enter a complete path beginning with plugin://")
-                elif (choice == 3 and entry.get("type") == "external_path") or (choice == 2 and entry.get("type") == "provider_list"):
-                    updated_entry["artwork"] = self._edit_compact_artwork("Shortcut artwork", entry.get("artwork"))
                 else:
-                    self.provider_list_movies(entry.get("provider"), entry.get("provider_list_id"), force=True)
+                    updated_entry["artwork"] = self._edit_compact_artwork("Shortcut artwork", entry.get("artwork"))
                 entries[index] = updated_entry
                 entry = updated_entry
             else:
-                offset = editable_count if entry.get("type") in ("external_path", "provider_list") else 0
+                offset = 4 if entry.get("type") == "external_path" else 0
                 operation = choice - offset
                 if operation == 0 and index > 0:
                     entries[index - 1], entries[index] = entries[index], entries[index - 1]
@@ -2799,7 +2487,7 @@ class Curator:
             raise RuntimeError("That Widget Folder no longer exists.")
         while True:
             choices = [
-                "Add a curatr list", "Add from Trakt Lists", "Add from MDBList", "Add an external shortcut", "Import from Kodi Favourites", "Manage folder items",
+                "Add a curatr list", "Add an external shortcut", "Import from Kodi Favourites", "Manage folder items",
                 "Folder Name", "Description", "Artwork", "Delete folder",
             ]
             choice = xbmcgui.Dialog().select(folder.get("name") or "Widget Folder", choices)
@@ -2808,14 +2496,10 @@ class Curator:
             if choice == 0:
                 folder = self.add_list_to_widget_folder_interactive(folder_id=folder_id) or folder
             elif choice == 1:
-                folder = self.add_provider_list_to_widget_folder_interactive(folder_id, "trakt") or folder
-            elif choice == 2:
-                folder = self.add_provider_list_to_widget_folder_interactive(folder_id, "mdblist") or folder
-            elif choice == 3:
                 folder = self.add_external_path_interactive(folder_id) or folder
-            elif choice == 4:
+            elif choice == 2:
                 folder = self.import_kodi_favourite_interactive(folder_id) or folder
-            elif choice == 5:
+            elif choice == 3:
                 entries = [row for row in folder.get("entries", []) if isinstance(row, dict)]
                 if not entries:
                     xbmcgui.Dialog().ok(self.name, "This folder is empty.")
@@ -2823,7 +2507,7 @@ class Curator:
                 selected = xbmcgui.Dialog().select("Manage folder items", [self._folder_entry_label(row) for row in entries])
                 if selected >= 0:
                     folder = self.edit_widget_folder_entry_interactive(folder_id, entries[selected].get("id")) or folder
-            elif choice == 6:
+            elif choice == 4:
                 value = xbmcgui.Dialog().input("Folder name", defaultt=str(folder.get("name") or ""))
                 if value and value.strip():
                     name = value.strip()
@@ -2837,11 +2521,11 @@ class Curator:
                     else:
                         updated = dict(folder); updated["name"] = name; updated["updated_at"] = int(time.time())
                         folder = self._store_widget_folder(updated, folder)
-            elif choice == 7:
+            elif choice == 5:
                 value = xbmcgui.Dialog().input("Folder description", defaultt=str(folder.get("description") or ""))
                 updated = dict(folder); updated["description"] = str(value or "").strip(); updated["updated_at"] = int(time.time())
                 folder = self._store_widget_folder(updated, folder)
-            elif choice == 8:
+            elif choice == 6:
                 updated = dict(folder); updated["artwork"] = self._edit_compact_artwork("Folder artwork", folder.get("artwork")); updated["updated_at"] = int(time.time())
                 folder = self._store_widget_folder(updated, folder)
             else:
@@ -3051,19 +2735,6 @@ class Curator:
                 entry["path"] = self._valid_external_plugin_path(entry.get("path"))
                 entry["name"] = str(entry.get("name") or "External Shortcut").strip() or "External Shortcut"
                 entry["description"] = str(entry.get("description") or "").strip()
-                entry_art = normalise_list_art(entry.get("artwork"))
-                if entry_art.get("icon_mode") == "custom":
-                    entry_art.update({"icon_mode": "default", "icon_source": "", "icon_label": ""})
-                if entry_art.get("fanart_mode") == "custom":
-                    entry_art.update({"fanart_mode": "default", "fanart_source": "", "fanart_label": ""})
-                entry["artwork"] = entry_art
-            elif entry.get("type") == "provider_list" and entry.get("provider") in ("trakt", "mdblist") and entry.get("provider_list_id"):
-                entry["provider"] = str(entry.get("provider"))
-                entry["provider_list_id"] = str(entry.get("provider_list_id"))
-                entry["name"] = str(entry.get("name") or "Linked list").strip() or "Linked list"
-                entry["description"] = str(entry.get("description") or "").strip()
-                entry["username"] = str(entry.get("username") or "").strip()
-                entry["item_count"] = self._safe_int(entry.get("item_count"), 0)
                 entry_art = normalise_list_art(entry.get("artwork"))
                 if entry_art.get("icon_mode") == "custom":
                     entry_art.update({"icon_mode": "default", "icon_source": "", "icon_label": ""})
@@ -3314,17 +2985,7 @@ class Curator:
 
     def manage_lists_interactive(self):
         records = [row for row in self.state.get("ai_lists", []) if isinstance(row, dict)]
-        order = str(self.addon.getSetting("list_sort_order") or "updated_desc")
-        if order == "name_asc":
-            records.sort(key=lambda row: str(row.get("name") or "").casefold())
-        elif order == "name_desc":
-            records.sort(key=lambda row: str(row.get("name") or "").casefold(), reverse=True)
-        elif order == "created_asc":
-            records.sort(key=lambda row: self._safe_int(row.get("created_at") or row.get("updated_at"), 0))
-        elif order == "created_desc":
-            records.sort(key=lambda row: self._safe_int(row.get("created_at") or row.get("updated_at"), 0), reverse=True)
-        else:
-            records.sort(key=lambda row: self._safe_int(row.get("updated_at"), 0), reverse=True)
+        records.sort(key=lambda row: self._safe_int(row.get("updated_at"), 0), reverse=True)
         if not records:
             self._notify("You do not have any saved lists yet")
             return None
@@ -3443,18 +3104,11 @@ class Curator:
         self._trim_movie_cache()
 
     def _generate_and_write(self, name, prompt, count, silent=False, managed_record=None, description=None):
-        with self._ai_operation_lock():
-            return self._generate_and_write_locked(
-                name, prompt, count, silent=silent,
-                managed_record=managed_record, description=description,
-            )
-
-    def _generate_and_write_locked(self, name, prompt, count, silent=False, managed_record=None, description=None):
-        self._require_profile_source()
         self._require_ai()
         count = max(5, min(50, self._safe_int(count, 20)))
 
-        if self._profile_is_stale():
+        has_profile_source = self._has_oauth() or bool(self._public_username())
+        if has_profile_source and self._profile_is_stale():
             try:
                 self.sync_profile(silent=True)
             except TraktError as exc:
@@ -3466,9 +3120,24 @@ class Curator:
                     "Using cached Trakt taste profile",
                     level="warning", detail=str(exc), notify=False,
                 )
+        # A Trakt profile improves personalisation but is not required. New
+        # local-only users receive prompt-led recommendations without spending
+        # an extra AI request on an empty preference summary.
         profile = self.state.get("profile") or {}
-        fingerprint = self._ensure_taste_fingerprint(profile, force=False)
+        if profile:
+            fingerprint = self._ensure_taste_fingerprint(profile, force=False)
+        else:
+            fingerprint = {
+                "summary": "No preference history is connected; follow the user's current request closely.",
+                "core_preferences": [],
+                "avoidances": [],
+                "director_affinities": [],
+                "representative_likes": [],
+                "representative_dislikes": [],
+                "exploration_directions": [],
+            }
         taste_context = self._build_recommendation_context(profile, fingerprint)
+        taste_context["recommendation_mode"] = "personalised" if profile else "prompt_only"
         hidden_rows = [row for row in self.state.get("hidden_movies", []) if isinstance(row, dict)]
         if hidden_rows:
             taste_context["never_recommend"] = [
@@ -3558,7 +3227,6 @@ class Curator:
         now = int(time.time())
         record.update({
             "local_id": previous.get("local_id") or uuid.uuid4().hex,
-            "created_at": self._safe_int(previous.get("created_at"), 0) or now,
             "name": name,
             "prompt": prompt,
             "description": (
@@ -3575,7 +3243,9 @@ class Curator:
             "grounded_candidate_count": len(grounded_pool),
         })
         if "sync_to_trakt" not in record:
-            record["sync_to_trakt"] = self._sync_enabled()
+            # Never leave a brand-new local-only list appearing to wait for a
+            # Trakt sync the user did not configure. It can be enabled later.
+            record["sync_to_trakt"] = bool(self._sync_enabled() and self._has_oauth())
         if "artwork" not in record:
             record["artwork"] = normalise_list_art({})
         if "regeneration_enabled" not in record:
@@ -4020,8 +3690,6 @@ class Curator:
 
 
     def auto_update_due(self, now=None):
-        if self._ai_operation_active():
-            return False
         now = int(now or time.time())
         records = [row for row in self.state.get("ai_lists", []) if isinstance(row, dict)]
         return any(self._list_regeneration_due(row, now) or self._list_trakt_refresh_due(row, now) for row in records)

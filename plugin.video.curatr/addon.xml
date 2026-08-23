@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.curatr" name="curatr" version="0.19.0~beta12" provider-name="crabbymondays">
+<addon id="plugin.video.curatr" name="curatr" version="0.18.2~beta10" provider-name="crabbymondays">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.requests"/>
@@ -9,39 +9,25 @@
     <extension point="xbmc.service" library="service.py"/>
     <extension point="xbmc.addon.metadata">
         <summary lang="en_GB">Personalised watchlists made from whatever you're in the mood for</summary>
-        <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around your preferences. Create and refresh lists, organise lightweight Widget Folders containing curatr, Trakt, MDBList and Kodi add-on paths, and optionally connect TMDB. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
+        <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around your preferences. Create and refresh lists, organise lightweight Widget Folders, hide recommendations you do not want, and optionally connect Trakt, TMDB and MDBList. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
         <platform>all</platform>
         <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
         <license>MIT</license>
         <assets><icon>icon_addon_v2.png</icon><fanart>fanart_addon_v2.jpg</fanart></assets>
         <source>https://github.com/crabbymondays/repo</source>
         <website>https://crabbymondays.github.io/repo/</website>
-        <news>0.19.0~beta12 (2026-08-23)
-- Adds Trakt and MDBList account lists to lightweight mixed Widget Folders.
-- Gives linked lists stable direct paths for movie widgets, with six-hour caching and offline fallback.
-- Shows provider, username, item count and last-check metadata on linked-list tiles.
-- Adds optional colour square icons matching curatr's bundled genre fanart.
-
-0.18.3~beta11 (2026-08-23)
-- Adds widget-friendly film counts, folder contents and relative refresh details.
-- Exposes list and folder metadata through standard Kodi fields and curatr properties.
-- Cleans interval wording so Refresh Every and Sync Every no longer repeat "Every".
-
-0.18.2~beta10 (2026-08-23)
-- Fixes external shortcut editing through a reliable direct plugin route.
-- Makes shortcut name, description, plugin path, icon and fanart controls explicit.
-- Uses versioned filenames for redesigned menu and Comedy icons to bypass Kodi's texture cache.
+        <news>0.18.2~beta10 (2026-08-23)
+- Re-centres and consistently sizes every curatr colour menu symbol.
+- Adds a full artwork preview before applying bundled, custom, movie or person images.
+- Supports remote-friendly OK to use and Back to choose another controls.
 
 0.18.1~beta9 (2026-08-23)
-- Prevents concurrent Kodi processes from replacing newly created lists with stale state.
-- Blocks overlapping AI requests, makes the background service wait, and keeps three automatic recovery snapshots.
-- Adds list sorting by update time, name or creation time.
-- Simplifies Widget Folder, backup, preference refresh, activity, saved prompt and Trakt connection icons.
-- Corrects the Comedy icon so it has one pair of eyes.
-- Adds distinct Information, Working, Success and Error notification artwork.
-- Removes the experimental curatr colour menu-icon theme.
+- Allows list creation and refresh with no Trakt account or public username configured.
+- Uses prompt-only recommendations when preference history is unavailable.
+- Keeps new prompt-only lists local and leaves optional Trakt syncing disabled.
 
-0.18.0~beta8 (2026-08-23)
+0.18.0~beta8 (2026-08-22)
+- Adds a choice between the original white menu icons and a consistent curatr colour theme.
 - Adds three optional abstract menu backgrounds while keeping the clean background as the default.
 - Updates the splash with the preferred centred curatr design and versioned artwork paths.
 

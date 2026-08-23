@@ -26,6 +26,11 @@ Kodi's main add-on page keeps the centred curatr artwork. Inside the add-on, all
 
 ## Requirements
 
+An AI provider and API key are required to generate recommendations. Trakt,
+TMDB and MDBList are optional. Without Trakt, curatr uses the list prompt alone
+and stores the resulting list locally in Kodi. Connecting Trakt adds ratings
+and watch-history personalisation plus optional Trakt list syncing.
+
 - Kodi 21 (Omega) or newer is the primary target.
 - Your own API key for at least one supported AI service: OpenAI, Google Gemini, Anthropic Claude, OpenRouter, or an advanced OpenAI-compatible endpoint.
 - Trakt is optional. A public Trakt username can provide read-only preference data. Full Trakt authorisation is only needed if curatr itself should write list copies to Trakt.
