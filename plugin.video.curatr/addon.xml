@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.curatr" name="curatr" version="0.18.1~beta9" provider-name="crabbymondays">
+<addon id="plugin.video.curatr" name="curatr" version="0.18.3~beta11" provider-name="crabbymondays">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.requests"/>
@@ -16,7 +16,17 @@
         <assets><icon>icon_addon_v2.png</icon><fanart>fanart_addon_v2.jpg</fanart></assets>
         <source>https://github.com/crabbymondays/repo</source>
         <website>https://crabbymondays.github.io/repo/</website>
-        <news>0.18.1~beta9 (2026-08-23)
+        <news>0.18.3~beta11 (2026-08-23)
+- Adds widget-friendly film counts, folder contents and relative refresh details.
+- Exposes list and folder metadata through standard Kodi fields and curatr properties.
+- Cleans interval wording so Refresh Every and Sync Every no longer repeat "Every".
+
+0.18.2~beta10 (2026-08-23)
+- Fixes external shortcut editing through a reliable direct plugin route.
+- Makes shortcut name, description, plugin path, icon and fanart controls explicit.
+- Uses versioned filenames for redesigned menu and Comedy icons to bypass Kodi's texture cache.
+
+0.18.1~beta9 (2026-08-23)
 - Prevents concurrent Kodi processes from replacing newly created lists with stale state.
 - Blocks overlapping AI requests, makes the background service wait, and keeps three automatic recovery snapshots.
 - Adds list sorting by update time, name or creation time.

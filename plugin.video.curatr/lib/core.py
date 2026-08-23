@@ -2037,8 +2037,8 @@ class Curator:
     @staticmethod
     def _format_interval(hours):
         hours = max(1, int(hours or 1))
-        labels = {6: "Every 6 hours", 12: "Every 12 hours", 24: "Every day", 72: "Every 3 days", 168: "Every week"}
-        return labels.get(hours, "Every %d hours" % hours)
+        labels = {6: "6 hours", 12: "12 hours", 24: "1 day", 72: "3 days", 168: "1 week"}
+        return labels.get(hours, "%d hour%s" % (hours, "" if hours == 1 else "s"))
 
     def _choose_interval_hours(self, heading, current):
         values = [6, 12, 24, 72, 168]
@@ -2585,7 +2585,10 @@ class Curator:
         while True:
             actions = ["Move up", "Move down", "Remove from folder"]
             if entry.get("type") == "external_path":
-                actions = ["Name", "Description", "Plugin path", "Artwork"] + actions
+                actions = [
+                    "Rename Shortcut", "Edit Description",
+                    "Choose Plugin Path", "Change Icon & Fanart",
+                ] + actions
             choice = xbmcgui.Dialog().select(self._folder_entry_label(entry), actions)
             if choice < 0:
                 return folder

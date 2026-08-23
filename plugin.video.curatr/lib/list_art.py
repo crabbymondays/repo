@@ -100,7 +100,7 @@ def resolved_sources(addon, record):
         if key not in LABELS:
             key = automatic
         # Versioned path avoids Kodi reusing the earlier drawn icon cache.
-        icon = _media(addon, "list_art", "icons_v2", key + ".png")
+        icon = _media(addon, "list_art", "icons_v3", key + ".png")
 
     fanart = ""
     if state["fanart_mode"] == "default":
