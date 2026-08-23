@@ -64,16 +64,8 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
     # Keep navigation glyphs as item icons while every menu entry uses the
     # same restrained global background. Never promote an icon or per-menu
     # image to fanart: many TV skins display that artwork full-screen.
-    icon_style = str(ADDON.getSetting("menu_icon_style") or "0")
     background_style = str(ADDON.getSetting("menu_background_style") or "0")
-
-    # Colour icons reuse one fixed image-generated curatr tile and the existing
-    # white glyphs.  This prevents shape, glow and line-spacing drift between
-    # individual menu icons while keeping the original clean theme available.
-    themed_icon = os.path.join("theme_curatr", icon_name) if icon_name and icon_style == "1" else icon_name
-    icon = _existing_art(themed_icon)
-    if not icon and themed_icon != icon_name:
-        icon = _existing_art(icon_name)
+    icon = _existing_art(icon_name)
 
     background_names = {
         "0": "fanart_menu_clean_v2.jpg",
@@ -143,7 +135,17 @@ def _add_action(label, command, plot="", icon_name="", fanart_name=""):
 
 def _managed_records(curator):
     records = [row for row in curator.state.get("ai_lists", []) if isinstance(row, dict)]
-    records.sort(key=lambda row: _safe_int(row.get("updated_at"), 0), reverse=True)
+    order = str(ADDON.getSetting("list_sort_order") or "updated_desc")
+    if order == "name_asc":
+        records.sort(key=lambda row: str(row.get("name") or "").casefold())
+    elif order == "name_desc":
+        records.sort(key=lambda row: str(row.get("name") or "").casefold(), reverse=True)
+    elif order == "created_asc":
+        records.sort(key=lambda row: _safe_int(row.get("created_at") or row.get("updated_at"), 0))
+    elif order == "created_desc":
+        records.sort(key=lambda row: _safe_int(row.get("created_at") or row.get("updated_at"), 0), reverse=True)
+    else:
+        records.sort(key=lambda row: _safe_int(row.get("updated_at"), 0), reverse=True)
     return records
 
 

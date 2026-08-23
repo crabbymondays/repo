@@ -621,23 +621,7 @@ msgid "Appearance"
 msgstr ""
 
 msgctxt "#32601"
-msgid "Choose how curatr menus look. These options do not change artwork assigned to your lists."
-msgstr ""
-
-msgctxt "#32602"
-msgid "Menu Icons"
-msgstr ""
-
-msgctxt "#32603"
-msgid "Use the original clean white icons or the curatr colour theme."
-msgstr ""
-
-msgctxt "#32604"
-msgid "Clean White"
-msgstr ""
-
-msgctxt "#32605"
-msgid "curatr Colour"
+msgid "Choose the background shown while browsing curatr. This does not change artwork assigned to your lists."
 msgstr ""
 
 msgctxt "#32606"
@@ -662,4 +646,32 @@ msgstr ""
 
 msgctxt "#32611"
 msgid "Midnight Waves"
+msgstr ""
+
+msgctxt "#32612"
+msgid "Sort My Lists By"
+msgstr ""
+
+msgctxt "#32613"
+msgid "Choose the order used in Browse My Lists. Widget Folders keep their own order."
+msgstr ""
+
+msgctxt "#32614"
+msgid "Recently Updated"
+msgstr ""
+
+msgctxt "#32615"
+msgid "Name: A–Z"
+msgstr ""
+
+msgctxt "#32616"
+msgid "Name: Z–A"
+msgstr ""
+
+msgctxt "#32617"
+msgid "Newest Created"
+msgstr ""
+
+msgctxt "#32618"
+msgid "Oldest Created"
 msgstr ""

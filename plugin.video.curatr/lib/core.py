@@ -4,6 +4,7 @@ import os
 import time
 import unicodedata
 import uuid
+from contextlib import contextmanager
 
 import xbmc
 import xbmcgui
@@ -40,6 +41,11 @@ class Curator:
         self.state_path = os.path.join(self.profile_dir, "state.json")
         self._had_state_file = xbmcvfs.exists(self.state_path)
         self.state = self._load_state()
+        # Keep the exact snapshot this process loaded. Kodi can run the plugin,
+        # script and background service in separate Python processes, so a
+        # later save must apply only this process's changes to the newest file
+        # rather than replacing it with a stale full-state snapshot.
+        self._state_baseline = self._clone_state(self.state)
         if not self.state.get("install_origin"):
             self.state["install_origin"] = "pre-0.13" if self._had_state_file else (addon.getAddonInfo("version") or "0.13.0")
         self._had_existing_configuration = self._detect_existing_configuration()
@@ -184,33 +190,197 @@ class Curator:
                 handle.close()
 
     def _load_state(self):
-        if not xbmcvfs.exists(self.state_path):
-            return {}
+        candidates = [self.state_path] + [self.state_path + ".backup.%d" % index for index in (1, 2, 3)]
+        last_error = None
+        for index, path in enumerate(candidates):
+            if not xbmcvfs.exists(path):
+                continue
+            try:
+                raw = self._read_text(path)
+                data = json.loads(raw) if raw else {}
+                if not isinstance(data, dict):
+                    raise ValueError("state root is not an object")
+                if index:
+                    xbmc.log("curatr recovered local data from backup %d" % index, xbmc.LOGWARNING)
+                return data
+            except Exception as exc:
+                last_error = exc
+        if last_error is not None:
+            xbmc.log("curatr could not read state or backups: %s" % last_error, xbmc.LOGWARNING)
+        return {}
+
+    @staticmethod
+    def _clone_state(value):
         try:
-            raw = self._read_text(self.state_path)
-            data = json.loads(raw) if raw else {}
-            return data if isinstance(data, dict) else {}
-        except Exception as exc:
-            xbmc.log("curatr could not read state: %s" % exc, xbmc.LOGWARNING)
-            return {}
+            return json.loads(json.dumps(value, ensure_ascii=False))
+        except Exception:
+            return dict(value) if isinstance(value, dict) else {}
+
+    @contextmanager
+    def _state_write_lock(self, timeout_seconds=8, stale_seconds=120):
+        """Serialise state commits across Kodi's independent Python processes."""
+        lock_path = self.state_path + ".lock"
+        deadline = time.time() + max(1, int(timeout_seconds))
+        acquired = False
+        while time.time() < deadline:
+            try:
+                os.mkdir(lock_path)
+                acquired = True
+                break
+            except FileExistsError:
+                try:
+                    if time.time() - os.path.getmtime(lock_path) > stale_seconds:
+                        os.rmdir(lock_path)
+                        continue
+                except OSError:
+                    pass
+                xbmc.sleep(100)
+            except OSError as exc:
+                raise RuntimeError("curatr could not lock its local data: %s" % exc)
+        if not acquired:
+            raise RuntimeError("curatr is busy saving another change. Please try again.")
+        try:
+            yield
+        finally:
+            try:
+                os.rmdir(lock_path)
+            except OSError:
+                pass
+
+    @contextmanager
+    def _ai_operation_lock(self, stale_seconds=3600):
+        """Prevent overlapping AI work from spending tokens or racing state."""
+        lock_path = os.path.join(self.profile_dir, "ai-operation.lock")
+        try:
+            os.mkdir(lock_path)
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lock_path) > stale_seconds:
+                    os.rmdir(lock_path)
+                    os.mkdir(lock_path)
+                else:
+                    raise RuntimeError(
+                        "curatr is already working on another list. Wait for it to finish before starting another."
+                    )
+            except RuntimeError:
+                raise
+            except OSError:
+                raise RuntimeError(
+                    "curatr is already working on another list. Wait for it to finish before starting another."
+                )
+        except OSError as exc:
+            raise RuntimeError("curatr could not start the list operation: %s" % exc)
+        try:
+            yield
+        finally:
+            try:
+                os.rmdir(lock_path)
+            except OSError:
+                pass
+
+    def _ai_operation_active(self, stale_seconds=3600):
+        lock_path = os.path.join(self.profile_dir, "ai-operation.lock")
+        if not os.path.isdir(lock_path):
+            return False
+        try:
+            if time.time() - os.path.getmtime(lock_path) > stale_seconds:
+                os.rmdir(lock_path)
+                return False
+        except OSError:
+            pass
+        return True
+
+    @staticmethod
+    def _records_by_key(records):
+        result = {}
+        order = []
+        for row in records if isinstance(records, list) else []:
+            if not isinstance(row, dict):
+                continue
+            key = str(row.get("local_id") or row.get("trakt_id") or "")
+            if not key:
+                continue
+            if key not in result:
+                order.append(key)
+            result[key] = row
+        return result, order
+
+    def _merge_latest_state(self, latest):
+        """Apply this process's delta onto the newest state stored on disk."""
+        baseline = self._state_baseline if isinstance(self._state_baseline, dict) else {}
+        pending = self.state if isinstance(self.state, dict) else {}
+        merged = self._clone_state(latest if isinstance(latest, dict) else {})
+
+        for key in set(baseline) | set(pending):
+            if key == "ai_lists":
+                continue
+            before_present = key in baseline
+            after_present = key in pending
+            if before_present == after_present and baseline.get(key) == pending.get(key):
+                continue
+            if after_present:
+                merged[key] = self._clone_state(pending[key]) if isinstance(pending[key], dict) else self._clone_state({"value": pending[key]}).get("value")
+            else:
+                merged.pop(key, None)
+
+        disk_rows, disk_order = self._records_by_key(merged.get("ai_lists", []))
+        base_rows, _ = self._records_by_key(baseline.get("ai_lists", []))
+        pending_rows, pending_order = self._records_by_key(pending.get("ai_lists", []))
+        changed_ids = {
+            key for key in set(base_rows) | set(pending_rows)
+            if base_rows.get(key) != pending_rows.get(key)
+        }
+        for key in changed_ids:
+            if key in pending_rows:
+                disk_rows[key] = self._clone_state(pending_rows[key])
+                if key not in disk_order:
+                    disk_order.append(key)
+            else:
+                disk_rows.pop(key, None)
+                if key in disk_order:
+                    disk_order.remove(key)
+        # Preserve deterministic append order when several new records were
+        # created by this process.
+        for key in pending_order:
+            if key in disk_rows and key not in disk_order:
+                disk_order.append(key)
+        merged["ai_lists"] = [disk_rows[key] for key in disk_order if key in disk_rows]
+        return merged
+
+    def _rotate_state_backups(self):
+        """Keep three recoverable snapshots without including credentials in exports."""
+        for index in (3, 2, 1):
+            source = self.state_path if index == 1 else self.state_path + ".backup.%d" % (index - 1)
+            target = self.state_path + ".backup.%d" % index
+            if not xbmcvfs.exists(source):
+                continue
+            if xbmcvfs.exists(target):
+                xbmcvfs.delete(target)
+            xbmcvfs.copy(source, target)
 
     def _save_state(self):
-        payload = json.dumps(self.state, ensure_ascii=False, separators=(",", ":"))
         temp_path = self.state_path + ".tmp"
-        try:
-            if xbmcvfs.exists(temp_path):
-                xbmcvfs.delete(temp_path)
-            self._write_text(temp_path, payload)
-            if xbmcvfs.exists(self.state_path):
-                xbmcvfs.delete(self.state_path)
-            if not xbmcvfs.rename(temp_path, self.state_path):
-                self._write_text(self.state_path, payload)
+        with self._state_write_lock():
+            latest = self._load_state() if xbmcvfs.exists(self.state_path) else {}
+            merged = self._merge_latest_state(latest)
+            payload = json.dumps(merged, ensure_ascii=False, separators=(",", ":"))
+            try:
                 if xbmcvfs.exists(temp_path):
                     xbmcvfs.delete(temp_path)
-        except Exception:
-            if xbmcvfs.exists(temp_path):
-                xbmcvfs.delete(temp_path)
-            raise
+                self._write_text(temp_path, payload)
+                self._rotate_state_backups()
+                if xbmcvfs.exists(self.state_path):
+                    xbmcvfs.delete(self.state_path)
+                if not xbmcvfs.rename(temp_path, self.state_path):
+                    self._write_text(self.state_path, payload)
+                    if xbmcvfs.exists(temp_path):
+                        xbmcvfs.delete(temp_path)
+            except Exception:
+                if xbmcvfs.exists(temp_path):
+                    xbmcvfs.delete(temp_path)
+                raise
+            self.state = merged
+            self._state_baseline = self._clone_state(merged)
 
     def _migrate_local_list_state(self):
         """Keep list definitions backward compatible while separating AI regeneration from Trakt refresh.
@@ -299,6 +469,9 @@ class Curator:
                 changed = True
             if "local_changed_at" not in record:
                 record["local_changed_at"] = self._safe_int(record.get("updated_at"), 0)
+                changed = True
+            if "created_at" not in record:
+                record["created_at"] = self._safe_int(record.get("updated_at"), 0) or int(time.time())
                 changed = True
 
             # Migrate the v0.8 auto-refresh settings into AI regeneration.
@@ -515,11 +688,24 @@ class Curator:
             return
         if level == "error" and not self._bool_setting("notify_errors", True):
             return
-        icon = xbmcgui.NOTIFICATION_INFO
-        if level == "warning":
-            icon = xbmcgui.NOTIFICATION_WARNING
-        elif level == "error":
-            icon = getattr(xbmcgui, "NOTIFICATION_ERROR", xbmcgui.NOTIFICATION_WARNING)
+        icon_names = {
+            "info": "information_v1.png",
+            "working": "working_v1.png",
+            "success": "success_v1.png",
+            "warning": "error_v1.png",
+            "error": "error_v1.png",
+        }
+        icon = os.path.join(
+            xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
+            "resources", "media", "notifications",
+            icon_names.get(str(level or "info"), "information_v1.png"),
+        )
+        if not xbmcvfs.exists(icon):
+            icon = xbmcgui.NOTIFICATION_INFO
+            if level == "warning":
+                icon = xbmcgui.NOTIFICATION_WARNING
+            elif level == "error":
+                icon = getattr(xbmcgui, "NOTIFICATION_ERROR", xbmcgui.NOTIFICATION_WARNING)
         duration = self._setting_int("notification_duration", 5, 2, 15) * 1000
         xbmcgui.Dialog().notification(self.name, str(message), icon, duration)
 
@@ -536,7 +722,8 @@ class Curator:
         self.state["activity"] = history[-50:]
         self._save_state()
         if notify:
-            self._notify(message, level=level, background=background)
+            notification_level = "success" if level == "info" else level
+            self._notify(message, level=notification_level, background=background)
         return event
 
     def report_error(self, message, detail="", background=False):
@@ -1090,7 +1277,7 @@ class Curator:
         if not confirmed:
             return None
 
-        self._notify("Finding %d films for %s…" % (count, name))
+        self._notify("Finding %d films for %s…" % (count, name), level="working")
         result = self._generate_and_write(
             name, prompt, count, managed_record=managed, description=description
         )
@@ -1118,7 +1305,7 @@ class Curator:
         count = self._setting_int("quick_pick_count", 15, 5, 50)
         name = "Quick Pick — %s" % label
         managed = self._managed_record_by_name(name)
-        self._notify("Finding fresh picks for %s…" % label)
+        self._notify("Finding fresh picks for %s…" % label, level="working")
         result = self._generate_and_write(name, prompt, count, managed_record=managed)
         self.record_activity("Quick Pick refreshed: %s" % label, notify=False)
         return result
@@ -1139,7 +1326,7 @@ class Curator:
 
         name = record.get("name") or "AI - My Picks"
         if not silent:
-            self._notify("Regenerating %s with AI…" % name)
+            self._notify("Regenerating %s with AI…" % name, level="working")
         result = self._generate_and_write(
             name,
             record.get("prompt") or "Recommend films for me.",
@@ -2942,7 +3129,17 @@ class Curator:
 
     def manage_lists_interactive(self):
         records = [row for row in self.state.get("ai_lists", []) if isinstance(row, dict)]
-        records.sort(key=lambda row: self._safe_int(row.get("updated_at"), 0), reverse=True)
+        order = str(self.addon.getSetting("list_sort_order") or "updated_desc")
+        if order == "name_asc":
+            records.sort(key=lambda row: str(row.get("name") or "").casefold())
+        elif order == "name_desc":
+            records.sort(key=lambda row: str(row.get("name") or "").casefold(), reverse=True)
+        elif order == "created_asc":
+            records.sort(key=lambda row: self._safe_int(row.get("created_at") or row.get("updated_at"), 0))
+        elif order == "created_desc":
+            records.sort(key=lambda row: self._safe_int(row.get("created_at") or row.get("updated_at"), 0), reverse=True)
+        else:
+            records.sort(key=lambda row: self._safe_int(row.get("updated_at"), 0), reverse=True)
         if not records:
             self._notify("You do not have any saved lists yet")
             return None
@@ -3061,6 +3258,13 @@ class Curator:
         self._trim_movie_cache()
 
     def _generate_and_write(self, name, prompt, count, silent=False, managed_record=None, description=None):
+        with self._ai_operation_lock():
+            return self._generate_and_write_locked(
+                name, prompt, count, silent=silent,
+                managed_record=managed_record, description=description,
+            )
+
+    def _generate_and_write_locked(self, name, prompt, count, silent=False, managed_record=None, description=None):
         self._require_profile_source()
         self._require_ai()
         count = max(5, min(50, self._safe_int(count, 20)))
@@ -3169,6 +3373,7 @@ class Curator:
         now = int(time.time())
         record.update({
             "local_id": previous.get("local_id") or uuid.uuid4().hex,
+            "created_at": self._safe_int(previous.get("created_at"), 0) or now,
             "name": name,
             "prompt": prompt,
             "description": (
@@ -3630,6 +3835,8 @@ class Curator:
 
 
     def auto_update_due(self, now=None):
+        if self._ai_operation_active():
+            return False
         now = int(now or time.time())
         records = [row for row in self.state.get("ai_lists", []) if isinstance(row, dict)]
         return any(self._list_regeneration_due(row, now) or self._list_trakt_refresh_due(row, now) for row in records)
