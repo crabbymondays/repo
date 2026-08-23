@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.curatr" name="curatr" version="0.19.0~beta11" provider-name="crabbymondays">
+<addon id="plugin.video.curatr" name="curatr" version="0.19.1~beta12" provider-name="crabbymondays">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.requests"/>
@@ -16,7 +16,13 @@
         <assets><icon>icon_addon_v2.png</icon><fanart>fanart_addon_v2.jpg</fanart></assets>
         <source>https://github.com/crabbymondays/repo</source>
         <website>https://crabbymondays.github.io/repo/</website>
-        <news>0.19.0~beta11 (2026-08-23)
+        <news>0.19.1~beta12 (2026-08-23)
+- Adds secure local API-key import through Kodi's file browser.
+- Supports AI providers, TMDB and MDBList using a simple one-line text file.
+- Confirms before replacing a saved key or deleting the source file.
+- Keeps imported credentials out of logs and curatr backups.
+
+0.19.0~beta11 (2026-08-23)
 - Replaces the approval preview flow with a direct Kodi artwork grid.
 - Adds independent White and Genre Colours icon styles for individual lists.
 - Uses image grids for bundled icons, genre fanart, movie fanart, people and suggestions.

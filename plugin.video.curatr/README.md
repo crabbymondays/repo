@@ -1,5 +1,13 @@
 # curatr
 
+## Importing API keys
+
+Android, Xbox and remote-control users can import a key without typing or
+pasting it. Put only the key on one line in a `.txt` or `.key` file, then use
+**Import Key from File** in AI Service, Metadata (TMDB), or Connected Accounts
+(MDBList). curatr confirms before replacing a saved key and can delete the
+source file after a successful import. Keys remain local and are not backed up.
+
 **curatr** is a Kodi movie-list curator that turns natural-language prompts into personalised recommendations shaped by your preferences. Lists live locally in Kodi by default and can optionally be copied to Trakt.
 
 ## 0.15.2 generated artwork update

@@ -1,5 +1,16 @@
 # curatr beta testing
 
+## API key import (beta12)
+
+- Put a test credential alone on one line in a `.txt` file.
+- Import it from AI Service, Metadata, or Connected Accounts as appropriate.
+- Confirm cancelling the file browser changes nothing.
+- Confirm an existing key is not replaced without approval.
+- Confirm **Keep File** leaves the source untouched.
+- Confirm **Delete File** removes it where the source is writable.
+- Confirm malformed, multi-line, empty and oversized files are rejected without
+  exposing their contents in the error message or Kodi log.
+
 ## Prompt-only mode
 
 1. Leave both the Trakt connection and public Trakt username empty.

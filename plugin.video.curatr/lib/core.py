@@ -687,6 +687,108 @@ class Curator:
             return True
         raise RuntimeError("Choose account lists or enter a public MDBList list link first.")
 
+    def import_api_key_interactive(self, target="ai"):
+        """Import one credential from a user-selected local text file."""
+        targets = {
+            "openai": ("OpenAI", "openai_api_key"),
+            "gemini": ("Gemini", "gemini_api_key"),
+            "anthropic": ("Claude", "anthropic_api_key"),
+            "openrouter": ("OpenRouter", "openrouter_api_key"),
+            "compatible": ("Compatible AI service", "compatible_api_key"),
+            "tmdb": ("TMDB", "tmdb_api_key"),
+            "mdblist": ("MDBList", "mdblist_api_key"),
+        }
+        selected = str(target or "ai").strip().lower()
+        if selected == "ai":
+            providers = ["openai", "gemini", "anthropic", "openrouter", "compatible"]
+            current = str(self.addon.getSetting("ai_provider") or "openai").strip().lower()
+            preselect = providers.index(current) if current in providers else 0
+            choice = xbmcgui.Dialog().select(
+                "Import API key for",
+                [targets[key][0] for key in providers],
+                preselect=preselect,
+            )
+            if choice < 0:
+                return False
+            selected = providers[choice]
+        if selected not in targets:
+            raise RuntimeError("That API-key destination is not supported.")
+
+        service_name, setting_id = targets[selected]
+        path = xbmcgui.Dialog().browseSingle(
+            1,
+            "Choose %s key file" % service_name,
+            "files",
+            ".txt|.key",
+        )
+        if not path:
+            return False
+
+        handle = None
+        try:
+            handle = xbmcvfs.File(path, "r")
+            raw = handle.read(16385)
+        except Exception as exc:
+            raise RuntimeError("The selected key file could not be read: %s" % exc)
+        finally:
+            if handle:
+                handle.close()
+        if len(raw) > 16384:
+            raise RuntimeError("That file is too large. Choose a small text file containing only the API key.")
+
+        lines = [line.strip() for line in str(raw or "").lstrip("\ufeff").splitlines() if line.strip()]
+        if len(lines) != 1:
+            raise RuntimeError("The file must contain only one API key on a single line.")
+        key = lines[0].strip().strip('"').strip("'").strip()
+        if selected == "tmdb" and key.lower().startswith("bearer "):
+            key = key[7:].strip()
+        if len(key) < 8 or len(key) > 4096 or any(character.isspace() for character in key):
+            raise RuntimeError("The file does not appear to contain a valid API key.")
+
+        existing = str(self.addon.getSetting(setting_id) or "").strip()
+        if existing and existing != key and not xbmcgui.Dialog().yesno(
+            self.name,
+            "%s already has a saved key. Replace it with the key from this file?" % service_name,
+        ):
+            return False
+
+        self.addon.setSetting(setting_id, key)
+        if selected in ("openai", "gemini", "anthropic", "openrouter", "compatible"):
+            self.addon.setSetting("ai_provider", selected)
+        elif selected == "tmdb":
+            self.addon.setSetting("tmdb_enabled", "true")
+        elif selected == "mdblist":
+            self.addon.setSetting("mdblist_enabled", "true")
+
+        deleted = False
+        if xbmcgui.Dialog().yesno(
+            self.name,
+            "%s key imported and stored locally by Kodi.\n\nDelete the original key file now?" % service_name,
+            nolabel="Keep File",
+            yeslabel="Delete File",
+        ):
+            deleted = bool(xbmcvfs.delete(path))
+            if not deleted:
+                xbmcgui.Dialog().ok(
+                    self.name,
+                    "The key was imported, but Kodi could not delete the original file. Delete it manually when convenient.",
+                )
+        if not deleted:
+            xbmcgui.Dialog().notification(
+                self.name,
+                "%s key imported — remember the source file contains your key" % service_name,
+                xbmcgui.NOTIFICATION_INFO,
+                5000,
+            )
+        else:
+            xbmcgui.Dialog().notification(
+                self.name,
+                "%s key imported" % service_name,
+                xbmcgui.NOTIFICATION_INFO,
+                3500,
+            )
+        return True
+
     def _catalogue_cache_get(self, key, max_age):
         cache = self.state.get("catalogue_cache") or {}
         row = cache.get(str(key)) if isinstance(cache, dict) else None

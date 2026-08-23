@@ -28,6 +28,11 @@
                         <heading>32106</heading>
                     </control>
                 </setting>
+                <setting id="ai_import_key" type="action" label="32620" help="32621">
+                    <level>0</level>
+                    <data>RunScript($ID,import_api_key,ai)</data>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
             </group>
             <group id="2" label="32104">
                 <setting id="openai_api_key" type="string" label="32110" help="32111">
@@ -145,6 +150,10 @@
                     <dependencies><dependency type="enable" setting="tmdb_enabled">true</dependency></dependencies>
                     <control type="edit" format="string"><heading>32525</heading><hidden>true</hidden></control>
                 </setting>
+                <setting id="tmdb_import_key" type="action" label="32622" help="32623">
+                    <level>0</level><data>RunScript($ID,import_api_key,tmdb)</data>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
                 <setting id="tmdb_region" type="string" label="32527" help="32528">
                     <level>0</level><default>GB</default><constraints><allowempty>false</allowempty></constraints>
                     <dependencies><dependency type="enable" setting="tmdb_enabled">true</dependency></dependencies>
@@ -198,6 +207,10 @@
                     <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
                     <dependencies><dependency type="enable" setting="mdblist_enabled">true</dependency></dependencies>
                     <control type="edit" format="string"><heading>32534</heading><hidden>true</hidden></control>
+                </setting>
+                <setting id="mdblist_import_key" type="action" label="32624" help="32625">
+                    <level>0</level><data>RunScript($ID,import_api_key,mdblist)</data>
+                    <control type="button" format="action"><close>true</close></control>
                 </setting>
                 <setting id="mdblist_choose_lists" type="action" label="32542" help="32543">
                     <level>0</level><data>RunScript($ID,choose_mdblist_lists)</data>

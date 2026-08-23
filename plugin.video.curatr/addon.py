@@ -66,6 +66,8 @@ def main():
             curator.test_tmdb_interactive()
         elif action == "test_mdblist":
             curator.test_mdblist_interactive()
+        elif action == "import_api_key":
+            curator.import_api_key_interactive(argument)
         elif action == "choose_mdblist_lists":
             curator.choose_mdblist_lists_interactive()
         elif action == "taste":

@@ -1,5 +1,9 @@
 # curatr
 
+API credentials can be entered normally in Kodi Settings or imported from a
+small one-line `.txt`/`.key` file using Kodi's own file browser. Imported keys
+stay in Kodi's local add-on settings and are excluded from curatr backups.
+
 curatr creates personalised Kodi movie lists from natural-language requests,
 using the AI provider and optional catalogue accounts selected by the user.
 

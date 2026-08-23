@@ -663,3 +663,27 @@ msgstr ""
 msgctxt "#32611"
 msgid "Midnight Waves"
 msgstr ""
+
+msgctxt "#32620"
+msgid "Import AI Key from File"
+msgstr ""
+
+msgctxt "#32621"
+msgid "Choose a small text file containing only your AI API key. The key is stored locally by Kodi."
+msgstr ""
+
+msgctxt "#32622"
+msgid "Import TMDB Key from File"
+msgstr ""
+
+msgctxt "#32623"
+msgid "Choose a small text file containing only your TMDB API key or read access token."
+msgstr ""
+
+msgctxt "#32624"
+msgid "Import MDBList Key from File"
+msgstr ""
+
+msgctxt "#32625"
+msgid "Choose a small text file containing only your MDBList API key."
+msgstr ""
