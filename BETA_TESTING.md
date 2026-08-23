@@ -8,13 +8,14 @@
 4. Confirm the list is saved locally and Trakt Sync is off.
 5. Refresh the list and confirm it remains usable without Trakt.
 
-## Artwork preview
+## Artwork grid
 
 1. Open List settings, then Artwork.
-2. Preview a bundled icon and bundled fanart; press Back and choose another.
-3. Press OK on a preview and confirm only that artwork is applied.
-4. With TMDB enabled, preview both a person portrait and movie fanart.
-5. Repeat with Widget Folder or external-shortcut artwork.
+2. Open curatr Icons and test both White and Genre Colours grids.
+3. Select an image and confirm it applies immediately; press Back and confirm nothing changes.
+4. Test Genre Colours and Monochrome fanart grids.
+5. With TMDB enabled, test both the person and movie-fanart grids.
+6. Repeat with Widget Folder or external-shortcut artwork.
 
 Please test on Kodi 21 Omega where possible.
 

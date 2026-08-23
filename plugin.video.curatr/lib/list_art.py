@@ -57,6 +57,7 @@ def default_state():
         "icon_key": "",
         "icon_source": "",
         "icon_label": "",
+        "icon_style": "white",
         "fanart_mode": "auto",
         "fanart_key": "",
         "fanart_source": "",
@@ -73,6 +74,8 @@ def normalise_state(value):
                 result[key] = str(value.get(key) or "")
     if result["icon_mode"] not in ("auto", "bundled", "custom", "default"):
         result["icon_mode"] = "auto"
+    if result["icon_style"] not in ("white", "genre_colours"):
+        result["icon_style"] = "white"
     if result["fanart_mode"] not in ("auto", "bundled", "item", "person", "custom", "default"):
         result["fanart_mode"] = "auto"
     if result["fanart_style"] not in ("colour", "monochrome"):
@@ -99,8 +102,10 @@ def resolved_sources(addon, record):
         key = automatic if state["icon_mode"] == "auto" else state["icon_key"]
         if key not in LABELS:
             key = automatic
-        # Versioned path avoids Kodi reusing the earlier drawn icon cache.
-        icon = _media(addon, "list_art", "icons_v2", key + ".png")
+        # List artwork is independent from the global menu theme. Versioned
+        # folders also prevent Kodi retaining an older texture-cache result.
+        folder = "icons_colour_v3" if state["icon_style"] == "genre_colours" else "icons_v2"
+        icon = _media(addon, "list_art", folder, key + ".png")
 
     fanart = ""
     if state["fanart_mode"] == "default":
@@ -121,9 +126,10 @@ def summary(record):
     state = normalise_state(record.get("artwork"))
     automatic = suggest_key(record.get("name"), record.get("prompt"))
     if state["icon_mode"] == "auto":
-        icon = "Automatic (%s)" % label(automatic)
+        icon = "Automatic (%s — White)" % label(automatic)
     elif state["icon_mode"] == "bundled":
-        icon = label(state["icon_key"])
+        style = "Genre Colours" if state["icon_style"] == "genre_colours" else "White"
+        icon = "%s — %s" % (label(state["icon_key"]), style)
     elif state["icon_mode"] == "custom" and state["icon_label"]:
         icon = state["icon_label"]
     else:

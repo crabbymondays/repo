@@ -9,9 +9,11 @@ using the AI provider and optional catalogue accounts selected by the user.
 2. Choose **Add-ons → Install from ZIP file**, open that source and install `repository.curatr-1.0.1.zip`.
 3. Choose **Install from repository → curatr Repository → Video add-ons → curatr**.
 4. Open curatr Settings, select an AI provider and enter its API key.
-5. Add a public Trakt username or connect a Trakt account.
+5. Optionally add a public Trakt username for preference-based recommendations,
+   or connect Trakt for preference data and list syncing.
 
-TMDB and MDBList are optional.
+Trakt, TMDB and MDBList are optional. Without Trakt, curatr follows the user's
+prompt and stores lists locally in Kodi.
 
 ## Widget paths
 

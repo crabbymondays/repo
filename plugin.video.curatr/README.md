@@ -94,7 +94,9 @@ Selected lists are cached for six hours, combined and de-duplicated before a com
 Open **List settings → Artwork** to change the square icon and landscape fanart independently.
 
 - **Automatic** chooses bundled artwork from the list name and prompt.
-- **Choose a curatr icon/fanart** offers Action, Comedy, Crime, Drama, Horror, Romance, Sci-Fi, Fantasy, Thriller, Mystery, Western, Documentary, Animation, Mind-Bending, Superhero, Director and Actor designs.
+- **Choose a curatr icon/fanart** opens a visual grid of Action, Comedy, Crime, Drama, Horror, Romance, Sci-Fi, Fantasy, Thriller, Mystery, Western, Documentary, Animation, Mind-Bending, Superhero, Director and Actor designs.
+- List icons independently offer **White** and **Genre Colours** styles. This does not follow or change the global menu theme.
+- Fanart independently offers **Genre Colours** and **Monochrome** styles.
 - **Fanart style** switches bundled backgrounds between genre colours and monochrome.
 - **Choose fanart from this list** uses artwork already attached to one of its films.
 - **Search for a director or actor** uses TMDB when it is configured.

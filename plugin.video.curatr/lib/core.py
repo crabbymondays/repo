@@ -11,7 +11,7 @@ import xbmcvfs
 
 from .ai_factory import create_ai_client
 from .art_cache import ArtworkCache
-from .artwork_preview import ArtworkPreviewWindow
+from .artwork_grid import choose_artwork
 from .catalogue_clients import CatalogueError, MDBListClient, TMDBClient
 from .list_art import CHOICES as LIST_ART_CHOICES
 from .list_art import label as list_art_label
@@ -1385,41 +1385,42 @@ class Curator:
         self._save_state()
         return updated
 
-    def _preview_artwork(self, source, label, heading="Artwork preview"):
-        source = str(source or "").strip()
-        if not source:
-            return False
-        display_source = source
-        if source.startswith(("https://", "http://")):
-            try:
-                display_source = ArtworkCache(self.addon, workers=1)._download(source) or source
-            except Exception as exc:
-                xbmc.log("curatr artwork preview cache skipped: %s" % exc, xbmc.LOGDEBUG)
+    def _bundled_art_source(self, key, kind, style):
         addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
-        backdrop = os.path.join(addon_path, "resources", "media", "pixel.png")
-        window = ArtworkPreviewWindow(display_source, backdrop, heading, label)
-        try:
-            window.doModal()
-            return bool(window.accepted)
-        finally:
-            window.close()
-
-    def _bundled_art_source(self, key, kind):
-        addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
-        folder = "icons_v2" if kind == "icon" else "fanart_v2"
+        if kind == "icon":
+            folder = "icons_colour_v3" if style == "genre_colours" else "icons_v2"
+        else:
+            folder = "fanart_mono_v2" if style == "monochrome" else "fanart_v2"
         extension = ".png" if kind == "icon" else ".jpg"
         return os.path.join(addon_path, "resources", "media", "list_art", folder, key + extension)
 
     def _choose_bundled_art(self, heading, kind):
-        labels = [label for _key, label in LIST_ART_CHOICES]
-        while True:
-            choice = xbmcgui.Dialog().select(heading, labels)
-            if not 0 <= choice < len(LIST_ART_CHOICES):
-                return ""
-            key, label = LIST_ART_CHOICES[choice]
-            source = self._bundled_art_source(key, kind)
-            if self._preview_artwork(source, label, "Preview %s" % kind):
-                return key
+        if kind == "icon":
+            style_choice = xbmcgui.Dialog().select("Icon style", ["White", "Genre Colours"])
+            if style_choice < 0:
+                return "", ""
+            style = "genre_colours" if style_choice == 1 else "white"
+            layout = "icon"
+        else:
+            style_choice = xbmcgui.Dialog().select("Fanart style", ["Genre Colours", "Monochrome"])
+            if style_choice < 0:
+                return "", ""
+            style = "monochrome" if style_choice == 1 else "colour"
+            layout = "fanart"
+        entries = [
+            {
+                "key": key,
+                "label": label,
+                "source": self._bundled_art_source(key, kind, style),
+            }
+            for key, label in LIST_ART_CHOICES
+        ]
+        selected = choose_artwork(
+            xbmcvfs.translatePath(self.addon.getAddonInfo("path")), heading, entries, layout
+        )
+        if not selected:
+            return "", ""
+        return selected["key"], style
 
     def _change_list_icon(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -1436,18 +1437,19 @@ class Curator:
         if choice < 0:
             return record
         if choice == 0:
-            art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": ""})
+            art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": "", "icon_style": "white"})
         elif choice == 1:
-            key = self._choose_bundled_art("Choose list icon", "icon")
+            key, icon_style = self._choose_bundled_art("Choose list icon", "icon")
             if not key:
                 return record
-            art.update({"icon_mode": "bundled", "icon_key": key, "icon_source": "", "icon_label": ""})
+            art.update({"icon_mode": "bundled", "icon_key": key, "icon_source": "", "icon_label": "", "icon_style": icon_style})
         elif choice == 2:
             fanart_mode = art.get("fanart_mode")
             if fanart_mode == "auto":
-                art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": ""})
+                art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": "", "icon_style": "white"})
             elif fanart_mode == "bundled":
-                art.update({"icon_mode": "bundled", "icon_key": art.get("fanart_key") or "", "icon_source": "", "icon_label": ""})
+                icon_style = "genre_colours" if art.get("fanart_style") == "colour" else "white"
+                art.update({"icon_mode": "bundled", "icon_key": art.get("fanart_key") or "", "icon_source": "", "icon_label": "", "icon_style": icon_style})
             elif fanart_mode in ("item", "person", "custom") and art.get("fanart_source"):
                 art.update({
                     "icon_mode": "custom", "icon_key": "",
@@ -1462,8 +1464,6 @@ class Curator:
         elif choice == 3:
             path = xbmcgui.Dialog().browseSingle(2, "Choose a square icon", "files", ".png|.jpg|.jpeg|.webp")
             if not path:
-                return record
-            if not self._preview_artwork(path, "Custom icon", "Preview icon"):
                 return record
             art.update({"icon_mode": "custom", "icon_source": str(path), "icon_key": "", "icon_label": "Custom"})
         else:
@@ -1482,18 +1482,18 @@ class Curator:
         if not choices:
             xbmcgui.Dialog().ok(self.name, "No landscape artwork is available in this list yet. Refresh the list first, or choose another fanart option.")
             return "", ""
-        labels = ["%s%s" % (row.get("title") or "Untitled", " (%s)" % row.get("year") if row.get("year") else "") for row, _url in choices]
-        while True:
-            selected = xbmcgui.Dialog().select("Use fanart from a list item", labels)
-            if not 0 <= selected < len(choices):
-                return "", ""
-            movie, source = choices[selected]
+        entries = []
+        for movie, source in choices:
             label = "%s%s" % (
                 movie.get("title") or "Film artwork",
                 " (%s)" % movie.get("year") if movie.get("year") else "",
             )
-            if self._preview_artwork(source, label, "Preview movie fanart"):
-                return source, label
+            entries.append({"label": label, "source": source})
+        selected = choose_artwork(
+            xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
+            "Choose fanart from this list", entries, "fanart",
+        )
+        return (selected["source"], selected["label"]) if selected else ("", "")
 
     def _fanart_from_person(self):
         if not self.tmdb or not self.tmdb.api_key:
@@ -1507,20 +1507,21 @@ class Curator:
         if not people:
             xbmcgui.Dialog().ok(self.name, "No suitable person artwork was found on TMDB.")
             return "", ""
-        labels = []
+        entries = []
         for person in people:
             known = [str(row.get("title") or row.get("name") or "") for row in person.get("known_for", []) if isinstance(row, dict)]
-            suffix = " — %s" % ", ".join([value for value in known if value][:2]) if known else ""
-            labels.append("%s%s" % (person.get("name"), suffix))
-        while True:
-            selected = xbmcgui.Dialog().select("Choose a person", labels)
-            if selected < 0:
-                return "", ""
-            person = people[selected]
             source = self.tmdb.image_url(person.get("profile_path"), "h632")
             label = str(person.get("name") or "Person artwork")
-            if self._preview_artwork(source, label, "Preview person artwork"):
-                return source, label
+            entries.append({
+                "label": label,
+                "subtitle": ", ".join([value for value in known if value][:2]),
+                "source": source,
+            })
+        selected = choose_artwork(
+            xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
+            "Choose a director or actor", entries, "icon",
+        )
+        return (selected["source"], selected["label"]) if selected else ("", "")
 
     def _change_list_fanart(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -1541,16 +1542,17 @@ class Curator:
         if choice == 0:
             art.update({"fanart_mode": "auto", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
         elif choice == 1:
-            key = self._choose_bundled_art("Choose list fanart", "fanart")
+            key, fanart_style = self._choose_bundled_art("Choose list fanart", "fanart")
             if not key:
                 return record
-            art.update({"fanart_mode": "bundled", "fanart_key": key, "fanart_source": "", "fanart_label": ""})
+            art.update({"fanart_mode": "bundled", "fanart_key": key, "fanart_source": "", "fanart_label": "", "fanart_style": fanart_style})
         elif choice == 2:
             icon_mode = art.get("icon_mode")
             if icon_mode == "auto":
                 art.update({"fanart_mode": "auto", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
             elif icon_mode == "bundled":
-                art.update({"fanart_mode": "bundled", "fanart_key": art.get("icon_key") or "", "fanart_source": "", "fanart_label": ""})
+                fanart_style = "colour" if art.get("icon_style") == "genre_colours" else "monochrome"
+                art.update({"fanart_mode": "bundled", "fanart_key": art.get("icon_key") or "", "fanart_source": "", "fanart_label": "", "fanart_style": fanart_style})
             elif icon_mode == "custom" and art.get("icon_source"):
                 art.update({
                     "fanart_mode": "custom", "fanart_key": "",
@@ -1575,8 +1577,6 @@ class Curator:
         elif choice == 5:
             source = xbmcgui.Dialog().browseSingle(2, "Choose landscape fanart", "files", ".png|.jpg|.jpeg|.webp")
             if not source:
-                return record
-            if not self._preview_artwork(source, "Custom fanart", "Preview fanart"):
                 return record
             art.update({"fanart_mode": "custom", "fanart_source": str(source), "fanart_key": "", "fanart_label": ""})
         else:
@@ -1634,13 +1634,22 @@ class Curator:
         if not suggestions:
             xbmcgui.Dialog().ok(self.name, "No person or list-item artwork suggestions are available yet. Enable TMDB or refresh this list first.")
             return record
-        while True:
-            choice = xbmcgui.Dialog().select("Suggested artwork", [row["label"] for row in suggestions])
-            if choice < 0:
-                return record
-            selected = suggestions[choice]
-            if self._preview_artwork(selected["source"], selected.get("art_label") or selected["label"], "Preview suggested artwork"):
-                break
+        grid_entries = [
+            {
+                "label": row.get("art_label") or row["label"],
+                "subtitle": row["label"],
+                "source": row["source"],
+                "suggestion": row,
+            }
+            for row in suggestions
+        ]
+        grid_choice = choose_artwork(
+            xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
+            "Suggested artwork", grid_entries, "fanart",
+        )
+        if not grid_choice:
+            return record
+        selected = grid_choice["suggestion"]
         art = normalise_list_art(record.get("artwork"))
         art.update({
             "fanart_mode": selected["mode"],
@@ -1649,7 +1658,7 @@ class Curator:
             "fanart_label": selected.get("art_label") or "",
         })
         if selected.get("icon_key") and xbmcgui.Dialog().yesno(self.name, "Use the matching %s icon too?" % list_art_label(selected["icon_key"]).lower()):
-            art.update({"icon_mode": "bundled", "icon_key": selected["icon_key"], "icon_source": "", "icon_label": ""})
+            art.update({"icon_mode": "bundled", "icon_key": selected["icon_key"], "icon_source": "", "icon_label": "", "icon_style": "white"})
         updated = self._store_list_artwork(record, art)
         self.record_activity("Applied suggested artwork to %s" % (updated.get("name") or "curatr list"), notify=True)
         return updated
@@ -2129,24 +2138,25 @@ class Curator:
                     "Choose a custom image", "Use the default curatr icon",
                 ])
                 if selected == 0:
-                    art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": ""})
+                    art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": "", "icon_style": "white"})
                 elif selected == 1:
-                    key = self._choose_bundled_art("Choose icon", "icon")
+                    key, icon_style = self._choose_bundled_art("Choose icon", "icon")
                     if key:
-                        art.update({"icon_mode": "bundled", "icon_key": key, "icon_source": "", "icon_label": ""})
+                        art.update({"icon_mode": "bundled", "icon_key": key, "icon_source": "", "icon_label": "", "icon_style": icon_style})
                 elif selected == 2:
                     mode = art.get("fanart_mode")
                     if mode == "auto":
                         art.update({"icon_mode": "auto", "icon_key": "", "icon_source": "", "icon_label": ""})
                     elif mode == "bundled":
-                        art.update({"icon_mode": "bundled", "icon_key": art.get("fanart_key") or "", "icon_source": "", "icon_label": ""})
+                        icon_style = "genre_colours" if art.get("fanart_style") == "colour" else "white"
+                        art.update({"icon_mode": "bundled", "icon_key": art.get("fanart_key") or "", "icon_source": "", "icon_label": "", "icon_style": icon_style})
                     elif mode in ("item", "person", "custom") and art.get("fanart_source"):
                         art.update({"icon_mode": "custom", "icon_key": "", "icon_source": art.get("fanart_source"), "icon_label": art.get("fanart_label") or "Custom"})
                     elif mode == "default":
                         art.update({"icon_mode": "default", "icon_key": "", "icon_source": "", "icon_label": ""})
                 elif selected == 3:
                     source = xbmcgui.Dialog().browseSingle(2, "Choose a square icon", "files", ".png|.jpg|.jpeg|.webp")
-                    if source and self._preview_artwork(source, "Custom icon", "Preview icon"):
+                    if source:
                         art.update({"icon_mode": "custom", "icon_key": "", "icon_source": str(source), "icon_label": "Custom"})
                 elif selected == 4:
                     art.update({"icon_mode": "default", "icon_key": "", "icon_source": "", "icon_label": ""})
@@ -2158,22 +2168,23 @@ class Curator:
             if selected == 0:
                 art.update({"fanart_mode": "auto", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
             elif selected == 1:
-                key = self._choose_bundled_art("Choose fanart", "fanart")
+                key, fanart_style = self._choose_bundled_art("Choose fanart", "fanart")
                 if key:
-                    art.update({"fanart_mode": "bundled", "fanart_key": key, "fanart_source": "", "fanart_label": ""})
+                    art.update({"fanart_mode": "bundled", "fanart_key": key, "fanart_source": "", "fanart_label": "", "fanart_style": fanart_style})
             elif selected == 2:
                 mode = art.get("icon_mode")
                 if mode == "auto":
                     art.update({"fanart_mode": "auto", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
                 elif mode == "bundled":
-                    art.update({"fanart_mode": "bundled", "fanart_key": art.get("icon_key") or "", "fanart_source": "", "fanart_label": ""})
+                    fanart_style = "colour" if art.get("icon_style") == "genre_colours" else "monochrome"
+                    art.update({"fanart_mode": "bundled", "fanart_key": art.get("icon_key") or "", "fanart_source": "", "fanart_label": "", "fanart_style": fanart_style})
                 elif mode == "custom" and art.get("icon_source"):
                     art.update({"fanart_mode": "custom", "fanart_key": "", "fanart_source": art.get("icon_source"), "fanart_label": art.get("icon_label") or "Custom"})
                 elif mode == "default":
                     art.update({"fanart_mode": "default", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
             elif selected == 3:
                 source = xbmcgui.Dialog().browseSingle(2, "Choose landscape fanart", "files", ".png|.jpg|.jpeg|.webp")
-                if source and self._preview_artwork(source, "Custom fanart", "Preview fanart"):
+                if source:
                     art.update({"fanart_mode": "custom", "fanart_key": "", "fanart_source": str(source), "fanart_label": "Custom"})
             elif selected == 4:
                 art.update({"fanart_mode": "default", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
