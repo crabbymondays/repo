@@ -43,6 +43,10 @@ def main():
             curator.add_list_to_widget_folder_interactive(folder_id=argument)
         elif action == "folder_add_path":
             curator.add_external_path_interactive(argument)
+        elif action == "folder_add_trakt":
+            curator.add_provider_list_to_widget_folder_interactive(argument, "trakt")
+        elif action == "folder_add_mdblist":
+            curator.add_provider_list_to_widget_folder_interactive(argument, "mdblist")
         elif action == "folder_import_favourite":
             curator.import_kodi_favourite_interactive(argument)
         elif action == "folder_edit_entry":
@@ -50,6 +54,13 @@ def main():
             if not separator or not folder_id or not entry_id:
                 raise RuntimeError("That Widget Folder item is not valid.")
             curator.edit_widget_folder_entry_interactive(folder_id, entry_id)
+        elif action == "create_related_local":
+            curator.create_related_list_interactive(list_id=argument)
+        elif action == "create_related_provider":
+            folder_id, separator, entry_id = argument.partition("|")
+            if not separator or not folder_id or not entry_id:
+                raise RuntimeError("That linked list reference is not valid.")
+            curator.create_related_list_interactive(folder_id=folder_id, entry_id=entry_id)
         elif action == "refresh_list":
             curator.refresh_list(argument)
         elif action == "edit_list":

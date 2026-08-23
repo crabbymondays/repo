@@ -13,6 +13,7 @@ from .ai_factory import create_ai_client
 from .art_cache import ArtworkCache
 from .artwork_grid import choose_artwork
 from .catalogue_clients import CatalogueError, MDBListClient, TMDBClient
+from .kodi_library import KodiLibraryError, KodiLibraryReader
 from .list_art import CHOICES as LIST_ART_CHOICES
 from .list_art import label as list_art_label
 from .list_art import normalise_state as normalise_list_art
@@ -145,7 +146,8 @@ class Curator:
 
         message = self._loc(32401,
             "Welcome to curatr. Choose an AI service and add its API key before creating your first list. "
-            "Trakt is optional: add a public username for personalised recommendations, or connect your account if curatr should save lists to Trakt.\n\nOpen Settings now?")
+            "curatr can personalise results from your Kodi Library, while Trakt remains optional for additional "
+            "history and list syncing.\n\nOpen Settings now?")
         try:
             open_now = xbmcgui.Dialog().yesno(
                 self._loc(32400, "Welcome to curatr"),
@@ -236,6 +238,9 @@ class Curator:
         if not isinstance(self.state.get("widget_folders"), list):
             self.state["widget_folders"] = []
             changed = True
+        if not isinstance(self.state.get("linked_list_cache"), dict):
+            self.state["linked_list_cache"] = {}
+            changed = True
 
         folders = []
         for folder in self.state.get("widget_folders", []):
@@ -264,6 +269,19 @@ class Curator:
                         "path": self._valid_external_plugin_path(item.get("path")),
                         "artwork": normalise_list_art(item.get("artwork")),
                     })
+                elif item.get("type") == "provider_list":
+                    provider = str(item.get("provider") or "").strip().lower()
+                    provider_list_id = str(item.get("provider_list_id") or "").strip()
+                    if provider not in ("trakt", "mdblist") or not provider_list_id or len(provider_list_id) > 128:
+                        changed = True
+                        continue
+                    item = {
+                        "id": item["id"], "type": "provider_list",
+                        "provider": provider, "provider_list_id": provider_list_id,
+                        "name": str(item.get("name") or ("Trakt list" if provider == "trakt" else "MDBList list")).strip(),
+                        "description": str(item.get("description") or "").strip(),
+                        "artwork": normalise_list_art(item.get("artwork")),
+                    }
                 else:
                     changed = True
                     continue
@@ -461,7 +479,13 @@ class Curator:
         fingerprint = self.state.get("taste_fingerprint") or {}
         if fingerprint.get("summary"):
             count = self._safe_int(fingerprint.get("source_rating_count"), 0)
-            text = "Ready" + ((" — %d ratings summarised" % count) if count else "")
+            profile = self.state.get("profile") or {}
+            source_names = [
+                "Kodi" if value == "kodi" else "Trakt"
+                for value in profile.get("sources", []) if value in ("kodi", "trakt")
+            ]
+            source_suffix = (" from " + " + ".join(source_names)) if source_names else ""
+            text = "Ready" + ((" — %d ratings%s" % (count, source_suffix)) if count else source_suffix)
             if self._taste_fingerprint_is_stale():
                 text += " (refresh due)"
         else:
@@ -1005,70 +1029,214 @@ class Curator:
             )
             self.state["director_cache"] = dict(ordered[: self.DIRECTOR_CACHE_MAX_ITEMS])
 
-    def sync_profile(self, silent=False):
-        self._require_profile_source()
-        limit = self._profile_limit()
+    def _preference_history_mode(self):
+        value = str(self.addon.getSetting("preference_history_source") or "both").strip().lower()
+        return value if value in ("both", "kodi", "trakt") else "both"
+
+    def _trakt_preference_available(self):
+        return bool(self._has_oauth() or self._public_username())
+
+    def _trakt_preference_movies(self, limit):
         source = "oauth" if self._has_oauth() else "public"
         username = str(self.state.get("trakt_username") or "").strip()
-
         if source == "oauth":
+            self.trakt.ensure_access_token()
             ratings = self.trakt.ratings_movies(limit)
             watched = self.trakt.watched_movies(limit)
             if not username:
                 try:
-                    profile = self.trakt.profile()
-                    username = str((profile or {}).get("username") or "").strip()
+                    username = str((self.trakt.profile() or {}).get("username") or "").strip()
                 except Exception:
                     username = ""
         else:
             username = self._public_username()
-            # Ratings are explicitly available without OAuth for public users.
             ratings = self.trakt.ratings_movies_for_user(username, limit)
             try:
                 watched = self.trakt.watched_movies_for_user(username, limit)
             except TraktError as exc:
-                # Privacy/settings can make some user data unavailable.  Ratings
-                # alone still provide a useful taste profile, so do not make the
-                # whole addon unusable in local-first mode.
                 watched = []
                 xbmc.log("curatr public watched history unavailable: %s" % exc, xbmc.LOGWARNING)
 
-        liked_min = self._setting_int("liked_rating_min", 8, 6, 10)
-
-        rating_rows = []
+        movies = []
         for row in ratings:
             movie = row.get("movie", {}) if isinstance(row, dict) else {}
-            rating_rows.append({
-                "title": movie.get("title"),
-                "year": movie.get("year"),
+            ids = (movie.get("ids") or {}) if isinstance(movie, dict) else {}
+            movies.append({
+                "title": movie.get("title"), "year": movie.get("year"),
                 "rating": row.get("rating") if isinstance(row, dict) else None,
-                "trakt_id": movie.get("ids", {}).get("trakt"),
+                "playcount": 0, "last_watched_at": "", "ids": dict(ids),
+                "directors": [], "genres": [], "source": "trakt",
             })
-
-        watched_rows = []
         for row in watched:
             movie = row.get("movie", {}) if isinstance(row, dict) else {}
-            watched_rows.append({
-                "title": movie.get("title"),
-                "year": movie.get("year"),
-                "trakt_id": movie.get("ids", {}).get("trakt"),
-                "last_watched_at": row.get("last_watched_at") if isinstance(row, dict) else None,
+            ids = (movie.get("ids") or {}) if isinstance(movie, dict) else {}
+            movies.append({
+                "title": movie.get("title"), "year": movie.get("year"), "rating": None,
+                "playcount": max(1, self._safe_int(row.get("plays"), 1)),
+                "last_watched_at": str(row.get("last_watched_at") or ""), "ids": dict(ids),
+                "directors": [], "genres": [], "source": "trakt",
             })
+        return movies, source, username
+
+    def _preference_identity_tokens(self, movie):
+        tokens = []
+        ids = (movie.get("ids") or {}) if isinstance(movie, dict) else {}
+        for kind in ("tmdb", "imdb", "trakt"):
+            value = ids.get(kind) if isinstance(ids, dict) else None
+            if value not in (None, ""):
+                tokens.append("%s:%s" % (kind, str(value).strip().casefold()))
+        title = self._normalise_title(movie.get("title"))
+        year = self._safe_int(movie.get("year"), 0)
+        if title:
+            tokens.append("title:%s:%s" % (title, year))
+        return tokens
+
+    def _merge_preference_movies(self, movies, liked_min):
+        merged = []
+        token_indexes = {}
+        for source_movie in movies:
+            if not isinstance(source_movie, dict) or not str(source_movie.get("title") or "").strip():
+                continue
+            tokens = self._preference_identity_tokens(source_movie)
+            index = next((token_indexes[token] for token in tokens if token in token_indexes), None)
+            if index is None:
+                index = len(merged)
+                merged.append({
+                    "title": str(source_movie.get("title") or "").strip(),
+                    "year": self._safe_int(source_movie.get("year"), 0),
+                    "ids": {}, "source_ratings": {}, "sources": [], "playcount": 0,
+                    "last_watched_at": "", "directors": [], "genres": [],
+                    "kodi_id": self._safe_int(source_movie.get("kodi_id"), 0),
+                })
+            target = merged[index]
+            source = str(source_movie.get("source") or "unknown").strip().lower()
+            if source not in target["sources"]:
+                target["sources"].append(source)
+            if not target.get("kodi_id") and self._safe_int(source_movie.get("kodi_id"), 0):
+                target["kodi_id"] = self._safe_int(source_movie.get("kodi_id"), 0)
+            rating = source_movie.get("rating")
+            if rating is not None:
+                rating = max(1, min(10, self._safe_int(rating, 0)))
+                if rating:
+                    target["source_ratings"][source] = rating
+            ids = source_movie.get("ids") or {}
+            if isinstance(ids, dict):
+                for kind in ("tmdb", "imdb", "trakt"):
+                    if ids.get(kind) not in (None, ""):
+                        target["ids"][kind] = ids.get(kind)
+            target["playcount"] = max(target["playcount"], self._safe_int(source_movie.get("playcount"), 0))
+            target["last_watched_at"] = max(
+                str(target.get("last_watched_at") or ""), str(source_movie.get("last_watched_at") or "")
+            )
+            for field in ("directors", "genres"):
+                values = list(target[field])
+                seen = {str(value).casefold() for value in values}
+                for value in source_movie.get(field) or []:
+                    text = str(value or "").strip()
+                    if text and text.casefold() not in seen:
+                        seen.add(text.casefold())
+                        values.append(text)
+                target[field] = values[:20]
+            for token in self._preference_identity_tokens(target):
+                token_indexes[token] = index
+            for token in tokens:
+                token_indexes[token] = index
+
+        ratings = []
+        watched = []
+        library_items = []
+        conflicts = 0
+        for movie in merged:
+            source_ratings = movie.pop("source_ratings", {})
+            values = list(source_ratings.values())
+            conflict = len(values) > 1 and max(values) - min(values) >= 4
+            if conflict:
+                combined_rating = None
+                confidence = "conflicting"
+                conflicts += 1
+            elif values:
+                combined_rating = int((sum(values) / float(len(values))) + 0.5)
+                confidence = "reduced" if len(values) > 1 and max(values) - min(values) == 3 else "normal"
+            else:
+                combined_rating = None
+                confidence = "none"
+            base = {
+                "title": movie.get("title"), "year": movie.get("year"),
+                "trakt_id": (movie.get("ids") or {}).get("trakt"),
+                "tmdb_id": (movie.get("ids") or {}).get("tmdb"),
+                "imdb_id": (movie.get("ids") or {}).get("imdb"),
+                "kodi_id": movie.get("kodi_id"), "sources": movie.get("sources"),
+                "directors": movie.get("directors"), "genres": movie.get("genres"),
+            }
+            if source_ratings:
+                rated = dict(base)
+                rated.update({
+                    "rating": combined_rating, "source_ratings": source_ratings,
+                    "rating_conflict": conflict, "rating_confidence": confidence,
+                })
+                ratings.append(rated)
+            if movie.get("playcount") or movie.get("last_watched_at"):
+                seen_row = dict(base)
+                seen_row.update({
+                    "playcount": max(1, self._safe_int(movie.get("playcount"), 1)),
+                    "last_watched_at": movie.get("last_watched_at"),
+                })
+                watched.append(seen_row)
+            if "kodi" in (movie.get("sources") or []):
+                library_items.append(dict(base))
 
         strong_likes = sorted(
-            [r for r in rating_rows if self._safe_int(r.get("rating"), 0) >= liked_min],
-            key=lambda item: self._safe_int(item.get("rating"), 0),
-            reverse=True,
+            [row for row in ratings if self._safe_int(row.get("rating"), 0) >= liked_min],
+            key=lambda row: self._safe_int(row.get("rating"), 0), reverse=True,
         )
+        return ratings, watched, library_items[:100], strong_likes, conflicts, len(merged)
+
+    def sync_profile(self, silent=False):
+        mode = self._preference_history_mode()
+        limit = self._profile_limit()
+        liked_min = self._setting_int("liked_rating_min", 8, 6, 10)
+        source_movies = []
+        sources_used = []
+        failures = []
+        username = str(self.state.get("trakt_username") or "").strip()
+        trakt_source = ""
+        kodi_total = 0
+
+        if mode in ("both", "kodi"):
+            try:
+                library = KodiLibraryReader(limit=limit).movies()
+                kodi_movies = library.get("movies") or []
+                kodi_total = self._safe_int(library.get("total"), len(kodi_movies))
+                source_movies.extend(kodi_movies)
+                if kodi_movies:
+                    sources_used.append("kodi")
+            except KodiLibraryError as exc:
+                failures.append("Kodi Library: %s" % exc)
+
+        if mode in ("both", "trakt") and self._trakt_preference_available():
+            try:
+                trakt_movies, trakt_source, username = self._trakt_preference_movies(limit)
+                source_movies.extend(trakt_movies)
+                if trakt_movies:
+                    sources_used.append("trakt")
+            except Exception as exc:
+                failures.append("Trakt: %s" % exc)
+        elif mode == "trakt":
+            failures.append("Trakt is not connected and no public username is configured")
+
+        if not source_movies and failures:
+            raise RuntimeError(failures[0])
+
+        (
+            rating_rows, watched_rows, library_rows, strong_likes,
+            conflicts, unique_movies,
+        ) = self._merge_preference_movies(source_movies, liked_min)
         director_stats = {}
-        # v0.7 deliberately caps people lookups more aggressively.  This is a
-        # taste enhancement, not something worth spending dozens of API calls on.
         for rated in strong_likes[:10]:
+            direct_names = [str(value) for value in rated.get("directors") or [] if str(value).strip()]
             trakt_id = rated.get("trakt_id")
-            if not trakt_id:
-                continue
-            director_names = self._cached_directors(trakt_id)
-            if director_names is None:
+            director_names = direct_names or (self._cached_directors(trakt_id) if trakt_id else [])
+            if not director_names and trakt_id:
                 try:
                     people = self.trakt.movie_people(trakt_id)
                 except TraktError as exc:
@@ -1113,11 +1281,19 @@ class Curator:
         self.state["profile"] = {
             "ratings": rating_rows,
             "watched": watched_rows,
+            "library": library_rows,
             "strong_likes": strong_likes[:100],
             "favourite_directors": favourite_directors[:20],
             "liked_rating_threshold": liked_min,
-            "source": source,
+            "source": "+".join(sources_used) or "prompt_only",
+            "sources": sources_used,
+            "preference_history_mode": mode,
             "username": username,
+            "trakt_source": trakt_source,
+            "kodi_library_total": kodi_total,
+            "unique_movies": unique_movies,
+            "conflicting_ratings": conflicts,
+            "source_failures": failures[:3],
             "synced_at": int(time.time()),
         }
         self._save_state()
@@ -1131,16 +1307,21 @@ class Curator:
                 xbmc.log("curatr taste fingerprint refresh failed: %s" % exc, xbmc.LOGWARNING)
                 xbmcgui.Dialog().ok(
                     self.name,
-                    "Your Trakt preferences were refreshed, but curatr could not rebuild the AI summary.\n\n%s"
+                    "Your preferences were refreshed, but curatr could not rebuild the AI summary.\n\n%s"
                     % exc,
                 )
 
         if not silent:
-            source_label = "linked Trakt" if source == "oauth" else "public Trakt profile"
-            message = "%s preferences refreshed" % source_label
+            labels = ["Kodi Library" if value == "kodi" else "Trakt" for value in sources_used]
+            message = "%s preferences refreshed" % (" + ".join(labels) if labels else "Prompt-only")
+            if conflicts:
+                message += " — %d conflicting rating%s ignored" % (conflicts, "" if conflicts == 1 else "s")
             if fingerprint_updated:
                 message += " + AI preference summary rebuilt"
-            self.record_activity(message, notify=True)
+            self.record_activity(
+                message, level="warning" if failures else "info",
+                detail="\n".join(failures), notify=True,
+            )
         return self.state["profile"]
 
     # ---------- List creation/update ----------
@@ -1197,6 +1378,79 @@ class Curator:
             name, prompt, count, managed_record=managed, description=description
         )
         return result
+
+    def create_related_list_interactive(self, list_id="", folder_id="", entry_id=""):
+        """Create a separate AI list using a compact snapshot of another list as evidence."""
+        self._require_ai()
+        if list_id:
+            source = self._managed_record_by_id(list_id)
+            if not source:
+                raise RuntimeError("That curatr list no longer exists.")
+            source_name = str(source.get("name") or "curatr list")
+            movies = [row for row in source.get("movies", []) if isinstance(row, dict)]
+        else:
+            entry, movies = self.linked_provider_list_movies(folder_id, entry_id, force=False)
+            source_name = str(entry.get("name") or "linked list")
+        references = []
+        seen = set()
+        for movie in movies:
+            title = str(movie.get("title") or "").strip()
+            year = self._safe_int(movie.get("year"), 0)
+            marker = (title.casefold(), year)
+            if not title or marker in seen:
+                continue
+            seen.add(marker)
+            references.append({"title": title, "year": year})
+            if len(references) >= 30:
+                break
+        if len(references) < 2:
+            raise RuntimeError("That list does not contain enough identifiable films to use as an AI reference.")
+
+        instruction = xbmcgui.Dialog().input(
+            "What should curatr find?",
+            defaultt="Find more films like these. Keep the strongest shared qualities without repeating the reference films.",
+        )
+        if not instruction or not instruction.strip():
+            return None
+        instruction = instruction.strip()
+        name = xbmcgui.Dialog().input("Name the new list", defaultt="More like %s" % source_name)
+        if not name or not name.strip():
+            return None
+        name = name.strip()
+        if self._managed_record_by_name(name):
+            xbmcgui.Dialog().ok(self.name, "A curatr list already uses that name. Choose a different name so the original is not replaced.")
+            return None
+        description = xbmcgui.Dialog().input(
+            "List description (optional)", defaultt="More films inspired by %s." % source_name,
+        )
+        count_text = xbmcgui.Dialog().numeric(0, "How many films? (5-50)", defaultt="20")
+        if not count_text or not str(count_text).strip():
+            return None
+        try:
+            count = max(5, min(50, int(count_text)))
+        except (TypeError, ValueError):
+            xbmcgui.Dialog().ok(self.name, "Enter a number between 5 and 50.")
+            return None
+        confirmation = (
+            "Create '%s' with %d new films using up to %d titles from '%s' as a reference?"
+            "\n\nThis makes one AI recommendation request and does not change the original list."
+            % (name, count, len(references), source_name)
+        )
+        try:
+            confirmed = xbmcgui.Dialog().yesno(
+                self.name, confirmation, nolabel="Cancel", yeslabel="Create List",
+            )
+        except TypeError:
+            # Retain compatibility with Kodi Python bindings/skins that expose
+            # the older positional-only yes/no signature.
+            confirmed = xbmcgui.Dialog().yesno(self.name, confirmation)
+        if not confirmed:
+            return None
+        self._notify("Finding %d related films…" % count)
+        return self._generate_and_write(
+            name, instruction, count, description=str(description or "").strip(),
+            reference_movies=references,
+        )
 
     @staticmethod
     def quick_pick_presets():
@@ -1584,13 +1838,15 @@ class Curator:
         if not choices:
             xbmcgui.Dialog().ok(self.name, "No landscape artwork is available in this list yet. Refresh the list first, or choose another fanart option.")
             return "", ""
+        choices = choices[:24]
+        preview_paths = ArtworkCache(self.addon, workers=6).cache_urls([source for _movie, source in choices], limit=24)
         entries = []
         for movie, source in choices:
             label = "%s%s" % (
                 movie.get("title") or "Film artwork",
                 " (%s)" % movie.get("year") if movie.get("year") else "",
             )
-            entries.append({"label": label, "source": source})
+            entries.append({"label": label, "source": source, "preview_source": preview_paths.get(source) or source})
         selected = choose_artwork(
             xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
             "Choose fanart from this list", entries, "fanart",
@@ -1619,6 +1875,11 @@ class Curator:
                 "subtitle": ", ".join([value for value in known if value][:2]),
                 "source": source,
             })
+        preview_paths = ArtworkCache(self.addon, workers=6).cache_urls(
+            [entry.get("source") for entry in entries], limit=20,
+        )
+        for entry in entries:
+            entry["preview_source"] = preview_paths.get(entry.get("source")) or entry.get("source")
         selected = choose_artwork(
             xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
             "Choose a director or actor", entries, "icon",
@@ -1745,6 +2006,11 @@ class Curator:
             }
             for row in suggestions
         ]
+        preview_paths = ArtworkCache(self.addon, workers=6).cache_urls(
+            [entry.get("source") for entry in grid_entries], limit=20,
+        )
+        for entry in grid_entries:
+            entry["preview_source"] = preview_paths.get(entry.get("source")) or entry.get("source")
         grid_choice = choose_artwork(
             xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
             "Suggested artwork", grid_entries, "fanart",
@@ -2212,6 +2478,8 @@ class Curator:
         if entry.get("type") == "curatr_list":
             record = self._managed_record_by_id(entry.get("list_id"))
             return str((record or {}).get("name") or "Missing curatr list")
+        if entry.get("type") == "provider_list":
+            return str(entry.get("name") or ("Trakt list" if entry.get("provider") == "trakt" else "MDBList list"))
         return str(entry.get("name") or "External Shortcut")
 
     def _edit_compact_artwork(self, heading, value):
@@ -2357,6 +2625,143 @@ class Curator:
         self._store_widget_folder(updated, folder)
         self.record_activity("Added %s to %s" % (record.get("name") or "curatr list", updated.get("name")), notify=True)
         return updated
+
+    def add_provider_list_to_widget_folder_interactive(self, folder_id, provider):
+        """Add a lightweight account-list reference without copying its contents."""
+        folder = self.widget_folder_by_id(folder_id)
+        if not folder:
+            raise RuntimeError("That Widget Folder no longer exists.")
+        provider = str(provider or "").strip().lower()
+        if provider == "trakt":
+            if not self._has_oauth():
+                raise RuntimeError("Connect Trakt before adding one of your Trakt lists.")
+            rows = self.trakt.lists()
+            service_name = "Trakt"
+            choices = []
+            for row in rows if isinstance(rows, list) else []:
+                if not isinstance(row, dict):
+                    continue
+                ids = row.get("ids") or {}
+                list_id = ids.get("trakt") if isinstance(ids, dict) else None
+                list_id = list_id or row.get("id") or (ids.get("slug") if isinstance(ids, dict) else None)
+                name = str(row.get("name") or "").strip()
+                if list_id in (None, "") or not name:
+                    continue
+                choices.append({
+                    "id": str(list_id), "name": name,
+                    "description": str(row.get("description") or "").strip(),
+                    "items": row.get("item_count"),
+                })
+        elif provider == "mdblist":
+            if not self.mdblist or not self.mdblist.api_key:
+                raise RuntimeError("Turn on MDBList and add its API key before adding an account list.")
+            choices = self.mdblist.user_lists()
+            service_name = "MDBList"
+        else:
+            raise RuntimeError("That linked-list provider is not supported.")
+
+        existing = {
+            str(row.get("provider_list_id") or "") for row in folder.get("entries", [])
+            if isinstance(row, dict) and row.get("type") == "provider_list" and row.get("provider") == provider
+        }
+        choices = [row for row in choices if isinstance(row, dict) and str(row.get("id") or "") not in existing]
+        if not choices:
+            xbmcgui.Dialog().ok(self.name, "No unused %s movie lists were found for this folder." % service_name)
+            return folder
+        labels = [
+            "%s%s" % (
+                row.get("name") or (service_name + " list"),
+                " (%s films)" % row.get("items") if row.get("items") not in (None, "") else "",
+            ) for row in choices
+        ]
+        selected = xbmcgui.Dialog().select("Add from %s" % service_name, labels)
+        if selected < 0:
+            return folder
+        chosen = choices[selected]
+        name = str(chosen.get("name") or (service_name + " list")).strip()
+        description = str(chosen.get("description") or "Linked directly to your %s account." % service_name).strip()
+        artwork = normalise_list_art({"icon_mode": "default", "fanart_mode": "default"})
+        if xbmcgui.Dialog().yesno(self.name, "%s added. Customise its name, description or artwork now?" % name):
+            custom_name = xbmcgui.Dialog().input("List name", defaultt=name)
+            if custom_name and custom_name.strip():
+                name = custom_name.strip()
+            custom_description = xbmcgui.Dialog().input("List description", defaultt=description)
+            description = str(custom_description or "").strip()
+            artwork = self._edit_compact_artwork("%s artwork" % name, artwork)
+        entry = {
+            "id": uuid.uuid4().hex, "type": "provider_list",
+            "provider": provider, "provider_list_id": str(chosen.get("id")),
+            "name": name, "description": description, "artwork": artwork,
+        }
+        updated = dict(folder)
+        updated["entries"] = [dict(row) for row in folder.get("entries", []) if isinstance(row, dict)] + [entry]
+        updated["updated_at"] = int(time.time())
+        self._store_widget_folder(updated, folder)
+        self.record_activity("Added %s %s to %s" % (service_name, name, updated.get("name")), notify=True)
+        return updated
+
+    @staticmethod
+    def _provider_cache_key(provider, provider_list_id):
+        return "%s:%s" % (str(provider or "").strip().lower(), str(provider_list_id or "").strip())
+
+    def linked_provider_list_movies(self, folder_id, entry_id, force=False):
+        """Load a linked list lazily, with a bounded cache and stale fallback."""
+        folder = self.widget_folder_by_id(folder_id)
+        if not folder:
+            raise RuntimeError("That Widget Folder no longer exists.")
+        entry = next((
+            row for row in folder.get("entries", [])
+            if isinstance(row, dict) and str(row.get("id") or "") == str(entry_id or "")
+        ), None)
+        if not entry or entry.get("type") != "provider_list":
+            raise RuntimeError("That linked list no longer exists in this folder.")
+        provider = str(entry.get("provider") or "").strip().lower()
+        provider_list_id = str(entry.get("provider_list_id") or "").strip()
+        cache_key = self._provider_cache_key(provider, provider_list_id)
+        cache = self.state.get("linked_list_cache") or {}
+        cached = cache.get(cache_key) if isinstance(cache, dict) else None
+        cache_seconds = 30 * 60
+        if not force and isinstance(cached, dict):
+            cached_at = self._safe_int(cached.get("cached_at"), 0)
+            movies = cached.get("movies")
+            if isinstance(movies, list) and time.time() - cached_at < cache_seconds:
+                return entry, movies
+
+        try:
+            if provider == "trakt":
+                if not self._has_oauth():
+                    raise RuntimeError("Reconnect Trakt to open this linked list.")
+                response = self.trakt.list_items(provider_list_id, limit=250, extended=True)
+                movies = [
+                    row.get("movie") for row in response if isinstance(row, dict) and isinstance(row.get("movie"), dict)
+                ]
+            elif provider == "mdblist":
+                if not self.mdblist or not self.mdblist.api_key:
+                    raise RuntimeError("Turn on MDBList and add its API key to open this linked list.")
+                movies = self.mdblist.fetch_list_id(provider_list_id, limit=250)
+            else:
+                raise RuntimeError("That linked-list provider is not supported.")
+            movies = [row for row in movies if isinstance(row, dict) and row.get("title")][:250]
+            cache = dict(cache) if isinstance(cache, dict) else {}
+            cache[cache_key] = {"cached_at": int(time.time()), "movies": movies}
+            if len(cache) > 20:
+                ordered = sorted(
+                    cache.items(), key=lambda pair: self._safe_int((pair[1] or {}).get("cached_at"), 0), reverse=True
+                )
+                cache = dict(ordered[:15])
+            self.state["linked_list_cache"] = cache
+            self._save_state()
+            return entry, movies
+        except Exception as exc:
+            if isinstance(cached, dict) and isinstance(cached.get("movies"), list):
+                self.record_activity(
+                    "Using cached %s list: %s" % (provider.title(), entry.get("name") or "Linked list"),
+                    level="warning", detail=str(exc), notify=False,
+                )
+                return entry, cached.get("movies")
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError(str(exc))
 
     @staticmethod
     def _valid_external_plugin_path(value):
@@ -2555,6 +2960,8 @@ class Curator:
             actions = ["Move up", "Move down", "Remove from folder"]
             if entry.get("type") == "external_path":
                 actions = ["Name", "Description", "Plugin path", "Artwork"] + actions
+            elif entry.get("type") == "provider_list":
+                actions = ["Name", "Description", "Artwork", "Refresh cached films"] + actions
             choice = xbmcgui.Dialog().select(self._folder_entry_label(entry), actions)
             if choice < 0:
                 return folder
@@ -2578,8 +2985,28 @@ class Curator:
                     updated_entry["artwork"] = self._edit_compact_artwork("Shortcut artwork", entry.get("artwork"))
                 entries[index] = updated_entry
                 entry = updated_entry
+            elif entry.get("type") == "provider_list" and choice < 4:
+                updated_entry = dict(entry)
+                if choice == 0:
+                    value = xbmcgui.Dialog().input("List name", defaultt=str(entry.get("name") or ""))
+                    if value and value.strip():
+                        updated_entry["name"] = value.strip()
+                elif choice == 1:
+                    value = xbmcgui.Dialog().input("List description", defaultt=str(entry.get("description") or ""))
+                    updated_entry["description"] = str(value or "").strip()
+                elif choice == 2:
+                    updated_entry["artwork"] = self._edit_compact_artwork("Linked-list artwork", entry.get("artwork"))
+                else:
+                    cache_key = self._provider_cache_key(entry.get("provider"), entry.get("provider_list_id"))
+                    cache = dict(self.state.get("linked_list_cache") or {})
+                    cache.pop(cache_key, None)
+                    self.state["linked_list_cache"] = cache
+                    self._save_state()
+                    xbmcgui.Dialog().notification(self.name, "Linked list will refresh when next opened", xbmcgui.NOTIFICATION_INFO, 3000)
+                entries[index] = updated_entry
+                entry = updated_entry
             else:
-                offset = 4 if entry.get("type") == "external_path" else 0
+                offset = 4 if entry.get("type") in ("external_path", "provider_list") else 0
                 operation = choice - offset
                 if operation == 0 and index > 0:
                     entries[index - 1], entries[index] = entries[index], entries[index - 1]
@@ -2600,7 +3027,8 @@ class Curator:
             raise RuntimeError("That Widget Folder no longer exists.")
         while True:
             choices = [
-                "Add a curatr list", "Add an external shortcut", "Import from Kodi Favourites", "Manage folder items",
+                "Add a curatr list", "Add from Trakt", "Add from MDBList", "Add an external shortcut",
+                "Import from Kodi Favourites", "Manage folder items",
                 "Folder Name", "Description", "Artwork", "Delete folder",
             ]
             choice = xbmcgui.Dialog().select(folder.get("name") or "Widget Folder", choices)
@@ -2609,10 +3037,14 @@ class Curator:
             if choice == 0:
                 folder = self.add_list_to_widget_folder_interactive(folder_id=folder_id) or folder
             elif choice == 1:
-                folder = self.add_external_path_interactive(folder_id) or folder
+                folder = self.add_provider_list_to_widget_folder_interactive(folder_id, "trakt") or folder
             elif choice == 2:
-                folder = self.import_kodi_favourite_interactive(folder_id) or folder
+                folder = self.add_provider_list_to_widget_folder_interactive(folder_id, "mdblist") or folder
             elif choice == 3:
+                folder = self.add_external_path_interactive(folder_id) or folder
+            elif choice == 4:
+                folder = self.import_kodi_favourite_interactive(folder_id) or folder
+            elif choice == 5:
                 entries = [row for row in folder.get("entries", []) if isinstance(row, dict)]
                 if not entries:
                     xbmcgui.Dialog().ok(self.name, "This folder is empty.")
@@ -2620,7 +3052,7 @@ class Curator:
                 selected = xbmcgui.Dialog().select("Manage folder items", [self._folder_entry_label(row) for row in entries])
                 if selected >= 0:
                     folder = self.edit_widget_folder_entry_interactive(folder_id, entries[selected].get("id")) or folder
-            elif choice == 4:
+            elif choice == 6:
                 value = xbmcgui.Dialog().input("Folder name", defaultt=str(folder.get("name") or ""))
                 if value and value.strip():
                     name = value.strip()
@@ -2634,15 +3066,15 @@ class Curator:
                     else:
                         updated = dict(folder); updated["name"] = name; updated["updated_at"] = int(time.time())
                         folder = self._store_widget_folder(updated, folder)
-            elif choice == 5:
+            elif choice == 7:
                 value = xbmcgui.Dialog().input("Folder description", defaultt=str(folder.get("description") or ""))
                 updated = dict(folder); updated["description"] = str(value or "").strip(); updated["updated_at"] = int(time.time())
                 folder = self._store_widget_folder(updated, folder)
-            elif choice == 6:
+            elif choice == 8:
                 updated = dict(folder); updated["artwork"] = self._edit_compact_artwork("Folder artwork", folder.get("artwork")); updated["updated_at"] = int(time.time())
                 folder = self._store_widget_folder(updated, folder)
             else:
-                if not xbmcgui.Dialog().yesno(self.name, "Delete the folder '%s'?\n\nIts lists and external paths will not be deleted." % (folder.get("name") or "Widget Folder")):
+                if not xbmcgui.Dialog().yesno(self.name, "Delete the folder '%s'?\n\nIts lists and linked sources will not be deleted." % (folder.get("name") or "Widget Folder")):
                     continue
                 self.state["widget_folders"] = [row for row in self.widget_folders() if str(row.get("id")) != str(folder_id)]
                 self._save_state()
@@ -2847,6 +3279,21 @@ class Curator:
             elif entry.get("type") == "external_path" and self._valid_external_plugin_path(entry.get("path")):
                 entry["path"] = self._valid_external_plugin_path(entry.get("path"))
                 entry["name"] = str(entry.get("name") or "External Shortcut").strip() or "External Shortcut"
+                entry["description"] = str(entry.get("description") or "").strip()
+                entry_art = normalise_list_art(entry.get("artwork"))
+                if entry_art.get("icon_mode") == "custom":
+                    entry_art.update({"icon_mode": "default", "icon_source": "", "icon_label": ""})
+                if entry_art.get("fanart_mode") == "custom":
+                    entry_art.update({"fanart_mode": "default", "fanart_source": "", "fanart_label": ""})
+                entry["artwork"] = entry_art
+            elif entry.get("type") == "provider_list":
+                provider = str(entry.get("provider") or "").strip().lower()
+                provider_list_id = str(entry.get("provider_list_id") or "").strip()
+                if provider not in ("trakt", "mdblist") or not provider_list_id or len(provider_list_id) > 128:
+                    continue
+                entry["provider"] = provider
+                entry["provider_list_id"] = provider_list_id
+                entry["name"] = str(entry.get("name") or ("Trakt list" if provider == "trakt" else "MDBList list")).strip()
                 entry["description"] = str(entry.get("description") or "").strip()
                 entry_art = normalise_list_art(entry.get("artwork"))
                 if entry_art.get("icon_mode") == "custom":
@@ -3216,28 +3663,34 @@ class Curator:
         cache[self._movie_cache_key(title, year)] = {"miss": True, "cached_at": int(time.time())}
         self._trim_movie_cache()
 
-    def _generate_and_write(self, name, prompt, count, silent=False, managed_record=None, description=None):
+    def _generate_and_write(
+        self, name, prompt, count, silent=False, managed_record=None,
+        description=None, reference_movies=None,
+    ):
         self._require_ai()
         count = max(5, min(50, self._safe_int(count, 20)))
 
-        has_profile_source = self._has_oauth() or bool(self._public_username())
+        has_profile_source = self._profile_source_available()
         if has_profile_source and self._profile_is_stale():
             try:
                 self.sync_profile(silent=True)
-            except TraktError as exc:
+            except Exception as exc:
                 if not self.state.get("profile"):
                     raise
                 # A stale local profile is more useful than failing the entire
-                # recommendation request during a temporary Trakt rate limit.
+                # recommendation request during a temporary source outage.
                 self.record_activity(
-                    "Using cached Trakt taste profile",
+                    "Using cached preference profile",
                     level="warning", detail=str(exc), notify=False,
                 )
-        # A Trakt profile improves personalisation but is not required. New
-        # local-only users receive prompt-led recommendations without spending
+        # Preference history improves personalisation but is not required. New
+        # prompt-only users receive recommendations without spending
         # an extra AI request on an empty preference summary.
         profile = self.state.get("profile") or {}
-        if profile:
+        has_preference_evidence = bool(
+            profile.get("ratings") or profile.get("watched") or profile.get("library")
+        )
+        if has_preference_evidence:
             fingerprint = self._ensure_taste_fingerprint(profile, force=False)
         else:
             fingerprint = {
@@ -3250,7 +3703,25 @@ class Curator:
                 "exploration_directions": [],
             }
         taste_context = self._build_recommendation_context(profile, fingerprint)
-        taste_context["recommendation_mode"] = "personalised" if profile else "prompt_only"
+        taste_context["recommendation_mode"] = "personalised" if has_preference_evidence else "prompt_only"
+        if reference_movies is None and managed_record:
+            reference_movies = managed_record.get("reference_movies")
+        compact_references = []
+        for row in reference_movies or []:
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "").strip()
+            year = self._safe_int(row.get("year"), 0)
+            if title:
+                compact_references.append({"title": title, "year": year})
+            if len(compact_references) >= 30:
+                break
+        if compact_references:
+            taste_context["reference_movies"] = compact_references
+            taste_context["reference_movies_note"] = (
+                "Use these films only as creative reference evidence. Follow the user's instruction, "
+                "infer shared qualities, and do not recommend the reference films themselves."
+            )
         hidden_rows = [row for row in self.state.get("hidden_movies", []) if isinstance(row, dict)]
         if hidden_rows:
             taste_context["never_recommend"] = [
@@ -3285,6 +3756,7 @@ class Curator:
         candidate_count = min(60, count + max(8, count // 3))
         result = self.ai.recommend(prompt, taste_context, candidate_count)
         excluded_ids = self._excluded_movie_ids(profile)
+        excluded_markers = self._excluded_movie_markers(profile)
         for row in self.state.get("hidden_movies", []):
             if not isinstance(row, dict):
                 continue
@@ -3294,6 +3766,11 @@ class Curator:
                 pass
         candidates = []
         resolved_ids = set()
+        reference_markers = {
+            (self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0))
+            for row in compact_references if row.get("title")
+        }
+        reference_titles = {marker[0] for marker in reference_markers}
 
         for item in result.get("items", []):
             title = item.get("title", "")
@@ -3313,12 +3790,25 @@ class Curator:
                     self._cache_movie_miss(title, year)
             if not movie:
                 continue
-            trakt_id = (movie.get("ids") or {}).get("trakt")
+            movie_marker = (
+                self._normalise_title(movie.get("title")), self._safe_int(movie.get("year"), 0)
+            )
+            if movie_marker in reference_markers or movie_marker[0] in reference_titles:
+                continue
+            movie_ids = movie.get("ids") or {}
+            trakt_id = movie_ids.get("trakt")
             try:
                 trakt_id = int(trakt_id)
             except (TypeError, ValueError):
                 continue
-            if trakt_id in excluded_ids or trakt_id in resolved_ids:
+            tmdb_id = str(movie_ids.get("tmdb") or "")
+            imdb_id = str(movie_ids.get("imdb") or "").casefold()
+            if (
+                trakt_id in excluded_ids or trakt_id in resolved_ids
+                or (tmdb_id and tmdb_id in excluded_markers["tmdb"])
+                or (imdb_id and imdb_id in excluded_markers["imdb"])
+                or movie_marker in excluded_markers["title_year"]
+            ):
                 continue
             resolved_ids.add(trakt_id)
             # Preserve the AI reason locally; skins can surface it later without
@@ -3355,6 +3845,10 @@ class Curator:
             "recommendations": [row["recommendation"] for row in candidates],
             "grounded_candidate_count": len(grounded_pool),
         })
+        if compact_references:
+            record["reference_movies"] = compact_references
+        elif not managed_record:
+            record.pop("reference_movies", None)
         if "sync_to_trakt" not in record:
             # Never leave a brand-new local-only list appearing to wait for a
             # Trakt sync the user did not configure. It can be enabled later.
@@ -3564,6 +4058,23 @@ class Curator:
                     pass
         return ids
 
+    @classmethod
+    def _excluded_movie_markers(cls, profile):
+        markers = {"tmdb": set(), "imdb": set(), "title_year": set()}
+        for bucket in ("watched", "ratings"):
+            for item in (profile or {}).get(bucket, []):
+                if not isinstance(item, dict):
+                    continue
+                if item.get("tmdb_id") not in (None, ""):
+                    markers["tmdb"].add(str(item.get("tmdb_id")))
+                if item.get("imdb_id"):
+                    markers["imdb"].add(str(item.get("imdb_id")).casefold())
+                title = cls._normalise_title(item.get("title"))
+                year = cls._safe_int(item.get("year"), 0)
+                if title:
+                    markers["title_year"].add((title, year))
+        return markers
+
     # ---------- Compact reusable AI taste fingerprint ----------
 
     def _ensure_taste_fingerprint(self, profile=None, force=False):
@@ -3577,13 +4088,15 @@ class Curator:
             row for row in profile.get("ratings", [])
             if isinstance(row, dict) and row.get("title") and row.get("rating") is not None
         ]
+        watched_count = len([row for row in profile.get("watched", []) if isinstance(row, dict) and row.get("title")])
+        library_count = len([row for row in profile.get("library", []) if isinstance(row, dict) and row.get("title")])
 
-        if len(valid_ratings) < 3:
-            # With very little rating history there is not enough evidence to justify
-            # spending an API call on a pseudo-precise profile. The natural-language
-            # request can still drive recommendations while Trakt exclusions stay local.
+        if len(valid_ratings) < 3 and watched_count < 10 and library_count < 20:
+            # With very little history there is not enough evidence to justify
+            # spending an API call on a pseudo-precise profile. The current
+            # request can still drive recommendations while exclusions stay local.
             fingerprint = {
-                "summary": "Limited Trakt rating history; rely mainly on the user's current request until more films are rated.",
+                "summary": "Limited personal rating history; rely mainly on the user's current request until more films are rated.",
                 "core_preferences": [],
                 "avoidances": [],
                 "director_affinities": [],
@@ -3597,6 +4110,8 @@ class Curator:
         fingerprint["generated_at"] = int(time.time())
         fingerprint["source_signature"] = self._profile_taste_signature(profile)
         fingerprint["source_rating_count"] = len(valid_ratings)
+        fingerprint["source_watched_count"] = watched_count
+        fingerprint["source_library_count"] = library_count
         fingerprint["provider"] = self.ai.provider_id
         fingerprint["provider_name"] = self.ai.provider_name
         fingerprint["model"] = self.ai.model
@@ -3629,8 +4144,13 @@ class Curator:
             if not isinstance(item, dict):
                 continue
             ratings.append([
+                item.get("title"),
+                item.get("year"),
                 item.get("trakt_id"),
+                item.get("tmdb_id"),
+                item.get("imdb_id"),
                 item.get("rating"),
+                item.get("rating_conflict"),
             ])
         directors = []
         for item in (profile or {}).get("favourite_directors", []):
@@ -3641,10 +4161,22 @@ class Curator:
                 item.get("liked_movies"),
                 item.get("average_rating"),
             ])
+        watched = []
+        for item in (profile or {}).get("watched", [])[:100]:
+            if isinstance(item, dict):
+                watched.append([item.get("title"), item.get("year"), item.get("playcount")])
+        library = []
+        for item in (profile or {}).get("library", [])[:100]:
+            if isinstance(item, dict):
+                library.append([item.get("title"), item.get("year")])
         payload = {
             "ratings": ratings,
             "directors": directors,
+            "watched": watched,
+            "library": library,
             "threshold": (profile or {}).get("liked_rating_threshold"),
+            "sources": (profile or {}).get("sources"),
+            "mode": (profile or {}).get("preference_history_mode"),
         }
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -3708,12 +4240,30 @@ class Curator:
                     rows.append("• %s (%s)" % (item.get("title") or "?", item.get("year") or "?"))
             return "\n".join(rows) or "—"
 
+        source_names = [
+            "Kodi Library" if value == "kodi" else "Trakt"
+            for value in profile.get("sources", []) if value in ("kodi", "trakt")
+        ]
+        source_text = " + ".join(source_names) or "prompt-only mode"
+        conflict_count = self._safe_int(profile.get("conflicting_ratings"), 0)
+        data_note = (
+            "Built using %d personal ratings, %d watched films and %d Kodi Library titles from %s. "
+            "%d conflicting rating%s %s ignored. "
+            "Complete watched/rated exclusion data stays local to Kodi and is not sent with every recommendation request."
+            % (
+                self._safe_int(fingerprint.get("source_rating_count"), 0),
+                self._safe_int(fingerprint.get("source_watched_count"), 0),
+                self._safe_int(fingerprint.get("source_library_count"), 0), source_text,
+                conflict_count, "" if conflict_count == 1 else "s",
+                "was" if conflict_count == 1 else "were",
+            )
+        )
+
         text = (
             "SUMMARY\n%s\n\nCORE PREFERENCES\n%s\n\nAVOIDANCES / WEAKER FITS\n%s\n\n"
             "DIRECTOR AFFINITIES\n%s\n\nREPRESENTATIVE LIKES\n%s\n\n"
             "REPRESENTATIVE DISLIKES\n%s\n\nEXPLORATION DIRECTIONS\n%s\n\n"
-            "Built from %d Trakt ratings using %s. The complete watched/rated exclusion data stays local to Kodi "
-            "and is not sent with every recommendation request."
+            "%s\n\nPreference summary: %s."
             % (
                 fingerprint.get("summary") or "—",
                 bullet_lines(fingerprint.get("core_preferences")),
@@ -3722,7 +4272,7 @@ class Curator:
                 movie_lines(fingerprint.get("representative_likes")),
                 movie_lines(fingerprint.get("representative_dislikes")),
                 bullet_lines(fingerprint.get("exploration_directions")),
-                self._safe_int(fingerprint.get("source_rating_count"), 0),
+                data_note,
                 "%s / %s" % (fingerprint.get("provider_name") or self.ai.provider_name, fingerprint.get("model") or self.ai.model),
             )
         )
@@ -3929,16 +4479,21 @@ class Curator:
         self.trakt.ensure_access_token()
 
     def _require_profile_source(self):
+        mode = self._preference_history_mode()
+        if mode in ("both", "kodi"):
+            return "kodi" if mode == "kodi" else "both"
         if not self.trakt.client_id:
             raise RuntimeError("curatr's Trakt application credentials are unavailable.")
         if self._has_oauth():
             self.trakt.ensure_access_token()
-            return "oauth"
+            return "trakt"
         if self._public_username():
-            return "public"
-        raise RuntimeError(
-            "Set your public Trakt username in Settings for Kodi-only use, or connect Trakt when you want curatr to update Trakt lists."
-        )
+            return "trakt"
+        raise RuntimeError("Connect Trakt or add a public Trakt username, or choose Kodi Library in Preference History.")
+
+    def _profile_source_available(self):
+        mode = self._preference_history_mode()
+        return mode in ("both", "kodi") or self._trakt_preference_available()
 
     def _require_ai(self):
         if not self.ai.api_key:
@@ -3946,6 +4501,8 @@ class Curator:
 
     def _profile_is_stale(self):
         profile = self.state.get("profile") or {}
+        if str(profile.get("preference_history_mode") or "") != self._preference_history_mode():
+            return True
         synced_at = self._safe_int(profile.get("synced_at"), 0)
         if not synced_at:
             return True
@@ -4005,7 +4562,7 @@ class Curator:
                 elif sub == 2: self.manage_hidden_interactive()
             elif choice == 2:
                 sub = xbmcgui.Dialog().select(self._loc(32412, "Preferences & Activity"), [
-                    self._loc(32440, "Refresh Preferences from Trakt"),
+                    self._loc(32440, "Refresh Preferences"),
                     self._loc(32441, "View My Preferences"),
                     self._loc(32442, "AI Usage"),
                     self._loc(32443, "Recent Activity"),

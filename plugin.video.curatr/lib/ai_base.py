@@ -25,13 +25,15 @@ class BaseAIClient:
         schema = self.fingerprint_schema()
         instructions = (
             "You are building a durable taste fingerprint for a personal movie curator. "
-            "Infer stable preferences from the supplied Trakt rating signals rather than merely listing genres. "
+            "Infer stable preferences from the supplied rating and viewing signals rather than merely listing genres. "
             "Look for recurring patterns in direction, tone, pacing, themes, visual style, performances, story "
             "structure, era, country and filmmaking sensibility. Distinguish strong evidence from isolated ratings, "
-            "and do not overfit one film. Treat low ratings as useful negative evidence. Keep the result concise, "
+            "and do not overfit one film. Treat low ratings as useful negative evidence and give reduced-confidence "
+            "blended ratings less influence. Treat mere presence in a Kodi library as weak collection evidence, "
+            "not proof that the user loved or even watched the film. Keep the result concise, "
             "specific and useful for future recommendation requests. Do not recommend new movies in this step."
         )
-        user_text = "TRAKT RATING SIGNALS:\n%s" % json.dumps(
+        user_text = "MOVIE PREFERENCE SIGNALS:\n%s" % json.dumps(
             signals, ensure_ascii=False, separators=(",", ":")
         )
         result = self._structured_request(
@@ -200,10 +202,17 @@ class BaseAIClient:
                 continue
             if not title:
                 continue
-            ratings.append({"title": title, "year": year, "rating": rating})
+            ratings.append({
+                "title": title, "year": year, "rating": rating,
+                "confidence": str(row.get("rating_confidence") or "normal"),
+                "sources": [str(value) for value in (row.get("sources") or [])[:3]],
+            })
 
+        liked_threshold = max(6, min(10, BaseAIClient._safe_int(
+            (profile or {}).get("liked_rating_threshold"), 8
+        )))
         high = sorted(
-            [r for r in ratings if r["rating"] >= 8],
+            [r for r in ratings if r["rating"] >= liked_threshold],
             key=lambda r: (r["rating"], r["year"]),
             reverse=True,
         )[:100]
@@ -211,7 +220,43 @@ class BaseAIClient:
             [r for r in ratings if r["rating"] <= 5],
             key=lambda r: (r["rating"], -r["year"]),
         )[:60]
-        middle = [r for r in ratings if 6 <= r["rating"] <= 7][:40]
+        middle = [r for r in ratings if 6 <= r["rating"] < liked_threshold][:40]
+
+        watched = []
+        for row in (profile or {}).get("watched", []):
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "").strip()
+            try:
+                year = int(row.get("year"))
+            except (TypeError, ValueError):
+                continue
+            if not title:
+                continue
+            watched.append({
+                "title": title,
+                "year": year,
+                "playcount": max(1, BaseAIClient._safe_int(row.get("playcount"), 1)),
+                "genres": [str(value) for value in (row.get("genres") or [])[:4] if str(value).strip()],
+                "directors": [str(value) for value in (row.get("directors") or [])[:3] if str(value).strip()],
+            })
+        watched.sort(key=lambda row: (row["playcount"], row["year"]), reverse=True)
+
+        library = []
+        for row in (profile or {}).get("library", []):
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "").strip()
+            try:
+                year = int(row.get("year"))
+            except (TypeError, ValueError):
+                continue
+            if title:
+                library.append({
+                    "title": title, "year": year,
+                    "genres": [str(value) for value in (row.get("genres") or [])[:4] if str(value).strip()],
+                    "directors": [str(value) for value in (row.get("directors") or [])[:3] if str(value).strip()],
+                })
 
         directors = []
         for item in (profile or {}).get("favourite_directors", [])[:20]:
@@ -227,12 +272,12 @@ class BaseAIClient:
             })
 
         return {
-            "liked_rating_threshold": BaseAIClient._safe_int(
-                (profile or {}).get("liked_rating_threshold"), 8
-            ),
+            "liked_rating_threshold": liked_threshold,
             "high_ratings": high,
             "low_ratings": low,
             "middle_ratings_sample": middle,
+            "watched_sample": watched[:50],
+            "kodi_library_sample_weak_evidence": library[:60],
             "favourite_directors": directors,
             "total_ratings_available": len(ratings),
         }

@@ -1,5 +1,45 @@
 # curatr beta testing
 
+## Kodi Library and blended preferences (beta14)
+
+- Test **Kodi Library + Trakt**, **Kodi Library Only**, and **Trakt Only** under
+  **Settings → Preferences & Data → Preference History**.
+- With Trakt disconnected, confirm Kodi Library Only refreshes without asking
+  for an account and prompt-only mode still works with an empty library.
+- Confirm Kodi access does not change ratings, watched states, files or artwork.
+- Rate the same identified movie similarly in Kodi and Trakt and confirm it is
+  deduplicated into one blended rating.
+- Give the same movie ratings four or more points apart and confirm **View My
+  Preferences** reports a conflicting rating that was ignored.
+- Confirm watched Kodi movies are excluded from generated recommendations by
+  TMDB ID, IMDb ID, or title/year fallback.
+- Temporarily make one source unavailable while using Kodi Library + Trakt and
+  confirm the available source is retained with a warning in Recent Activity.
+- Confirm selected MDBList references and the current prompt continue to
+  contribute without creating additional preference-summary requests.
+
+## Linked account lists and AI references (beta13)
+
+- Add one Trakt and one MDBList account list to a Widget Folder.
+- Confirm opening either item displays its current films without creating a
+  new local or remote list.
+- Reopen within 30 minutes and confirm it uses the responsive cached result.
+- Use **Refresh linked list** and confirm the provider is queried again.
+- Disconnect a provider and confirm a previously cached list still opens.
+- Change a linked item's name, description and artwork independently.
+- Back up and restore a folder containing both linked-list types.
+- Use **Use contents as AI reference** from curatr, Trakt and MDBList sources.
+- Cancel each dialog in turn and confirm no AI request or empty list is made.
+- Confirm the related list is separate, does not include reference films and
+  does not change the original provider list.
+
+## Remote artwork previews (beta13)
+
+- Search for an actor/director and confirm TMDB photos appear in the grid.
+- Choose fanart from a list item and confirm film images appear in the grid.
+- Open Suggested Artwork and confirm remote person/movie previews appear.
+- Confirm Back cancels without changing the current artwork.
+
 ## API key import (beta12)
 
 - Put a test credential alone on one line in a `.txt` file.

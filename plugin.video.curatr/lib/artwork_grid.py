@@ -36,7 +36,7 @@ class ArtworkGridWindow(xbmcgui.WindowXMLDialog):
             for entry in self.entries:
                 label = str(entry.get("label") or "Artwork")
                 item = xbmcgui.ListItem(label=label, offscreen=True)
-                source = str(entry.get("source") or "")
+                source = str(entry.get("preview_source") or entry.get("source") or "")
                 if source:
                     item.setArt({"icon": source, "thumb": source})
                 subtitle = str(entry.get("subtitle") or "").strip()
@@ -74,4 +74,3 @@ def choose_artwork(addon_path, heading, entries, layout="icon"):
         return None
     finally:
         window.close()
-

@@ -8,6 +8,34 @@ pasting it. Put only the key on one line in a `.txt` or `.key` file, then use
 (MDBList). curatr confirms before replacing a saved key and can delete the
 source file after a successful import. Keys remain local and are not backed up.
 
+## Linked lists and AI references
+
+Widget Folders can link directly to lists from a connected Trakt or MDBList
+account. Only the provider and list ID are stored; contents are loaded when the
+item opens and retained in a bounded 30-minute cache. If a provider is briefly
+unavailable, the last cached copy can still be displayed.
+
+Use **Use contents as AI reference** on a curatr, Trakt or MDBList list to make
+a separate related list. curatr sends at most 30 compact title/year examples,
+excludes those films from the result, and never changes the source list. This
+costs one normal recommendation request and no extra profile-summary request.
+
+## Kodi Library preferences
+
+**Settings → Preferences & Data → Preference History** chooses **Kodi Library
++ Trakt**, **Kodi Library Only**, or **Trakt Only**. Kodi access is read-only and
+uses compact ratings, watched status, repeat plays, genres, directors and movie
+IDs; curatr never modifies library records. The two sources are deduplicated
+locally before one reusable preference summary is built. Close ratings are
+blended, while ratings that differ by four or more points are treated as a
+conflict and ignored as taste evidence. Unrated library presence is only weak
+collection evidence; personal ratings and repeat watches carry more weight.
+Prompt instructions and selected
+MDBList reference lists remain separate contributors to each recommendation.
+The global **Strong-like rating (1–10)** threshold applies to the blended
+personal ratings from both services. Trakt's five-star interface uses half-star
+steps, so its stored/API values still map directly onto the same ten points.
+
 **curatr** is a Kodi movie-list curator that turns natural-language prompts into personalised recommendations shaped by your preferences. Lists live locally in Kodi by default and can optionally be copied to Trakt.
 
 ## 0.15.2 generated artwork update
@@ -21,7 +49,7 @@ Kodi's main add-on page keeps the centred curatr artwork. Inside the add-on, all
 ## What it does
 
 - Create movie lists from prompts such as “smart 90s thrillers with great direction, no obvious blockbusters”.
-- Blend each prompt with a reusable preference summary built from your Trakt ratings and watch history.
+- Blend each prompt with a reusable preference summary built from Kodi Library, Trakt, or both.
 - Exclude watched, rated and manually hidden movies.
 - Refresh each list with AI on its own schedule.
 - Optionally update a copy of a list on Trakt on a separate schedule.
@@ -35,9 +63,9 @@ Kodi's main add-on page keeps the centred curatr artwork. Inside the add-on, all
 ## Requirements
 
 An AI provider and API key are required to generate recommendations. Trakt,
-TMDB and MDBList are optional. Without Trakt, curatr uses the list prompt alone
-and stores the resulting list locally in Kodi. Connecting Trakt adds ratings
-and watch-history personalisation plus optional Trakt list syncing.
+TMDB and MDBList are optional. Without Trakt, curatr can use the local Kodi
+Library alongside the list prompt and stores the resulting list locally.
+Connecting Trakt adds another ratings/history source plus optional list syncing.
 
 - Kodi 21 (Omega) or newer is the primary target.
 - Your own API key for at least one supported AI service: OpenAI, Google Gemini, Anthropic Claude, OpenRouter, or an advanced OpenAI-compatible endpoint.
@@ -57,7 +85,7 @@ On a new installation curatr offers to open Settings once.
 
 1. Choose an AI service. **OpenAI**, **Gemini** and **Claude** are the simplest direct options; **OpenRouter** provides many model families through one account.
 2. Enter your own API key and model ID.
-3. For personalised recommendations, either enter a public Trakt username or configure a full Trakt connection.
+3. Leave **Preference History** on **Kodi Library + Trakt** to use every available history source, or choose one source only. Trakt remains optional.
 4. Leave **Save new lists to Trakt by default** off if you only want Kodi-local lists.
 5. Create your first list from **My Lists → Create a New List**.
 
@@ -163,7 +191,7 @@ Kodi Favourites.
 
 ## Troubleshooting
 
-- **No recommendations:** verify the selected AI provider and key, and make sure a Trakt profile source is configured if you want personalised results.
+- **No recommendations:** verify the selected AI provider and key. Refresh Preferences if you recently changed Kodi Library or Trakt data.
 - **Trakt list copy will not update:** full Trakt authorisation is required for writes. A public username is read-only.
 - **Artwork seems stale after an update:** restart Kodi once so the skin can refresh cached artwork references.
 - **Background update failed:** check **Preferences & Activity → Recent Activity** for the stored error.

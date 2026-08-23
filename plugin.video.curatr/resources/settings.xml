@@ -281,6 +281,18 @@
         </category>
         <category id="taste_data" label="32300" help="32301">
             <group id="1">
+                <setting id="preference_history_source" type="string" label="32630" help="32631">
+                    <level>0</level>
+                    <default>both</default>
+                    <constraints>
+                        <options>
+                            <option label="32632">both</option>
+                            <option label="32633">kodi</option>
+                            <option label="32634">trakt</option>
+                        </options>
+                    </constraints>
+                    <control type="spinner" format="string" />
+                </setting>
                 <setting id="taste_fingerprint_status" type="string" label="32130" help="32131">
                     <level>0</level>
                     <default>Not built yet</default>

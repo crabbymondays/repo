@@ -167,6 +167,34 @@ class ArtworkCache:
                     pass
         self._trim_cache()
 
+    def cache_urls(self, urls, limit=24):
+        """Cache a small preview set concurrently and return URL-to-file mappings."""
+        ordered = []
+        seen = set()
+        for value in urls or []:
+            url = self._normalise_url(value)
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            ordered.append(url)
+            if len(ordered) >= max(1, min(40, int(limit or 24))):
+                break
+        if not ordered:
+            return {}
+        results = {}
+        with ThreadPoolExecutor(max_workers=min(self.workers, len(ordered))) as executor:
+            future_urls = {executor.submit(self._download, url): url for url in ordered}
+            for future in as_completed(future_urls):
+                url = future_urls[future]
+                try:
+                    path = future.result()
+                except Exception:
+                    path = ""
+                if path:
+                    results[url] = path
+        self._trim_cache()
+        return results
+
     def art_for_movie(self, movie):
         poster_url = self._first_image(movie, "poster")
         fanart_url = self._first_image(movie, "fanart")

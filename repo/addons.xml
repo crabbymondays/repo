@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="0.19.1~beta12" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="0.21.0~beta14" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -35,7 +35,7 @@
         <extension point="xbmc.service" library="service.py" />
         <extension point="xbmc.addon.metadata">
             <summary lang="en_GB">Personalised watchlists made from whatever you're in the mood for</summary>
-            <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around your preferences. Create and refresh lists, organise lightweight Widget Folders, hide recommendations you do not want, and optionally connect Trakt, TMDB and MDBList. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
+            <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around preferences from your Kodi Library, Trakt or both. Create and refresh lists, organise lightweight Widget Folders, hide unwanted recommendations, and optionally connect Trakt, TMDB and MDBList. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
             <platform>all</platform>
             <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
             <license>MIT</license>
@@ -45,7 +45,23 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>0.19.1~beta12 (2026-08-23)
+            <news>0.21.0~beta14 (2026-08-23)
+- Adds read-only Kodi movie-library preferences with no external account required.
+- Adds Kodi Library + Trakt, Kodi Library Only and Trakt Only preference modes.
+- Deduplicates both sources locally and blends compatible personal ratings.
+- Ignores strongly conflicting cross-source ratings instead of guessing which is correct.
+- Applies one clear 1–10 strong-like threshold to blended Kodi and Trakt ratings.
+- Excludes watched Kodi movies using TMDB, IMDb or title/year matching.
+- Keeps prompts and selected MDBList references as separate recommendation evidence.
+
+0.20.0~beta13 (2026-08-23)
+- Adds direct lightweight Trakt and MDBList account-list references to Widget Folders.
+- Loads linked-list films lazily with a bounded 30-minute cache and stale fallback.
+- Adds Use contents as AI reference for curatr, Trakt and MDBList lists.
+- Creates a separate related list without changing the source or repeating its films.
+- Caches small actor and movie preview sets so remote artwork appears reliably in the grid.
+
+0.19.1~beta12 (2026-08-23)
 - Adds secure local API-key import through Kodi's file browser.
 - Supports AI providers, TMDB and MDBList using a simple one-line text file.
 - Confirms before replacing a saved key or deleting the source file.

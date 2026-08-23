@@ -43,23 +43,23 @@ msgid "Preference data size"
 msgstr ""
 
 msgctxt "#32019"
-msgid "Maximum number of ratings and watched entries kept locally. Higher values provide more history but use more Trakt requests during a full refresh."
+msgid "Maximum number of rating and viewing entries kept locally from each enabled preference source."
 msgstr ""
 
 msgctxt "#32020"
-msgid "Strong-like rating"
+msgid "Strong-like rating (1–10)"
 msgstr ""
 
 msgctxt "#32021"
-msgid "Ratings at or above this value count as particularly strong positive preferences."
+msgid "Applies to both Kodi and Trakt personal ratings. Trakt's five-star display uses half-stars, which map to the same ten values."
 msgstr ""
 
 msgctxt "#32022"
-msgid "Refresh Trakt preferences after (hours)"
+msgid "Refresh preference history after (hours)"
 msgstr ""
 
 msgctxt "#32023"
-msgid "How long the local ratings/watch-history cache can be reused before curatr refreshes it from Trakt when needed."
+msgid "How long the local ratings and viewing-history cache can be reused before curatr refreshes the enabled sources."
 msgstr ""
 
 msgctxt "#32024"
@@ -267,7 +267,7 @@ msgid "Preferences & Data"
 msgstr ""
 
 msgctxt "#32301"
-msgid "Control how much Trakt preference data is kept and how often the reusable AI summary is refreshed."
+msgid "Choose where curatr reads your preferences and how often the reusable summary is refreshed."
 msgstr ""
 
 msgctxt "#32310"
@@ -457,7 +457,7 @@ msgid "Welcome to curatr"
 msgstr ""
 
 msgctxt "#32401"
-msgid "Welcome to curatr. Choose an AI service and add its API key before creating your first list. Trakt is optional: add a public username for personalised recommendations, or connect your account if curatr should save lists to Trakt.\n\nOpen Settings now?"
+msgid "Welcome to curatr. Choose an AI service and add its API key before creating your first list. curatr can personalise results from your Kodi Library, while Trakt remains optional for additional history and list syncing.\n\nOpen Settings now?"
 msgstr ""
 
 msgctxt "#32402"
@@ -565,7 +565,27 @@ msgid "Review movies you have asked curatr not to recommend."
 msgstr ""
 
 msgctxt "#32440"
-msgid "Refresh Preferences from Trakt"
+msgid "Refresh Preferences"
+msgstr ""
+
+msgctxt "#32630"
+msgid "Preference History"
+msgstr ""
+
+msgctxt "#32631"
+msgid "Choose where curatr reads your ratings and viewing activity. Your current prompt and selected MDBList references are always handled separately."
+msgstr ""
+
+msgctxt "#32632"
+msgid "Kodi Library + Trakt"
+msgstr ""
+
+msgctxt "#32633"
+msgid "Kodi Library Only"
+msgstr ""
+
+msgctxt "#32634"
+msgid "Trakt Only"
 msgstr ""
 
 msgctxt "#32441"

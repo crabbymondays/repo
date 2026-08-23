@@ -13,11 +13,11 @@ using the AI provider and optional catalogue accounts selected by the user.
 2. Choose **Add-ons → Install from ZIP file**, open that source and install `repository.curatr-1.0.1.zip`.
 3. Choose **Install from repository → curatr Repository → Video add-ons → curatr**.
 4. Open curatr Settings, select an AI provider and enter its API key.
-5. Optionally add a public Trakt username for preference-based recommendations,
-   or connect Trakt for preference data and list syncing.
+5. curatr can use the local Kodi movie library for preferences. Optionally add
+   Trakt for additional rating/history data and list syncing.
 
-Trakt, TMDB and MDBList are optional. Without Trakt, curatr follows the user's
-prompt and stores lists locally in Kodi.
+Trakt, TMDB and MDBList are optional. Without Trakt, curatr can combine the
+user's prompt with local Kodi Library preferences and store lists locally.
 
 ## Widget paths
 
@@ -30,7 +30,8 @@ plugin://plugin.video.curatr/?action=folders
 ```
 
 Each Widget Folder also exposes a stable path using its folder ID. Widget
-Folders reference existing curatr lists and direct external `plugin://` paths;
+Folders reference existing curatr lists, linked Trakt/MDBList account lists and
+direct external `plugin://` paths;
 they do not duplicate movie data or use AI tokens.
 
 ## Privacy and attribution

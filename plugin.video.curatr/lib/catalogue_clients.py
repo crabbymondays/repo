@@ -179,7 +179,18 @@ class MDBListClient:
             if not title or marker in seen or mediatype not in ("movie", "movies"):
                 continue
             seen.add(marker)
-            output.append({"title": title, "year": year, "imdb_id": row.get("imdb_id"), "rank": row.get("rank")})
+            ids = {
+                "imdb": row.get("imdb_id") or row.get("imdbid"),
+                "tmdb": row.get("tmdb_id") or row.get("tmdbid"),
+                "trakt": row.get("trakt_id") or row.get("traktid"),
+            }
+            ids = {key: value for key, value in ids.items() if value not in (None, "")}
+            output.append({
+                "title": title, "year": year, "ids": ids,
+                "imdb_id": ids.get("imdb"), "rank": row.get("rank"),
+                "rating": row.get("score") or row.get("rating"),
+                "overview": str(row.get("description") or row.get("overview") or "")[:500],
+            })
             if len(output) >= limit:
                 break
         if not output:
@@ -250,7 +261,18 @@ class MDBListClient:
             if not title or marker in seen or mediatype not in ("movie", "movies"):
                 continue
             seen.add(marker)
-            output.append({"title": title, "year": year, "imdb_id": row.get("imdb_id"), "rank": row.get("rank")})
+            ids = {
+                "imdb": row.get("imdb_id") or row.get("imdbid"),
+                "tmdb": row.get("tmdb_id") or row.get("tmdbid"),
+                "trakt": row.get("trakt_id") or row.get("traktid"),
+            }
+            ids = {key: value for key, value in ids.items() if value not in (None, "")}
+            output.append({
+                "title": title, "year": year, "ids": ids,
+                "imdb_id": ids.get("imdb"), "rank": row.get("rank"),
+                "rating": row.get("score") or row.get("rating"),
+                "overview": str(row.get("description") or row.get("overview") or "")[:500],
+            })
             if len(output) >= limit:
                 break
         return output

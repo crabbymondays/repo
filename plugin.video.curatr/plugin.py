@@ -216,7 +216,7 @@ def _explore(curator):
 
 def _taste_activity(curator):
     xbmcplugin.setPluginCategory(HANDLE, _loc(32412, "Preferences & Activity"))
-    _add_action(_loc(32440, "Refresh Preferences from Trakt"), "sync", _loc(32446, "Update the ratings and watch history curatr uses."), icon_name="menu_sync.png", fanart_name="fanart_taste.jpg")
+    _add_action(_loc(32440, "Refresh Preferences"), "sync", _loc(32446, "Update the ratings and watch history curatr uses."), icon_name="menu_sync.png", fanart_name="fanart_taste.jpg")
     _add_action(_loc(32441, "View My Preferences"), "taste", _loc(32447, "See the information curatr uses when choosing recommendations."), icon_name="menu_taste.png", fanart_name="fanart_taste.jpg")
     _add_action(_loc(32442, "AI Usage"), "usage", _loc(32448, "See request and token totals reported by your AI provider."), icon_name="menu_usage.png", fanart_name="fanart_info.jpg")
     _add_action(_loc(32443, "Recent Activity"), "activity", _loc(32449, "See recent list refreshes, Trakt updates and errors."), icon_name="menu_activity.png", fanart_name="fanart_info.jpg")
@@ -246,6 +246,7 @@ def _lists(curator):
             delete_url = _url(action="delete_list", list_id=local_id)
             context = [
                 ("Refresh this list", "RunPlugin(%s)" % refresh_url),
+                ("Use contents as AI reference", "RunScript(%s,create_related_local,%s)" % (ADDON_ID, local_id)),
                 ("List settings", "RunPlugin(%s)" % edit_url),
                 ("Artwork", "RunPlugin(%s)" % artwork_url),
                 ("Add to Widget Folder", "RunScript(%s,folder_add_list,%s)" % (ADDON_ID, local_id)),
@@ -266,7 +267,7 @@ def _lists(curator):
 def _folders(curator):
     xbmcplugin.setPluginCategory(HANDLE, "Widget Folders")
     folders = curator.widget_folders()
-    _add_action("Create a Widget Folder", "folder_create", "Create a lightweight folder for curatr lists and external plugin shortcuts.", icon_name="menu_add_folder.png")
+    _add_action("Create a Widget Folder", "folder_create", "Create a lightweight folder for curatr lists, linked account lists and external plugin shortcuts.", icon_name="menu_add_folder.png")
     if folders:
         for folder in folders:
             folder_id = str(folder.get("id") or "")
@@ -277,6 +278,8 @@ def _folders(curator):
             context = [
                 ("Manage folder", "RunScript(%s,manage_folder,%s)" % (ADDON_ID, folder_id)),
                 ("Add a curatr list", "RunScript(%s,folder_add_list_to,%s)" % (ADDON_ID, folder_id)),
+                ("Add from Trakt", "RunScript(%s,folder_add_trakt,%s)" % (ADDON_ID, folder_id)),
+                ("Add from MDBList", "RunScript(%s,folder_add_mdblist,%s)" % (ADDON_ID, folder_id)),
                 ("Add an external shortcut", "RunScript(%s,folder_add_path,%s)" % (ADDON_ID, folder_id)),
                 ("Import Kodi Favourite", "RunScript(%s,folder_import_favourite,%s)" % (ADDON_ID, folder_id)),
             ]
@@ -321,6 +324,32 @@ def _add_external_shortcut(curator, folder, entry):
     return bool(xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=True))
 
 
+def _add_provider_list_folder(curator, folder, entry):
+    provider = str(entry.get("provider") or "").strip().lower()
+    if provider not in ("trakt", "mdblist") or not entry.get("provider_list_id"):
+        return False
+    name = str(entry.get("name") or ("Trakt list" if provider == "trakt" else "MDBList list"))
+    service = "Trakt" if provider == "trakt" else "MDBList"
+    plot = str(entry.get("description") or "").strip() or "Linked directly to your %s account." % service
+    folder_id = str(folder.get("id") or "")
+    entry_id = str(entry.get("id") or "")
+    context = [
+        ("Refresh linked list", "RunPlugin(%s)" % _url(
+            action="linked_list", folder_id=folder_id, entry_id=entry_id, force="1",
+        )),
+        ("Use contents as AI reference", "RunScript(%s,create_related_provider,%s|%s)" % (
+            ADDON_ID, folder_id, entry_id,
+        )),
+        ("Manage folder item", "RunScript(%s,folder_edit_entry,%s|%s)" % (ADDON_ID, folder_id, entry_id)),
+        ("Manage folder", "RunScript(%s,manage_folder,%s)" % (ADDON_ID, folder_id)),
+    ]
+    _add_folder(
+        name, "linked_list", plot=plot, context_items=context,
+        art=_record_art(curator, entry), folder_id=folder_id, entry_id=entry_id,
+    )
+    return True
+
+
 def _folder(curator, params):
     folder = curator.widget_folder_by_id(params.get("folder_id"))
     if not folder:
@@ -340,11 +369,14 @@ def _folder(curator, params):
             edit_argument = "%s|%s" % (folder.get("id"), entry.get("id"))
             context = [
                 ("List settings", "RunPlugin(%s)" % _url(action="edit_list", list_id=local_id)),
+                ("Use contents as AI reference", "RunScript(%s,create_related_local,%s)" % (ADDON_ID, local_id)),
                 ("Manage folder item", "RunScript(%s,folder_edit_entry,%s)" % (ADDON_ID, edit_argument)),
             ]
             _add_folder(name, "list", plot=plot, context_items=context, art=_record_art(curator, record), list_id=local_id, name=name)
             added += 1
         elif entry.get("type") == "external_path" and _add_external_shortcut(curator, folder, entry):
+            added += 1
+        elif entry.get("type") == "provider_list" and _add_provider_list_folder(curator, folder, entry):
             added += 1
     if not added:
         _add_folder("Manage this folder", "folder_manage", "Add a curatr list or browse an external add-on path.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
@@ -566,7 +598,7 @@ def _redlight_play_url(movie):
     })
 
 
-def _add_movie(movie, artwork, list_name="", list_id=""):
+def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=True):
     if not isinstance(movie, dict):
         return False
     title = str(movie.get("title") or "Unknown movie")
@@ -594,17 +626,18 @@ def _add_movie(movie, artwork, list_name="", list_id=""):
 
     play_url = _redlight_play_url(movie)
     try:
-        context = [
-            ("Why this pick?", "RunPlugin(%s)" % why_url),
-            ("Never recommend this", "RunPlugin(%s)" % hide_url),
-        ]
+        context = []
+        if recommendation_actions:
+            context.extend([
+                ("Why this pick?", "RunPlugin(%s)" % why_url),
+                ("Never recommend this", "RunPlugin(%s)" % hide_url),
+            ])
         if list_id:
             refresh_url = _url(action="refresh_list", list_id=str(list_id))
             context.append(("Refresh this list", "RunPlugin(%s)" % refresh_url))
-        context.extend([
-            ("Movie details", "RunPlugin(%s)" % info_url),
-            ("curatr settings", "RunScript(%s,settings)" % ADDON_ID),
-        ])
+        if trakt_id:
+            context.append(("Movie details", "RunPlugin(%s)" % info_url))
+        context.append(("curatr settings", "RunScript(%s,settings)" % ADDON_ID))
         item.addContextMenuItems(context)
     except Exception as exc:
         xbmc.log("curatr context menu skipped: %s" % exc, xbmc.LOGDEBUG)
@@ -616,12 +649,19 @@ def _add_movie(movie, artwork, list_name="", list_id=""):
             pass
         target_url = play_url
         is_folder = False
-    else:
+    elif trakt_id:
         try:
             item.setProperty("IsPlayable", "false")
         except Exception:
             pass
         target_url = info_url
+        is_folder = True
+    else:
+        try:
+            item.setProperty("IsPlayable", "false")
+        except Exception:
+            pass
+        target_url = _url(action="linked_movie", title=title, year=str(year or ""))
         is_folder = True
 
     return bool(xbmcplugin.addDirectoryItem(HANDLE, target_url, item, isFolder=is_folder))
@@ -649,12 +689,16 @@ def _render_movies(curator, rows, category):
             movie = entry[1]
             list_name = entry[2] if len(entry) > 2 else category
             list_id = entry[3] if len(entry) > 3 else ""
+            recommendation_actions = bool(entry[4]) if len(entry) > 4 else True
             try:
                 artwork = art_cache.art_for_movie(movie)
             except Exception as exc:
                 artwork = {}
                 xbmc.log("curatr artwork skipped for %s: %s" % (movie.get("title"), exc), xbmc.LOGDEBUG)
-            if _add_movie(movie, artwork, list_name=list_name, list_id=list_id):
+            if _add_movie(
+                movie, artwork, list_name=list_name, list_id=list_id,
+                recommendation_actions=recommendation_actions,
+            ):
                 added += 1
             else:
                 skipped += 1
@@ -701,6 +745,16 @@ def _single_list(curator, params):
         raise RuntimeError("No curatr list ID was supplied.")
     name = params.get("name") or "curatr Recommendations"
     rows = [(row, movie, name, list_id) for row, movie in _movie_rows_for_list(curator, list_id) if not curator.is_movie_hidden(movie)]
+    _render_movies(curator, rows, name)
+
+
+def _linked_list(curator, params):
+    entry, movies = curator.linked_provider_list_movies(
+        params.get("folder_id") or "", params.get("entry_id") or "",
+        force=str(params.get("force") or "") == "1",
+    )
+    name = str(entry.get("name") or "Linked list")
+    rows = [({}, movie, name, "", False) for movie in movies]
     _render_movies(curator, rows, name)
 
 
@@ -796,6 +850,12 @@ def main():
             curator.manage_widget_folder_interactive(params.get("folder_id") or "")
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
             refresh_if_changed(before, curator.state)
+        elif action == "linked_list":
+            _linked_list(curator, params)
+        elif action == "linked_movie":
+            title = params.get("title") or "This movie"
+            xbmcgui.Dialog().ok(NAME, "%s is listed here without a playable TMDB or Trakt ID. Open it through your preferred movie add-on." % title)
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "external_missing":
             xbmcgui.Dialog().ok(NAME, "The add-on used by '%s' is not currently installed or enabled.\n\n%s" % (
                 params.get("name") or "this shortcut", params.get("addon_id") or "Unknown add-on",
