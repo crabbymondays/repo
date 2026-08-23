@@ -41,6 +41,10 @@ def main():
             curator.add_list_to_widget_folder_interactive(list_id=argument)
         elif action == "folder_add_list_to":
             curator.add_list_to_widget_folder_interactive(folder_id=argument)
+        elif action == "folder_add_trakt":
+            curator.add_provider_list_to_widget_folder_interactive(argument, "trakt")
+        elif action == "folder_add_mdblist":
+            curator.add_provider_list_to_widget_folder_interactive(argument, "mdblist")
         elif action == "folder_add_path":
             curator.add_external_path_interactive(argument)
         elif action == "folder_import_favourite":

@@ -405,6 +405,9 @@ class Curator:
         if not isinstance(self.state.get("widget_folders"), list):
             self.state["widget_folders"] = []
             changed = True
+        if not isinstance(self.state.get("provider_list_cache"), dict):
+            self.state["provider_list_cache"] = {}
+            changed = True
 
         folders = []
         for folder in self.state.get("widget_folders", []):
@@ -431,6 +434,17 @@ class Curator:
                         "name": str(item.get("name") or "External Shortcut").strip() or "External Shortcut",
                         "description": str(item.get("description") or "").strip(),
                         "path": self._valid_external_plugin_path(item.get("path")),
+                        "artwork": normalise_list_art(item.get("artwork")),
+                    })
+                elif item.get("type") == "provider_list" and item.get("provider") in ("trakt", "mdblist") and item.get("provider_list_id"):
+                    item.update({
+                        "type": "provider_list",
+                        "provider": str(item.get("provider")),
+                        "provider_list_id": str(item.get("provider_list_id")),
+                        "name": str(item.get("name") or "Linked list").strip() or "Linked list",
+                        "description": str(item.get("description") or "").strip(),
+                        "username": str(item.get("username") or "").strip(),
+                        "item_count": self._safe_int(item.get("item_count"), 0),
                         "artwork": normalise_list_art(item.get("artwork")),
                     })
                 else:
@@ -1745,6 +1759,19 @@ class Curator:
         art["fanart_style"] = "monochrome" if choice == 1 else "colour"
         return self._store_list_artwork(record, art)
 
+    def _change_list_icon_style(self, list_id):
+        record = self._managed_record_by_id(list_id)
+        if not record:
+            raise RuntimeError("That list has already been removed.")
+        art = normalise_list_art(record.get("artwork"))
+        if art.get("icon_mode") not in ("auto", "bundled"):
+            return record
+        choice = xbmcgui.Dialog().select("Icon style", ["White", "Colour square"])
+        if choice < 0:
+            return record
+        art["icon_style"] = "colour" if choice == 1 else "white"
+        return self._store_list_artwork(record, art)
+
     def _suggest_list_artwork(self, list_id):
         record = self._managed_record_by_id(list_id)
         if not record:
@@ -1809,6 +1836,8 @@ class Curator:
                 ("icon", "Icon: %s" % icon),
                 ("fanart", "Fanart: %s" % fanart),
             ]
+            if art.get("icon_mode") in ("auto", "bundled"):
+                actions.append(("icon_style", "Icon style: %s" % ("Colour square" if art.get("icon_style") == "colour" else "White")))
             # Colour/monochrome variants only exist for curatr's generated
             # fanart. Remote and custom images are displayed unmodified.
             if art.get("fanart_mode") in ("auto", "bundled"):
@@ -1829,6 +1858,8 @@ class Curator:
                 self._change_list_icon(key)
             elif action == "fanart":
                 self._change_list_fanart(key)
+            elif action == "icon_style":
+                self._change_list_icon_style(key)
             elif action == "style":
                 self._change_list_fanart_style(key)
             elif action == "suggest":
@@ -2245,13 +2276,134 @@ class Curator:
         if entry.get("type") == "curatr_list":
             record = self._managed_record_by_id(entry.get("list_id"))
             return str((record or {}).get("name") or "Missing curatr list")
+        if entry.get("type") == "provider_list":
+            return "%s — %s" % (entry.get("name") or "Linked list", str(entry.get("provider") or "").upper())
         return str(entry.get("name") or "External Shortcut")
+
+    @staticmethod
+    def _provider_cache_key(provider, list_id):
+        return "%s:%s" % (str(provider or "").lower(), str(list_id or ""))
+
+    def provider_list_cached_metadata(self, entry):
+        key = self._provider_cache_key(entry.get("provider"), entry.get("provider_list_id"))
+        cached = (self.state.get("provider_list_cache") or {}).get(key) or {}
+        return {
+            "item_count": self._safe_int(cached.get("item_count"), self._safe_int(entry.get("item_count"), 0)),
+            "checked_at": self._safe_int(cached.get("checked_at"), 0),
+        }
+
+    def _available_provider_lists(self, provider):
+        provider = str(provider or "").lower()
+        if provider == "trakt":
+            if not self._has_oauth():
+                raise RuntimeError("Connect Trakt first to browse your Trakt lists.")
+            rows = self.trakt.lists()
+            curatr_trakt_ids = {
+                str(row.get("trakt_id")) for row in self.state.get("ai_lists", [])
+                if isinstance(row, dict) and row.get("trakt_id") not in (None, "")
+            }
+            output = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                ids = row.get("ids") if isinstance(row.get("ids"), dict) else {}
+                list_id = ids.get("trakt") or ids.get("slug") or row.get("id")
+                if list_id in (None, ""):
+                    continue
+                if str(list_id) in curatr_trakt_ids:
+                    continue
+                owner = row.get("user") if isinstance(row.get("user"), dict) else {}
+                output.append({
+                    "id": str(list_id), "name": str(row.get("name") or "Trakt list"),
+                    "description": str(row.get("description") or "").strip(),
+                    "username": str(owner.get("username") or self.state.get("trakt_username") or "").strip(),
+                    "items": self._safe_int(row.get("item_count"), 0),
+                })
+            return sorted(output, key=lambda row: row["name"].casefold())
+        if provider == "mdblist":
+            if not self.mdblist or not self.mdblist.api_key:
+                raise RuntimeError("Turn on MDBList and enter your API key first.")
+            return self.mdblist.user_lists()
+        raise RuntimeError("That list provider is not supported.")
+
+    def add_provider_list_to_widget_folder_interactive(self, folder_id, provider):
+        folder = self.widget_folder_by_id(folder_id)
+        if not folder:
+            raise RuntimeError("That Widget Folder no longer exists.")
+        provider = str(provider or "").lower()
+        rows = self._available_provider_lists(provider)
+        existing = {
+            self._provider_cache_key(row.get("provider"), row.get("provider_list_id"))
+            for row in folder.get("entries", []) if isinstance(row, dict) and row.get("type") == "provider_list"
+        }
+        rows = [row for row in rows if self._provider_cache_key(provider, row.get("id")) not in existing]
+        if not rows:
+            xbmcgui.Dialog().ok(self.name, "All available %s lists are already in this folder." % ("Trakt" if provider == "trakt" else "MDBList"))
+            return folder
+        labels = [
+            "%s%s" % (row.get("name") or "Linked list", " (%d items)" % self._safe_int(row.get("items"), 0) if self._safe_int(row.get("items"), 0) else "")
+            for row in rows
+        ]
+        selected = xbmcgui.Dialog().multiselect("Add from %s" % ("Trakt Lists" if provider == "trakt" else "MDBList"), labels)
+        if selected is None:
+            return folder
+        entries = [dict(row) for row in folder.get("entries", []) if isinstance(row, dict)]
+        for index in selected:
+            row = rows[index]
+            entries.append({
+                "id": uuid.uuid4().hex, "type": "provider_list", "provider": provider,
+                "provider_list_id": str(row.get("id")), "name": str(row.get("name") or "Linked list"),
+                "description": str(row.get("description") or "").strip(),
+                "username": str(row.get("username") or (self.state.get("trakt_username") if provider == "trakt" else "")).strip(),
+                "item_count": self._safe_int(row.get("items"), 0), "artwork": normalise_list_art({}),
+            })
+        updated = dict(folder); updated["entries"] = entries; updated["updated_at"] = int(time.time())
+        self._store_widget_folder(updated, folder)
+        self.record_activity("Added %d %s list%s to %s" % (len(selected), provider, "" if len(selected) == 1 else "s", updated.get("name")), notify=True)
+        return updated
+
+    def provider_list_movies(self, provider, list_id, force=False):
+        provider = str(provider or "").lower()
+        list_id = str(list_id or "")
+        key = self._provider_cache_key(provider, list_id)
+        cache = self.state.get("provider_list_cache") or {}
+        cached = cache.get(key) if isinstance(cache.get(key), dict) else {}
+        now = int(time.time())
+        if not force and cached.get("movies") and now - self._safe_int(cached.get("checked_at"), 0) < 6 * 3600:
+            return [row for row in cached.get("movies", []) if isinstance(row, dict)]
+        try:
+            if provider == "trakt":
+                if not self._has_oauth():
+                    raise RuntimeError("Connect Trakt to open this linked list.")
+                raw = self.trakt.list_items(list_id, limit=1000, extended=True)
+                movies = [row.get("movie") for row in raw if isinstance(row, dict) and isinstance(row.get("movie"), dict)]
+            elif provider == "mdblist":
+                if not self.mdblist or not self.mdblist.api_key:
+                    raise RuntimeError("Turn on MDBList and enter your API key to open this linked list.")
+                movies = self.mdblist.fetch_list_id(list_id, limit=1000)
+            else:
+                raise RuntimeError("That list provider is not supported.")
+            movies = [row for row in movies if isinstance(row, dict)]
+            cache[key] = {"movies": movies, "item_count": len(movies), "checked_at": now}
+            if len(cache) > 50:
+                cache = dict(sorted(
+                    cache.items(), key=lambda pair: self._safe_int((pair[1] or {}).get("checked_at"), 0), reverse=True,
+                )[:40])
+            self.state["provider_list_cache"] = cache
+            self._save_state()
+            return movies
+        except Exception:
+            if cached.get("movies"):
+                return [row for row in cached.get("movies", []) if isinstance(row, dict)]
+            raise
 
     def _edit_compact_artwork(self, heading, value):
         art = normalise_list_art(value)
         while True:
             icon, fanart, style = list_art_summary({"artwork": art})
             actions = [("icon", "Icon: %s" % icon), ("fanart", "Fanart: %s" % fanart)]
+            if art.get("icon_mode") in ("auto", "bundled"):
+                actions.append(("icon_style", "Icon style: %s" % ("Colour square" if art.get("icon_style") == "colour" else "White")))
             if art.get("fanart_mode") in ("auto", "bundled"):
                 actions.append(("style", "Fanart style: %s" % style))
             actions.extend([("reset", "Reset to Automatic"), ("done", "Done")])
@@ -2266,6 +2418,11 @@ class Curator:
                 selected = xbmcgui.Dialog().select("Fanart style", ["Genre colours", "Monochrome"])
                 if selected >= 0:
                     art["fanart_style"] = "monochrome" if selected == 1 else "colour"
+                continue
+            if action == "icon_style":
+                selected = xbmcgui.Dialog().select("Icon style", ["White", "Colour square"])
+                if selected >= 0:
+                    art["icon_style"] = "colour" if selected == 1 else "white"
                 continue
             if action == "icon":
                 selected = xbmcgui.Dialog().select("Change icon", [
@@ -2584,11 +2741,16 @@ class Curator:
             raise RuntimeError("That folder item no longer exists.")
         while True:
             actions = ["Move up", "Move down", "Remove from folder"]
-            if entry.get("type") == "external_path":
+            if entry.get("type") in ("external_path", "provider_list"):
                 actions = [
                     "Rename Shortcut", "Edit Description",
-                    "Choose Plugin Path", "Change Icon & Fanart",
-                ] + actions
+                ]
+                if entry.get("type") == "external_path":
+                    actions.append("Choose Plugin Path")
+                actions.append("Change Icon & Fanart")
+                if entry.get("type") == "provider_list":
+                    actions.append("Refresh linked list")
+                actions += ["Move up", "Move down", "Remove from folder"]
             choice = xbmcgui.Dialog().select(self._folder_entry_label(entry), actions)
             if choice < 0:
                 return folder
@@ -2596,7 +2758,8 @@ class Curator:
             index = next((i for i, row in enumerate(entries) if str(row.get("id")) == str(entry_id)), -1)
             if index < 0:
                 return folder
-            if entry.get("type") == "external_path" and choice < 4:
+            editable_count = 4 if entry.get("type") == "external_path" else (4 if entry.get("type") == "provider_list" else 0)
+            if entry.get("type") in ("external_path", "provider_list") and choice < editable_count:
                 updated_entry = dict(entry)
                 if choice == 0:
                     value = xbmcgui.Dialog().input("Shortcut name", defaultt=str(entry.get("name") or ""))
@@ -2604,16 +2767,18 @@ class Curator:
                 elif choice == 1:
                     value = xbmcgui.Dialog().input("Shortcut description", defaultt=str(entry.get("description") or ""))
                     updated_entry["description"] = str(value or "").strip()
-                elif choice == 2:
+                elif choice == 2 and entry.get("type") == "external_path":
                     value = self._valid_external_plugin_path(xbmcgui.Dialog().input("Plugin path", defaultt=str(entry.get("path") or "")))
                     if value: updated_entry["path"] = value
                     else: xbmcgui.Dialog().ok(self.name, "Enter a complete path beginning with plugin://")
-                else:
+                elif (choice == 3 and entry.get("type") == "external_path") or (choice == 2 and entry.get("type") == "provider_list"):
                     updated_entry["artwork"] = self._edit_compact_artwork("Shortcut artwork", entry.get("artwork"))
+                else:
+                    self.provider_list_movies(entry.get("provider"), entry.get("provider_list_id"), force=True)
                 entries[index] = updated_entry
                 entry = updated_entry
             else:
-                offset = 4 if entry.get("type") == "external_path" else 0
+                offset = editable_count if entry.get("type") in ("external_path", "provider_list") else 0
                 operation = choice - offset
                 if operation == 0 and index > 0:
                     entries[index - 1], entries[index] = entries[index], entries[index - 1]
@@ -2634,7 +2799,7 @@ class Curator:
             raise RuntimeError("That Widget Folder no longer exists.")
         while True:
             choices = [
-                "Add a curatr list", "Add an external shortcut", "Import from Kodi Favourites", "Manage folder items",
+                "Add a curatr list", "Add from Trakt Lists", "Add from MDBList", "Add an external shortcut", "Import from Kodi Favourites", "Manage folder items",
                 "Folder Name", "Description", "Artwork", "Delete folder",
             ]
             choice = xbmcgui.Dialog().select(folder.get("name") or "Widget Folder", choices)
@@ -2643,10 +2808,14 @@ class Curator:
             if choice == 0:
                 folder = self.add_list_to_widget_folder_interactive(folder_id=folder_id) or folder
             elif choice == 1:
-                folder = self.add_external_path_interactive(folder_id) or folder
+                folder = self.add_provider_list_to_widget_folder_interactive(folder_id, "trakt") or folder
             elif choice == 2:
-                folder = self.import_kodi_favourite_interactive(folder_id) or folder
+                folder = self.add_provider_list_to_widget_folder_interactive(folder_id, "mdblist") or folder
             elif choice == 3:
+                folder = self.add_external_path_interactive(folder_id) or folder
+            elif choice == 4:
+                folder = self.import_kodi_favourite_interactive(folder_id) or folder
+            elif choice == 5:
                 entries = [row for row in folder.get("entries", []) if isinstance(row, dict)]
                 if not entries:
                     xbmcgui.Dialog().ok(self.name, "This folder is empty.")
@@ -2654,7 +2823,7 @@ class Curator:
                 selected = xbmcgui.Dialog().select("Manage folder items", [self._folder_entry_label(row) for row in entries])
                 if selected >= 0:
                     folder = self.edit_widget_folder_entry_interactive(folder_id, entries[selected].get("id")) or folder
-            elif choice == 4:
+            elif choice == 6:
                 value = xbmcgui.Dialog().input("Folder name", defaultt=str(folder.get("name") or ""))
                 if value and value.strip():
                     name = value.strip()
@@ -2668,11 +2837,11 @@ class Curator:
                     else:
                         updated = dict(folder); updated["name"] = name; updated["updated_at"] = int(time.time())
                         folder = self._store_widget_folder(updated, folder)
-            elif choice == 5:
+            elif choice == 7:
                 value = xbmcgui.Dialog().input("Folder description", defaultt=str(folder.get("description") or ""))
                 updated = dict(folder); updated["description"] = str(value or "").strip(); updated["updated_at"] = int(time.time())
                 folder = self._store_widget_folder(updated, folder)
-            elif choice == 6:
+            elif choice == 8:
                 updated = dict(folder); updated["artwork"] = self._edit_compact_artwork("Folder artwork", folder.get("artwork")); updated["updated_at"] = int(time.time())
                 folder = self._store_widget_folder(updated, folder)
             else:
@@ -2882,6 +3051,19 @@ class Curator:
                 entry["path"] = self._valid_external_plugin_path(entry.get("path"))
                 entry["name"] = str(entry.get("name") or "External Shortcut").strip() or "External Shortcut"
                 entry["description"] = str(entry.get("description") or "").strip()
+                entry_art = normalise_list_art(entry.get("artwork"))
+                if entry_art.get("icon_mode") == "custom":
+                    entry_art.update({"icon_mode": "default", "icon_source": "", "icon_label": ""})
+                if entry_art.get("fanart_mode") == "custom":
+                    entry_art.update({"fanart_mode": "default", "fanart_source": "", "fanart_label": ""})
+                entry["artwork"] = entry_art
+            elif entry.get("type") == "provider_list" and entry.get("provider") in ("trakt", "mdblist") and entry.get("provider_list_id"):
+                entry["provider"] = str(entry.get("provider"))
+                entry["provider_list_id"] = str(entry.get("provider_list_id"))
+                entry["name"] = str(entry.get("name") or "Linked list").strip() or "Linked list"
+                entry["description"] = str(entry.get("description") or "").strip()
+                entry["username"] = str(entry.get("username") or "").strip()
+                entry["item_count"] = self._safe_int(entry.get("item_count"), 0)
                 entry_art = normalise_list_art(entry.get("artwork"))
                 if entry_art.get("icon_mode") == "custom":
                     entry_art.update({"icon_mode": "default", "icon_source": "", "icon_label": ""})

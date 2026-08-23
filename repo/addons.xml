@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="0.18.3~beta11" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="0.19.0~beta12" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -35,7 +35,7 @@
         <extension point="xbmc.service" library="service.py" />
         <extension point="xbmc.addon.metadata">
             <summary lang="en_GB">Personalised watchlists made from whatever you're in the mood for</summary>
-            <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around your preferences. Create and refresh lists, organise lightweight Widget Folders, hide recommendations you do not want, and optionally connect Trakt, TMDB and MDBList. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
+            <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around your preferences. Create and refresh lists, organise lightweight Widget Folders containing curatr, Trakt, MDBList and Kodi add-on paths, and optionally connect TMDB. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
             <platform>all</platform>
             <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
             <license>MIT</license>
@@ -45,7 +45,13 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>0.18.3~beta11 (2026-08-23)
+            <news>0.19.0~beta12 (2026-08-23)
+- Adds Trakt and MDBList account lists to lightweight mixed Widget Folders.
+- Gives linked lists stable direct paths for movie widgets, with six-hour caching and offline fallback.
+- Shows provider, username, item count and last-check metadata on linked-list tiles.
+- Adds optional colour square icons matching curatr's bundled genre fanart.
+
+0.18.3~beta11 (2026-08-23)
 - Adds widget-friendly film counts, folder contents and relative refresh details.
 - Exposes list and folder metadata through standard Kodi fields and curatr properties.
 - Cleans interval wording so Refresh Every and Sync Every no longer repeat "Every".

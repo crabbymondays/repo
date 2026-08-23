@@ -24,8 +24,14 @@ plugin://plugin.video.curatr/?action=folders
 ```
 
 Each Widget Folder also exposes a stable path using its folder ID. Widget
-Folders reference existing curatr lists and direct external `plugin://` paths;
-they do not duplicate movie data or use AI tokens.
+Folders can mix existing curatr lists, lists from the connected Trakt or
+MDBList account, and direct external `plugin://` paths. They store references,
+not duplicate lists, and never use AI tokens.
+
+Open a linked provider list once, then choose that page as a skin widget to
+show its films directly on Kodi's home screen. Linked-list paths remain stable.
+curatr caches their contents for six hours and keeps the last successful copy
+available if the provider is temporarily offline.
 
 ## Privacy and attribution
 

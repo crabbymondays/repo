@@ -99,7 +99,7 @@ def _list_display_metadata(record, fallback="A personalised curatr list."):
 
 def _folder_display_metadata(folder):
     entries = [row for row in (folder.get("entries") or []) if isinstance(row, dict)]
-    list_count = sum(1 for row in entries if row.get("type") == "curatr_list")
+    list_count = sum(1 for row in entries if row.get("type") in ("curatr_list", "provider_list"))
     shortcut_count = sum(1 for row in entries if row.get("type") == "external_path")
     parts = ["%d list%s" % (list_count, "" if list_count == 1 else "s")]
     if shortcut_count:
@@ -346,6 +346,8 @@ def _folders(curator):
             context = [
                 ("Manage folder", "RunScript(%s,manage_folder,%s)" % (ADDON_ID, folder_id)),
                 ("Add a curatr list", "RunScript(%s,folder_add_list_to,%s)" % (ADDON_ID, folder_id)),
+                ("Add from Trakt Lists", "RunScript(%s,folder_add_trakt,%s)" % (ADDON_ID, folder_id)),
+                ("Add from MDBList", "RunScript(%s,folder_add_mdblist,%s)" % (ADDON_ID, folder_id)),
                 ("Add an external shortcut", "RunScript(%s,folder_add_path,%s)" % (ADDON_ID, folder_id)),
                 ("Import Kodi Favourite", "RunScript(%s,folder_import_favourite,%s)" % (ADDON_ID, folder_id)),
             ]
@@ -392,6 +394,37 @@ def _add_external_shortcut(curator, folder, entry):
     return bool(xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=True))
 
 
+def _add_provider_list(curator, folder, entry):
+    provider = str(entry.get("provider") or "").lower()
+    list_id = str(entry.get("provider_list_id") or "")
+    if provider not in ("trakt", "mdblist") or not list_id:
+        return False
+    name = str(entry.get("name") or "Linked list")
+    owner = str(entry.get("username") or "").strip()
+    meta = curator.provider_list_cached_metadata(entry)
+    count = _safe_int(meta.get("item_count"), 0)
+    provider_label = "Trakt" if provider == "trakt" else "MDBList"
+    parts = ["%d item%s" % (count, "" if count == 1 else "s"), provider_label]
+    if owner:
+        parts.append(owner)
+    if _safe_int(meta.get("checked_at"), 0):
+        parts.append("Checked %s" % _relative_refresh(meta.get("checked_at")))
+    summary = " • ".join(parts)
+    description = str(entry.get("description") or "").strip() or "A linked %s list." % provider_label
+    folder_id = str(folder.get("id") or "")
+    entry_id = str(entry.get("id") or "")
+    context = [
+        ("Edit linked list", "RunPlugin(%s)" % _url(action="folder_edit_entry", folder_id=folder_id, entry_id=entry_id)),
+        ("Refresh linked list", "RunPlugin(%s)" % _url(action="provider_list", provider=provider, list_id=list_id, name=name, username=owner, refresh="1")),
+    ]
+    _add_folder(
+        name, "provider_list", plot=summary + "\n\n" + description, tagline=summary,
+        properties={"CuratrItemCount": count, "CuratrProvider": provider_label, "CuratrUsername": owner},
+        context_items=context, art=_record_art(curator, entry), provider=provider, list_id=list_id, name=name, username=owner,
+    )
+    return True
+
+
 def _folder(curator, params):
     folder = curator.widget_folder_by_id(params.get("folder_id"))
     if not folder:
@@ -416,6 +449,8 @@ def _folder(curator, params):
                 )),
             ]
             _add_folder(name, "list", plot=plot, tagline=tagline, properties=properties, context_items=context, art=_record_art(curator, record), list_id=local_id, name=name)
+            added += 1
+        elif entry.get("type") == "provider_list" and _add_provider_list(curator, folder, entry):
             added += 1
         elif entry.get("type") == "external_path" and _add_external_shortcut(curator, folder, entry):
             added += 1
@@ -639,7 +674,7 @@ def _redlight_play_url(movie):
     })
 
 
-def _add_movie(movie, artwork, list_name="", list_id=""):
+def _add_movie(movie, artwork, list_name="", list_id="", provider="", username=""):
     if not isinstance(movie, dict):
         return False
     title = str(movie.get("title") or "Unknown movie")
@@ -662,6 +697,12 @@ def _add_movie(movie, artwork, list_name="", list_id=""):
     if list_name:
         try:
             item.setProperty("CuratrList", list_name)
+        except Exception:
+            pass
+    if provider:
+        try:
+            item.setProperty("CuratrProvider", str(provider))
+            item.setProperty("CuratrUsername", str(username or ""))
         except Exception:
             pass
 
@@ -722,12 +763,14 @@ def _render_movies(curator, rows, category):
             movie = entry[1]
             list_name = entry[2] if len(entry) > 2 else category
             list_id = entry[3] if len(entry) > 3 else ""
+            provider = entry[4] if len(entry) > 4 else ""
+            username = entry[5] if len(entry) > 5 else ""
             try:
                 artwork = art_cache.art_for_movie(movie)
             except Exception as exc:
                 artwork = {}
                 xbmc.log("curatr artwork skipped for %s: %s" % (movie.get("title"), exc), xbmc.LOGDEBUG)
-            if _add_movie(movie, artwork, list_name=list_name, list_id=list_id):
+            if _add_movie(movie, artwork, list_name=list_name, list_id=list_id, provider=provider, username=username):
                 added += 1
             else:
                 skipped += 1
@@ -767,6 +810,16 @@ def _render_movies(curator, rows, category):
     if skipped:
         xbmc.log("curatr rendered %d movie(s), skipped %d" % (added, skipped), xbmc.LOGWARNING)
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+
+
+def _provider_list(curator, params):
+    provider = str(params.get("provider") or "").lower()
+    list_id = str(params.get("list_id") or "")
+    name = str(params.get("name") or ("Trakt list" if provider == "trakt" else "MDBList list"))
+    movies = curator.provider_list_movies(provider, list_id, force=params.get("refresh") == "1")
+    username = str(params.get("username") or "")
+    rows = [({}, movie, name, "", "Trakt" if provider == "trakt" else "MDBList", username) for movie in movies if isinstance(movie, dict)]
+    _render_movies(curator, rows, name)
 
 def _single_list(curator, params):
     list_id = params.get("list_id") or params.get("trakt_id")
@@ -865,6 +918,8 @@ def main():
             _folders(curator)
         elif action == "folder":
             _folder(curator, params)
+        elif action == "provider_list":
+            _provider_list(curator, params)
         elif action == "folder_manage":
             curator.manage_widget_folder_interactive(params.get("folder_id") or "")
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)

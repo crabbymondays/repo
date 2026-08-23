@@ -222,7 +222,11 @@ class MDBListClient:
                 continue
             output.append({
                 "id": str(list_id), "name": name,
-                "items": row.get("items"), "dynamic": bool(row.get("dynamic")),
+                "items": row.get("items") or row.get("item_count"),
+                "dynamic": bool(row.get("dynamic")),
+                "description": str(row.get("description") or "").strip(),
+                "username": str(row.get("username") or row.get("user_name") or row.get("user") or "").strip(),
+                "mediatype": mediatype,
             })
         output.sort(key=lambda row: row["name"].casefold())
         return output
@@ -250,7 +254,18 @@ class MDBListClient:
             if not title or marker in seen or mediatype not in ("movie", "movies"):
                 continue
             seen.add(marker)
-            output.append({"title": title, "year": year, "imdb_id": row.get("imdb_id"), "rank": row.get("rank")})
+            ids = row.get("ids") if isinstance(row.get("ids"), dict) else {}
+            ids = {
+                "imdb": row.get("imdb_id") or ids.get("imdb"),
+                "tmdb": row.get("tmdb_id") or ids.get("tmdb"),
+                "trakt": row.get("trakt_id") or ids.get("trakt"),
+            }
+            output.append({
+                "title": title, "year": year, "ids": {key: value for key, value in ids.items() if value not in (None, "")},
+                "rank": row.get("rank"), "overview": str(row.get("overview") or row.get("description") or ""),
+                "runtime": row.get("runtime"), "genres": row.get("genres") or [],
+                "images": row.get("images") or {},
+            })
             if len(output) >= limit:
                 break
         return output
