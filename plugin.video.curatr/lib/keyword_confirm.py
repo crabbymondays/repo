@@ -38,10 +38,13 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
     def _text_width(text, chip=False):
         # Bold chip labels are slightly wider than connector text. Keep the
         # estimate conservative so Kodi fonts do not touch the rounded ends.
-        unit = 14 if chip else 11
-        padding = 76 if chip else 20
-        minimum = 140 if chip else 46
-        maximum = 490 if chip else 330
+        # Kodi's bold font needs more room than a plain character count
+        # suggests. Keep chips compact, but never squeeze common values into
+        # an ellipsis (for example "Mystery" or "2000 onwards").
+        unit = 13 if chip else 11
+        padding = 52 if chip else 20
+        minimum = 120 if chip else 46
+        maximum = 500 if chip else 330
         return max(minimum, min(maximum, len(str(text or "")) * unit + padding))
 
     def _add_label(self, x, y, width, text, colour="0xFFD7D3DF"):
@@ -58,14 +61,15 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         # Use a raster cap here. Some Kodi/Android builds flatten dynamically
         # created SVG ControlImages, making the chip appear square even though
         # the source SVG is rounded.
-        rounded_end = os.path.join(media, "chip_round_end.png")
-        height, corner = 60, 16
+        rounded_left = os.path.join(media, "chip_round_left.png")
+        rounded_right = os.path.join(media, "chip_round_right.png")
+        height, corner = 60, 14
         controls = [
-            xbmcgui.ControlImage(x, y, corner * 2, height, rounded_end, colorDiffuse=background),
+            xbmcgui.ControlImage(x, y, corner, height, rounded_left, colorDiffuse=background),
             xbmcgui.ControlImage(x + corner, y, max(1, width - corner * 2), height, pixel, colorDiffuse=background),
-            xbmcgui.ControlImage(x + width - corner * 2, y, corner * 2, height, rounded_end, colorDiffuse=background),
+            xbmcgui.ControlImage(x + width - corner, y, corner, height, rounded_right, colorDiffuse=background),
             xbmcgui.ControlLabel(
-                x + 30, y + 10, width - 60, 40, "[B]%s[/B]" % str(text or ""),
+                x + 18, y + 10, width - 36, 40, "[B]%s[/B]" % str(text or ""),
                 font="font13", textColor=foreground, alignment=6,
             ),
         ]

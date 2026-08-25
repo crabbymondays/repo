@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="0.24.0~beta26" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="0.24.2~beta28" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -42,7 +42,16 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>0.24.0~beta26 (2026-08-25)
+            <news>0.24.2~beta28 (2026-08-25)
+- Keeps complete Keyword Matching tag values visible instead of shortening them with ellipses.
+- Rebalances tag padding so labels remain compact while fitting Kodi's bold font reliably.
+
+0.24.1~beta27 (2026-08-25)
+- Restores the approved compact asymmetric Preferences fingerprint without grafted ridge additions.
+- Tightens Keyword Matching tag widths and label padding.
+- Removes dark overlap seams by using separate non-overlapping rounded chip caps.
+
+0.24.0~beta26 (2026-08-25)
 - Keeps the Preferences fingerprint naturally asymmetric while completing its ridge detail.
 - Uses Kodi-safe rounded PNG caps so Keyword Matching tags retain visibly rounded corners on Android.
 - Stops release and year wording from being included in detected actor or director names.
