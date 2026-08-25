@@ -25,49 +25,52 @@
             <left>120</left><top>158</top><width>1680</width><height>820</height>
             <onleft>100</onleft><onright>100</onright><onup>100</onup><ondown>100</ondown>
             <pagecontrol>300</pagecontrol><scrolltime>180</scrolltime>
-            <itemlayout width="420" height="390">
+            <itemlayout width="420" height="400">
                 <control type="image">
-                    <left>31</left><top>4</top><width>358</width><height>358</height>
+                    <left>50</left><top>8</top><width>320</width><height>320</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture colordiffuse="551F1F2A">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
                 </control>
                 <control type="image">
-                    <left>42</left><top>15</top><width>336</width><height>316</height>
+                    <left>58</left><top>16</top><width>304</width><height>304</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="label">
-                    <left>20</left><top>334</top><width>380</width><height>32</height>
+                    <left>40</left><top>334</top><width>340</width><height>32</height>
                     <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
                 <control type="label">
-                    <left>20</left><top>364</top><width>380</width><height>24</height>
+                    <left>40</left><top>368</top><width>340</width><height>26</height>
                     <font>font13</font><textcolor>FFAAAAAA</textcolor><align>center</align>
                     <label>$INFO[ListItem.Property(CuratrSubtitle)]</label>
                 </control>
             </itemlayout>
-            <focusedlayout width="420" height="390">
+            <focusedlayout width="420" height="400">
                 <control type="image">
-                    <left>23</left><top>-4</top><width>374</width><height>374</height>
+                    <left>44</left><top>2</top><width>332</width><height>332</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture colordiffuse="FF9A67FF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
                     <animation effect="fade" start="80" end="100" time="120">Focus</animation>
                 </control>
                 <control type="image">
-                    <left>31</left><top>4</top><width>358</width><height>358</height>
+                    <left>50</left><top>8</top><width>320</width><height>320</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture colordiffuse="FF20202B">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
                 </control>
                 <control type="image">
-                    <left>42</left><top>15</top><width>336</width><height>316</height>
+                    <left>58</left><top>16</top><width>304</width><height>304</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="label">
-                    <left>20</left><top>334</top><width>380</width><height>32</height>
+                    <left>40</left><top>334</top><width>340</width><height>32</height>
                     <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
                 <control type="label">
-                    <left>20</left><top>364</top><width>380</width><height>24</height>
+                    <left>40</left><top>368</top><width>340</width><height>26</height>
                     <font>font13</font><textcolor>FFAAAAAA</textcolor><align>center</align>
                     <label>$INFO[ListItem.Property(CuratrSubtitle)]</label>
                 </control>
@@ -75,54 +78,46 @@
         </control>
 
         <control type="panel" id="200">
-            <visible>false</visible>
             <left>120</left><top>158</top><width>1680</width><height>820</height>
             <onleft>200</onleft><onright>200</onright><onup>200</onup><ondown>200</ondown>
             <pagecontrol>300</pagecontrol><scrolltime>180</scrolltime>
             <itemlayout width="560" height="360">
                 <control type="image">
-                    <left>10</left><top>4</top><width>540</width><height>330</height>
-                    <texture colordiffuse="551F1F2A">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
+                    <left>14</left><top>8</top><width>532</width><height>299</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
+                    <texture colordiffuse="551F1F2A">special://home/addons/plugin.video.curatr/resources/media/pixel_16x9.png</texture>
                 </control>
                 <control type="image">
-                    <left>20</left><top>14</top><width>520</width><height>280</height>
+                    <left>20</left><top>14</top><width>520</width><height>293</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="label">
-                    <left>20</left><top>300</top><width>520</width><height>30</height>
+                    <left>20</left><top>314</top><width>520</width><height>36</height>
                     <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
                     <label>$INFO[ListItem.Label]</label>
-                </control>
-                <control type="label">
-                    <left>20</left><top>329</top><width>520</width><height>24</height>
-                    <font>font13</font><textcolor>FFAAAAAA</textcolor><align>center</align>
-                    <label>$INFO[ListItem.Property(CuratrSubtitle)]</label>
                 </control>
             </itemlayout>
             <focusedlayout width="560" height="360">
                 <control type="image">
-                    <left>2</left><top>-4</top><width>556</width><height>346</height>
-                    <texture colordiffuse="FF9A67FF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
+                    <left>8</left><top>2</top><width>544</width><height>306</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
+                    <texture colordiffuse="FF9A67FF">special://home/addons/plugin.video.curatr/resources/media/pixel_16x9.png</texture>
                 </control>
                 <control type="image">
-                    <left>10</left><top>4</top><width>540</width><height>330</height>
-                    <texture colordiffuse="FF20202B">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
+                    <left>14</left><top>8</top><width>532</width><height>299</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
+                    <texture colordiffuse="FF20202B">special://home/addons/plugin.video.curatr/resources/media/pixel_16x9.png</texture>
                 </control>
                 <control type="image">
-                    <left>20</left><top>14</top><width>520</width><height>280</height>
+                    <left>20</left><top>14</top><width>520</width><height>293</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="label">
-                    <left>20</left><top>300</top><width>520</width><height>30</height>
+                    <left>20</left><top>314</top><width>520</width><height>36</height>
                     <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
                     <label>$INFO[ListItem.Label]</label>
-                </control>
-                <control type="label">
-                    <left>20</left><top>329</top><width>520</width><height>24</height>
-                    <font>font13</font><textcolor>FFAAAAAA</textcolor><align>center</align>
-                    <label>$INFO[ListItem.Property(CuratrSubtitle)]</label>
                 </control>
             </focusedlayout>
         </control>

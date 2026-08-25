@@ -59,7 +59,14 @@ class GeminiClient(BaseAIClient):
                     "Content-Type": "application/json",
                 },
                 json=payload,
-                timeout=120,
+                # Keep connection failures responsive, while allowing enough
+                # time for a structured list response on slower Kodi devices.
+                timeout=(15, 180),
+            )
+        except requests.Timeout:
+            raise AIError(
+                "Google Gemini took too long to respond. No list changes were saved. "
+                "Please try again; the timed-out request may still count towards your Gemini usage."
             )
         except requests.RequestException as exc:
             raise AIError("Could not contact Google Gemini: %s" % exc)

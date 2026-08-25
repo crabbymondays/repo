@@ -18,6 +18,20 @@
 - Confirm selected MDBList references and the current prompt continue to
   contribute without creating additional preference-summary requests.
 
+## Artwork grid visibility (beta14 hotfix)
+
+- Check square and landscape artwork grids on both a 16:9 television and a tall/wide phone.
+- Confirm the purple focus border stays clear of the image and title.
+- Confirm suggested movie artwork shows one title only, without a repeated `list-item fanart` line.
+- Under **Choose a curatr icon > Genre Colours**, confirm Thriller displays its eye icon.
+- Confirm square icons and portrait people remain centred inside a square frame with labels below it.
+- On a non-16:9 display, confirm the purple icon frame remains physically square rather than stretching horizontally.
+
+- Open **Suggested artwork** and **Choose fanart from this list** and confirm
+  landscape tiles appear over the semi-transparent dialog.
+- Open the curatr icon and person pickers and confirm square tiles still appear.
+- Confirm only one grid layout is visible at a time and Back still cancels.
+
 ## Linked account lists and AI references (beta13)
 
 - Add one Trakt and one MDBList account list to a Widget Folder.

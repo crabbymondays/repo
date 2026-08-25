@@ -1,22 +1,118 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.curatr" name="curatr" version="0.21.0~beta14" provider-name="crabbymondays">
+<addon id="plugin.video.curatr" name="curatr" version="0.24.0~beta26" provider-name="crabbymondays">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.requests"/>
     </requires>
-    <extension point="xbmc.python.script" library="addon.py"><provides>executable</provides></extension>
     <extension point="xbmc.python.pluginsource" library="plugin.py"><provides>video</provides></extension>
     <extension point="xbmc.service" library="service.py"/>
     <extension point="xbmc.addon.metadata">
         <summary lang="en_GB">Personalised watchlists made from whatever you're in the mood for</summary>
-        <description lang="en_GB">Tell curatr what you're in the mood for and it will create a watchlist shaped around preferences from your Kodi Library, Trakt or both. Create and refresh lists, organise lightweight Widget Folders, hide unwanted recommendations, and optionally connect Trakt, TMDB and MDBList. Choose from OpenAI, Gemini, Claude, OpenRouter or another compatible AI service.</description>
+        <description lang="en_GB">Tell curatr what you're in the mood for and create a watchlist with AI or lightweight Keyword Matching. Shape results around preferences from your Kodi Library, Trakt or both; organise Widget Folders; hide unwanted recommendations; and optionally connect Trakt, TMDB and MDBList. AI services include OpenAI, Gemini, Claude, OpenRouter and compatible providers.</description>
         <platform>all</platform>
         <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
         <license>MIT</license>
         <assets><icon>icon_addon_v2.png</icon><fanart>fanart_addon_v2.jpg</fanart></assets>
         <source>https://github.com/crabbymondays/repo</source>
         <website>https://crabbymondays.github.io/repo/</website>
-        <news>0.21.0~beta14 (2026-08-23)
+        <news>0.24.0~beta26 (2026-08-25)
+- Keeps the Preferences fingerprint naturally asymmetric while completing its ridge detail.
+- Uses Kodi-safe rounded PNG caps so Keyword Matching tags retain visibly rounded corners on Android.
+- Stops release and year wording from being included in detected actor or director names.
+- Gives film references, years and runtimes their own tag colours while retaining gold for ratings.
+- Recognises natural year ranges such as "between 2000 and 2010".
+
+0.23.9~beta25 (2026-08-25)
+- Replaces the Preferences and Settings artwork with clean, balanced generated icons.
+- Ensures both icons use true transparency with no black background.
+- Allows longer Gemini responses on slower connections and reports timeouts clearly without automatically repeating a potentially billable request.
+
+0.23.8~beta24 (2026-08-25)
+- Corrects menu-icon mappings for lists, preferences, refresh and recent activity.
+- Replaces the damaged Add Folder artwork and centres the repaired non-AI menu icons.
+- Removes decorative sparkles from list, activity and settings actions that do not use AI.
+- Makes recognised Keyword Matching tag values bold while keeping connector text understated.
+- Reuses compiled parser filter boundaries to keep repeated prompt parsing lightweight.
+
+0.23.7~beta23 (2026-08-25)
+- Stops recognised genres and other filters being mistaken for actor or director names in Keyword Matching.
+
+0.23.6~beta22 (2026-08-25)
+- Restores the correct list icon for Browse My Lists.
+- Completes and balances the fingerprint icon while preserving its approved minimal style.
+
+0.23.5~beta21 (2026-08-25)
+- Opens Privacy &amp; Data directly from the curatr main menu without an intermediate Settings button.
+
+0.23.4~beta20 (2026-08-25)
+- Adds a plain-language Privacy &amp; Data page to Settings.
+- Replaces suitable numerical sliders with Kodi numeric input.
+- Replaces the single-list Refresh All action with one reliable Sync to Trakt action.
+- Recognises MDBList-backed IMDb, Rotten Tomatoes and MDBList chart/rating phrases in Keyword Matching.
+- Correctly separates multiple people such as Zendaya and Tom Holland.
+- Gives filter labels clearer soft-rounded corners.
+
+0.23.3~beta19 (2026-08-24)
+- Redesigns Keyword Matching confirmation around a centred translucent content panel.
+- Enlarges the request, recognised filters, subtly rounded chips and action buttons.
+- Gives chip labels more horizontal breathing room while retaining natural wrapping.
+- Understands natural cast wording such as "films with Gal Gadot" without confusing ordinary qualities for actors.
+- Re-parses saved Keyword Matching prompts with the updated rules on their next refresh.
+
+0.23.1~beta17 (2026-08-24)
+- Repairs Settings actions after curatr's move to Video-only plugin routes.
+- Restores TMDB, AI and MDBList key import from local text files.
+- Routes Trakt connection and service checks through the same supported entry point.
+- Migrates every list, folder and movie context-menu action away from the retired script entry point.
+- Corrects menu-to-icon assignments for Explore, Preferences and Refresh All Lists.
+- Restores the simple fingerprint and compass without decorative sparkles.
+- Adds distinct lightning, bookmark, stacked-list, recents and Surprise Me icons.
+- Simplifies the Widget Folders icon.
+- Makes state writes recoverable so an interrupted save cannot silently remove lists.
+
+0.23.0~beta16 (2026-08-24)
+- Automatically chooses the lightest Keyword Matching strategy from the prompt.
+- Supports multiple directors, actors and reference films without using AI.
+- Adds cached metadata similarity for creator styles and recurring collaborators.
+- Compares bounded genre, keyword, cast and production-company signals through TMDB.
+- Adds a concise confirmation window with soft pastel tags and natural connector words.
+- Preserves the user's original prompt and offers Edit Prompt directly from confirmation.
+- Keeps ordinary filter prompts cheap and reuses creator analysis for 90 days.
+
+0.22.0~beta15 (2026-08-24)
+- Adds a per-list choice between AI and lightweight Keyword Matching.
+- Saves parsed filters so keyword lists refresh manually or automatically without AI requests or tokens.
+- Supports genre, theme, year, runtime, rating, language, country, actor, director and similar-film matching through TMDB.
+- Keeps existing lists on AI automatically and allows the creation method to be changed in List settings.
+- Registers curatr only as a Video add-on for one consistent opening experience.
+- Removes the coloured global menu-icon option and reserves sparkle artwork for AI actions.
+- Simplifies AI terminology across ordinary list and refresh controls.
+
+0.21.5~beta14 (2026-08-23)
+- Gives landscape artwork, backing and focus borders one consistent 16:9 frame.
+- Removes excess grey card space and places landscape titles beneath the image.
+- Preserves landscape proportions across televisions, PCs, Xbox and wider phones.
+
+0.21.4~beta14 (2026-08-23)
+- Keeps square artwork borders physically square on ultrawide and phone displays.
+- Matches the focus frame and dark backing to Kodi's aspect-preserved icon rendering.
+
+0.21.3~beta14 (2026-08-23)
+- Restores the missing generated Thriller icon in the Genre Colours set.
+- Replaces a previously truncated Random Picks coloured menu asset.
+- Gives square artwork a true square image area with labels in a separate strip.
+- Improves focus spacing for icons and portrait person artwork across screen shapes.
+
+0.21.2~beta14 (2026-08-23)
+- Refines artwork-grid spacing for phones, ultrawide screens and television displays.
+- Uses a slimmer inset focus border and prevents labels touching the artwork frame.
+- Removes repeated technical subtitles from suggested movie artwork.
+
+0.21.1~beta14 (2026-08-23)
+- Fixes landscape artwork grids being hidden behind the semi-transparent dialog.
+- Keeps both square and landscape artwork panels controlled by the picker at runtime.
+
+0.21.0~beta14 (2026-08-23)
 - Adds read-only Kodi movie-library preferences with no external account required.
 - Adds Kodi Library + Trakt, Kodi Library Only and Trakt Only preference modes.
 - Deduplicates both sources locally and blends compatible personal ratings.

@@ -14,6 +14,8 @@ from .art_cache import ArtworkCache
 from .artwork_grid import choose_artwork
 from .catalogue_clients import CatalogueError, MDBListClient, TMDBClient
 from .kodi_library import KodiLibraryError, KodiLibraryReader
+from .keyword_confirm import confirm_keyword_rules
+from .keyword_matcher import PARSER_VERSION, candidate_matches, format_rules, parse_prompt, preferred_genre_ids, score_candidate
 from .list_art import CHOICES as LIST_ART_CHOICES
 from .list_art import label as list_art_label
 from .list_art import normalise_state as normalise_list_art
@@ -32,6 +34,8 @@ class Curator:
     MOVIE_CACHE_MAX_ITEMS = 500
     MOVIE_CACHE_KEEP_ITEMS = 350
     MOVIE_MISS_TTL_SECONDS = 24 * 3600
+    KEYWORD_ANALYSIS_MAX_AGE_SECONDS = 90 * 24 * 3600
+    KEYWORD_ANALYSIS_MAX_ITEMS = 20
 
     def __init__(self, addon, update_status=True, init_clients=True):
         self.addon = addon
@@ -145,9 +149,9 @@ class Curator:
             pass
 
         message = self._loc(32401,
-            "Welcome to curatr. Choose an AI service and add its API key before creating your first list. "
-            "curatr can personalise results from your Kodi Library, while Trakt remains optional for additional "
-            "history and list syncing.\n\nOpen Settings now?")
+            "Welcome to curatr. You can create lists with Keyword Matching and TMDB, or add an AI service for "
+            "more nuanced requests. curatr can use your Kodi Library for preferences, while Trakt remains optional "
+            "for additional history and list syncing.\n\nOpen Settings now?")
         try:
             open_now = xbmcgui.Dialog().yesno(
                 self._loc(32400, "Welcome to curatr"),
@@ -187,32 +191,56 @@ class Curator:
                 handle.close()
 
     def _load_state(self):
-        if not xbmcvfs.exists(self.state_path):
-            return {}
-        try:
-            raw = self._read_text(self.state_path)
-            data = json.loads(raw) if raw else {}
-            return data if isinstance(data, dict) else {}
-        except Exception as exc:
-            xbmc.log("curatr could not read state: %s" % exc, xbmc.LOGWARNING)
-            return {}
+        backup_path = self.state_path + ".bak"
+        errors = []
+        for path in (self.state_path, backup_path):
+            if not xbmcvfs.exists(path):
+                continue
+            try:
+                raw = self._read_text(path)
+                data = json.loads(raw) if raw else {}
+                if not isinstance(data, dict):
+                    raise ValueError("state root is not an object")
+                if path == backup_path:
+                    xbmc.log("curatr recovered state from its safety backup", xbmc.LOGWARNING)
+                return data
+            except Exception as exc:
+                errors.append("%s: %s" % (os.path.basename(path), exc))
+        if errors:
+            xbmc.log("curatr could not read state: %s" % "; ".join(errors), xbmc.LOGWARNING)
+        return {}
 
     def _save_state(self):
         payload = json.dumps(self.state, ensure_ascii=False, separators=(",", ":"))
         temp_path = self.state_path + ".tmp"
+        backup_path = self.state_path + ".bak"
+        moved_existing = False
         try:
             if xbmcvfs.exists(temp_path):
                 xbmcvfs.delete(temp_path)
             self._write_text(temp_path, payload)
             if xbmcvfs.exists(self.state_path):
-                xbmcvfs.delete(self.state_path)
+                if xbmcvfs.exists(backup_path):
+                    xbmcvfs.delete(backup_path)
+                moved_existing = bool(xbmcvfs.rename(self.state_path, backup_path))
+                if not moved_existing:
+                    # Some VFS implementations cannot rename an open/profile
+                    # file. Keep the live file in place and use the established
+                    # direct-write fallback rather than deleting it first.
+                    self._write_text(self.state_path, payload)
+                    xbmcvfs.delete(temp_path)
+                    return
             if not xbmcvfs.rename(temp_path, self.state_path):
                 self._write_text(self.state_path, payload)
                 if xbmcvfs.exists(temp_path):
                     xbmcvfs.delete(temp_path)
+            if xbmcvfs.exists(backup_path):
+                xbmcvfs.delete(backup_path)
         except Exception:
             if xbmcvfs.exists(temp_path):
                 xbmcvfs.delete(temp_path)
+            if moved_existing and not xbmcvfs.exists(self.state_path) and xbmcvfs.exists(backup_path):
+                xbmcvfs.rename(backup_path, self.state_path)
             raise
 
     def _migrate_local_list_state(self):
@@ -240,6 +268,9 @@ class Curator:
             changed = True
         if not isinstance(self.state.get("linked_list_cache"), dict):
             self.state["linked_list_cache"] = {}
+            changed = True
+        if not isinstance(self.state.get("keyword_analysis_cache"), dict):
+            self.state["keyword_analysis_cache"] = {}
             changed = True
 
         folders = []
@@ -300,6 +331,12 @@ class Curator:
         for record in records:
             if not isinstance(record, dict):
                 continue
+            method = str(record.get("generation_method") or "ai").strip().lower()
+            if method not in ("ai", "keyword"):
+                method = "ai"
+            if record.get("generation_method") != method:
+                record["generation_method"] = method
+                changed = True
             if not record.get("local_id"):
                 record["local_id"] = uuid.uuid4().hex
                 changed = True
@@ -1328,8 +1365,6 @@ class Curator:
 
     def create_list_interactive(self, preset_prompt=None, preset_name=None, preset_count=None):
         """Create a saved list from a free-form prompt or a supplied preset."""
-        self._require_ai()
-
         prompt = preset_prompt
         if prompt is None:
             prompt = xbmcgui.Dialog().input("What are you in the mood for?")
@@ -1337,7 +1372,32 @@ class Curator:
             return None
         prompt = str(prompt).strip()
 
-        default_name = preset_name or "My AI Picks"
+        method_choice = xbmcgui.Dialog().select(
+            "How should curatr build this list?",
+            [
+                "Create with AI — best for nuanced requests",
+                "Create with Keyword Matching — no AI request",
+            ],
+        )
+        if method_choice < 0:
+            return None
+        generation_method = "keyword" if method_choice == 1 else "ai"
+        keyword_rules = None
+        if generation_method == "ai":
+            self._require_ai()
+        else:
+            self._require_keyword_catalogue()
+            keyword_rules = parse_prompt(prompt)
+            if not keyword_rules.get("confidence"):
+                xbmcgui.Dialog().ok(
+                    self.name,
+                    "Keyword Matching could not find a clear filter in that request.\n\n"
+                    "Try details such as genre, decade, rating, runtime, country, language, actor or director. "
+                    "For more nuanced requests, choose Create with AI.",
+                )
+                return None
+
+        default_name = preset_name or "My Picks"
         name = xbmcgui.Dialog().input("Name this list", defaultt=default_name)
         if not name or not str(name).strip():
             return None
@@ -1360,23 +1420,54 @@ class Curator:
             xbmcgui.Dialog().ok(self.name, "Enter a number between 5 and 50.")
             return None
 
-        summary = "Create '%s' with %d films?" % (name, count)
-        if description:
-            summary += "\n\nDescription: %s" % self._shorten_text(description, 160)
-        summary += "\n\nNo AI request will be made until you choose Create List."
-        try:
-            confirmed = xbmcgui.Dialog().yesno(
-                self.name, summary, nolabel="Cancel", yeslabel="Create List",
-            )
-        except TypeError:
-            confirmed = xbmcgui.Dialog().yesno(self.name, summary)
-        if not confirmed:
-            return None
+        if generation_method == "keyword":
+            footer = "Create '%s' with %d films" % (name, count)
+            while True:
+                decision = confirm_keyword_rules(
+                    xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
+                    prompt, keyword_rules, footer,
+                )
+                if decision == "edit":
+                    while True:
+                        edited = xbmcgui.Dialog().input("What are you in the mood for?", defaultt=prompt)
+                        if not edited or not edited.strip():
+                            return None
+                        revised = parse_prompt(edited.strip())
+                        if revised.get("confidence"):
+                            prompt, keyword_rules = edited.strip(), revised
+                            break
+                        xbmcgui.Dialog().ok(
+                            self.name,
+                            "curatr couldn't turn enough of that request into reliable filters. "
+                            "Try adding a genre, year, actor, director or reference film.",
+                        )
+                    continue
+                if decision != "create":
+                    return None
+                break
+        else:
+            summary = "Create '%s' with %d films?" % (name, count)
+            if description:
+                summary += "\n\nDescription: %s" % self._shorten_text(description, 160)
+            summary += "\n\nOne AI recommendation request will be made when you choose Create List."
+            try:
+                confirmed = xbmcgui.Dialog().yesno(
+                    self.name, summary, nolabel="Cancel", yeslabel="Create List",
+                )
+            except TypeError:
+                confirmed = xbmcgui.Dialog().yesno(self.name, summary)
+            if not confirmed:
+                return None
 
         self._notify("Finding %d films for %s…" % (count, name))
-        result = self._generate_and_write(
-            name, prompt, count, managed_record=managed, description=description
-        )
+        if generation_method == "keyword":
+            result = self._generate_keyword_and_write(
+                name, prompt, count, keyword_rules, managed_record=managed, description=description,
+            )
+        else:
+            result = self._generate_and_write(
+                name, prompt, count, managed_record=managed, description=description
+            )
         return result
 
     def create_related_list_interactive(self, list_id="", folder_id="", entry_id=""):
@@ -1492,16 +1583,26 @@ class Curator:
         if not record:
             raise RuntimeError("That list has already been removed.")
 
-        name = record.get("name") or "AI - My Picks"
+        name = record.get("name") or "My Picks"
+        method = str(record.get("generation_method") or "ai").lower()
         if not silent:
-            self._notify("Regenerating %s with AI…" % name)
-        result = self._generate_and_write(
-            name,
-            record.get("prompt") or "Recommend films for me.",
-            self._safe_int(record.get("count"), 20),
-            silent=True,
-            managed_record=record,
-        )
+            self._notify("Refreshing %s%s…" % (name, " with Keyword Matching" if method == "keyword" else ""))
+        if method == "keyword":
+            rules = record.get("keyword_rules")
+            if not isinstance(rules, dict):
+                rules = parse_prompt(record.get("prompt") or "")
+            result = self._generate_keyword_and_write(
+                name, record.get("prompt") or "", self._safe_int(record.get("count"), 20),
+                rules, silent=True, managed_record=record,
+            )
+        else:
+            result = self._generate_and_write(
+                name,
+                record.get("prompt") or "Recommend films for me.",
+                self._safe_int(record.get("count"), 20),
+                silent=True,
+                managed_record=record,
+            )
         if not silent:
             self.record_activity(
                 "%s refreshed in Kodi with %d films"
@@ -1518,7 +1619,7 @@ class Curator:
         record = self._managed_record_by_id(list_id)
         if not record:
             raise RuntimeError("That list has already been removed.")
-        current_name = str(record.get("name") or "AI - My Picks")
+        current_name = str(record.get("name") or "My Picks")
         new_name = xbmcgui.Dialog().input("List name", defaultt=current_name)
         if not new_name or not new_name.strip():
             return record
@@ -1558,6 +1659,15 @@ class Curator:
             return record
         updated = dict(record)
         updated["prompt"] = new_prompt.strip()
+        if str(updated.get("generation_method") or "ai").lower() == "keyword":
+            rules = parse_prompt(updated["prompt"])
+            if not rules.get("confidence"):
+                xbmcgui.Dialog().ok(
+                    self.name,
+                    "That prompt does not contain a clear Keyword Matching filter. The existing prompt was kept.",
+                )
+                return record
+            updated["keyword_rules"] = rules
         updated["edited_at"] = int(time.time())
         self._store_managed_record(updated, record)
         self._save_state()
@@ -1652,7 +1762,7 @@ class Curator:
         self._store_managed_record(updated, record)
         self._save_state()
         self.record_activity(
-            "Automatic AI refresh %s for %s" % ("enabled" if enabled else "disabled", updated.get("name") or "curatr list"),
+            "Auto Refresh %s for %s" % ("enabled" if enabled else "disabled", updated.get("name") or "curatr list"),
             notify=True,
         )
         return updated
@@ -1672,7 +1782,7 @@ class Curator:
         self._store_managed_record(updated, record)
         self._save_state()
         self.record_activity(
-            "AI refresh interval for %s set to %d hour(s)" % (updated.get("name") or "curatr list", hours),
+            "Refresh interval for %s set to %d hour(s)" % (updated.get("name") or "curatr list", hours),
             notify=True,
         )
         return updated
@@ -1684,13 +1794,13 @@ class Curator:
         if not record.get("sync_to_trakt"):
             xbmcgui.Dialog().ok(
                 self.name,
-                "Turn on 'Save a copy to Trakt' for this list first. Automatic Trakt updates only copy your current Kodi list to Trakt; they do not call the AI.",
+                "Turn on 'Save a copy to Trakt' for this list first. Automatic Trakt updates only copy your current Kodi list to Trakt.",
             )
             return record
         if not self._has_oauth():
             xbmcgui.Dialog().ok(
                 self.name,
-                "Automatic Trakt updates need curatr to be connected to Trakt. Automatic AI refresh works independently for Kodi-only lists.",
+                "Automatic Trakt updates need curatr to be connected to Trakt. List refreshes work independently for Kodi-only lists.",
             )
             return record
 
@@ -2000,7 +2110,6 @@ class Curator:
         grid_entries = [
             {
                 "label": row.get("art_label") or row["label"],
-                "subtitle": row["label"],
                 "source": row["source"],
                 "suggestion": row,
             }
@@ -2085,9 +2194,10 @@ class Curator:
             except Exception:
                 return str(stamp)
 
-        ai_refresh = "Manual only"
+        refresh_schedule = "Manual only"
         if record.get("regeneration_enabled"):
-            ai_refresh = "Every %d hour(s)" % self._safe_int(record.get("regeneration_interval_hours"), 24)
+            refresh_schedule = "Every %d hour(s)" % self._safe_int(record.get("regeneration_interval_hours"), 24)
+        method_label = "Keyword Matching" if str(record.get("generation_method") or "ai").lower() == "keyword" else "AI"
         trakt_update = "Off"
         if record.get("sync_to_trakt"):
             trakt_update = "Manual only"
@@ -2097,7 +2207,7 @@ class Curator:
         icon_art, fanart_art, fanart_style = list_art_summary(record)
         text = (
             "List: %s\n\nDescription:\n%s\n\nFilms requested: %d\nSaved: %s\n\nIcon: %s\nFanart: %s\nFanart style: %s\n\n"
-            "Grounded candidates considered: %d\n\nAuto Refresh: %s\nLast refresh: %s\n\n"
+            "Creation method: %s\nGrounded candidates considered: %d\n\nAuto Refresh: %s\nLast refresh: %s\n\n"
             "Trakt Sync: %s\nLast sync: %s\n\nPrompt:\n%s"
             % (
                 record.get("name") or "curatr list",
@@ -2107,8 +2217,9 @@ class Curator:
                 icon_art,
                 fanart_art,
                 fanart_style,
+                method_label,
                 self._safe_int(record.get("grounded_candidate_count"), 0),
-                ai_refresh,
+                refresh_schedule,
                 when(record.get("updated_at")),
                 trakt_update,
                 when(record.get("trakt_synced_at")),
@@ -2200,12 +2311,14 @@ class Curator:
             trakt_refresh_enabled = bool(record.get("trakt_refresh_enabled"))
             trakt_interval = self._safe_int(record.get("trakt_refresh_interval_hours"), self._default_trakt_refresh_interval())
             trakt_refresh_label = "ON" if record.get("sync_to_trakt") and trakt_refresh_enabled else "OFF"
+            method_label = "Keyword Matching" if str(record.get("generation_method") or "ai").lower() == "keyword" else "AI"
 
             choices = [
                 "List name: %s" % (record.get("name") or "curatr list"),
                 "Description: %s" % self._shorten_text(record.get("description") or "Not set", 70),
                 "Prompt: %s" % self._shorten_text(record.get("prompt") or "", 70),
                 "Number of films: %d" % self._safe_int(record.get("count"), 20),
+                "Creation method: %s" % method_label,
                 "Artwork",
                 "Save a copy to Trakt: %s" % sync_state,
                 "Auto Refresh: %s" % ("ON" if regen_enabled else "OFF"),
@@ -2231,20 +2344,22 @@ class Curator:
             elif choice == 3:
                 self._edit_list_count(key)
             elif choice == 4:
-                self.list_artwork_interactive(key)
+                self._edit_list_generation_method(key)
             elif choice == 5:
-                self._toggle_list_trakt_sync(key)
+                self.list_artwork_interactive(key)
             elif choice == 6:
-                self._toggle_list_regeneration(key)
+                self._toggle_list_trakt_sync(key)
             elif choice == 7:
-                self._edit_list_regeneration_interval(key)
+                self._toggle_list_regeneration(key)
             elif choice == 8:
-                self._toggle_list_trakt_refresh(key)
+                self._edit_list_regeneration_interval(key)
             elif choice == 9:
-                self._edit_list_trakt_refresh_interval(key)
+                self._toggle_list_trakt_refresh(key)
             elif choice == 10:
-                return self.refresh_list(key, silent=False)
+                self._edit_list_trakt_refresh_interval(key)
             elif choice == 11:
+                return self.refresh_list(key, silent=False)
+            elif choice == 12:
                 current = self._managed_record_by_id(key)
                 if not current.get("sync_to_trakt"):
                     xbmcgui.Dialog().ok(self.name, "Turn on 'Save a copy to Trakt' for this list first.")
@@ -2252,13 +2367,59 @@ class Curator:
                     xbmcgui.Dialog().ok(self.name, "Updating a Trakt copy needs curatr to be connected to Trakt.")
                 else:
                     self.sync_list_to_trakt(key, silent=False)
-            elif choice == 12:
-                self.save_list_prompt_as_template(key)
             elif choice == 13:
-                self._view_list_settings(key)
+                self.save_list_prompt_as_template(key)
             elif choice == 14:
+                self._view_list_settings(key)
+            elif choice == 15:
                 if self.delete_list_interactive(key):
                     return None
+
+    def _edit_list_generation_method(self, list_id):
+        record = self._managed_record_by_id(list_id)
+        if not record:
+            raise RuntimeError("That list has already been removed.")
+        current = str(record.get("generation_method") or "ai").lower()
+        choice = xbmcgui.Dialog().select(
+            "Creation method",
+            ["AI — best for nuanced requests", "Keyword Matching — no AI request"],
+            preselect=1 if current == "keyword" else 0,
+        )
+        if choice < 0:
+            return record
+        method = "keyword" if choice == 1 else "ai"
+        if method == current:
+            return record
+        updated = dict(record)
+        if method == "ai":
+            self._require_ai()
+            updated["generation_method"] = "ai"
+        else:
+            self._require_keyword_catalogue()
+            rules = parse_prompt(updated.get("prompt") or "")
+            if not rules.get("confidence"):
+                xbmcgui.Dialog().ok(
+                    self.name,
+                    "The saved prompt does not contain a clear Keyword Matching filter. Edit the prompt first, "
+                    "using details such as genre, decade, runtime, rating, actor or director.",
+                )
+                return record
+            if not xbmcgui.Dialog().yesno(
+                self.name,
+                "Use Keyword Matching for future refreshes?\n\n%s\n\nThe current films will stay unchanged until the next refresh."
+                % format_rules(rules),
+            ):
+                return record
+            updated["generation_method"] = "keyword"
+            updated["keyword_rules"] = rules
+        updated["edited_at"] = int(time.time())
+        self._store_managed_record(updated, record)
+        self._save_state()
+        self.record_activity(
+            "%s now uses %s" % (updated.get("name") or "curatr list", "Keyword Matching" if method == "keyword" else "AI"),
+            notify=True,
+        )
+        return updated
 
     @staticmethod
     def _shorten_text(value, limit=70):
@@ -2393,7 +2554,7 @@ class Curator:
         marker = self._movie_marker(movie)
         if not marker:
             return False
-        if confirm and not xbmcgui.Dialog().yesno(self.name, "Never recommend '%s' again?\n\nIt will be removed from current local lists and excluded from future AI refreshes." % (title or "this movie")):
+        if confirm and not xbmcgui.Dialog().yesno(self.name, "Never recommend '%s' again?\n\nIt will be removed from current local lists and excluded from future refreshes." % (title or "this movie")):
             return False
         hidden = [row for row in self.state.get("hidden_movies", []) if isinstance(row, dict)]
         if not any(row.get("marker") == marker for row in hidden):
@@ -3111,7 +3272,7 @@ class Curator:
                 ids = item.get("ids") or {}
                 if trakt_id and str(ids.get("trakt") or "") == str(trakt_id): movie = item; break
                 if not trakt_id and str(item.get("title") or "").casefold() == str(title or "").casefold() and self._safe_int(item.get("year"), 0) == self._safe_int(year, 0): movie = item; break
-        reason = str((movie or {}).get("ai_reason") or "").strip()
+        reason = str((movie or {}).get("ai_reason") or (movie or {}).get("match_reason") or "").strip()
         fingerprint = self.state.get("taste_fingerprint") or {}
         pieces = []
         if reason:
@@ -3484,7 +3645,7 @@ class Curator:
             raise RuntimeError("Find some recommendations for this list before syncing it to Trakt.")
 
         target = self._resolve_target_list(
-            record.get("name") or "AI - My Picks",
+            record.get("name") or "My Picks",
             record.get("description") or "Personalised recommendations created by curatr.",
             record,
             silent,
@@ -3505,6 +3666,45 @@ class Curator:
         if not silent:
             self.record_activity("%s synced to Trakt" % updated.get("name"), notify=True)
         return updated
+
+    def sync_list_to_trakt_interactive(self, list_id):
+        """Create or update one Trakt copy, offering connection only on request."""
+        if not self._has_oauth():
+            connect = xbmcgui.Dialog().yesno(
+                self.name,
+                "Sync to Trakt needs a connected Trakt account.\n\nConnect Trakt now?",
+                nolabel="Not now", yeslabel="Connect Trakt",
+            )
+            if not connect:
+                return None
+            self.authenticate_trakt()
+            if not self._has_oauth():
+                return None
+        return self.sync_list_to_trakt(list_id, silent=False)
+
+    def show_privacy_and_data(self):
+        """Explain curatr's data flow in plain language from inside Kodi."""
+        text = (
+            "WHAT STAYS IN KODI\n\n"
+            "Your lists, prompts, preferences, artwork choices, hidden films and settings are stored in Kodi's curatr profile. "
+            "API keys and account tokens are stored there too, but are excluded from curatr backups.\n\n"
+            "KEYWORD MATCHING\n\n"
+            "Keyword Matching does not send your prompt or preferences to an AI provider. TMDB or MDBList may still receive "
+            "the catalogue requests needed for filters you choose.\n\n"
+            "WHEN YOU USE AI\n\n"
+            "curatr sends your prompt and a limited preference summary to the AI service you selected. It does not send your "
+            "API keys, account tokens, Kodi file paths or artwork files.\n\n"
+            "CONNECTED SERVICES\n\n"
+            "Trakt, TMDB and MDBList receive only the requests needed for the features you enable. Each service handles those "
+            "requests under its own privacy terms. All connections are optional.\n\n"
+            "LOGS AND BACKUPS\n\n"
+            "curatr is designed to keep credentials out of backups and redact sensitive request data from its own logs. Before "
+            "sharing a Kodi log, you should still check it for personal information added by Kodi or other add-ons.\n\n"
+            "YOUR CONTROL\n\n"
+            "You can use local lists without Trakt or MDBList, use Keyword Matching without an AI key, and disconnect optional "
+            "services whenever you choose."
+        )
+        xbmcgui.Dialog().textviewer("Privacy & Data", text)
 
     def set_list_trakt_sync(self, list_id, enabled):
         record = self._managed_record_by_id(list_id)
@@ -3551,9 +3751,10 @@ class Curator:
             return None
         labels = []
         for row in records:
-            regen = "AI refresh off"
+            method = "Keywords" if str(row.get("generation_method") or "ai").lower() == "keyword" else "AI"
+            regen = "%s refresh off" % method
             if row.get("regeneration_enabled"):
-                regen = "AI every %dh" % self._safe_int(row.get("regeneration_interval_hours"), 24)
+                regen = "%s every %dh" % (method, self._safe_int(row.get("regeneration_interval_hours"), 24))
             if row.get("sync_to_trakt"):
                 if row.get("trakt_refresh_enabled"):
                     trakt = "Trakt every %dh" % self._safe_int(row.get("trakt_refresh_interval_hours"), 24)
@@ -3581,13 +3782,7 @@ class Curator:
         failed = 0
         for record in records:
             try:
-                self._generate_and_write(
-                    record.get("name") or "AI - My Picks",
-                    record.get("prompt") or "Recommend films for me.",
-                    self._safe_int(record.get("count"), 20),
-                    silent=True,
-                    managed_record=record,
-                )
+                self.refresh_list(self._record_key(record), silent=True)
                 updated += 1
             except Exception as exc:
                 failed += 1
@@ -3603,11 +3798,11 @@ class Curator:
         if not silent:
             if failed:
                 self.record_activity(
-                    "AI refresh finished: %d refreshed, %d failed" % (updated, failed),
+                    "List refresh finished: %d refreshed, %d failed" % (updated, failed),
                     level="warning", notify=True,
                 )
             else:
-                self.record_activity("Refreshed %d list(s) with AI" % updated, notify=True)
+                self.record_activity("Refreshed %d list(s)" % updated, notify=True)
         return {"updated": updated, "failed": failed}
 
     def _movie_cache_key(self, title, year):
@@ -3662,6 +3857,267 @@ class Curator:
         cache = self.state.setdefault("movie_resolution_cache", {})
         cache[self._movie_cache_key(title, year)] = {"miss": True, "cached_at": int(time.time())}
         self._trim_movie_cache()
+
+    @staticmethod
+    def _keyword_analysis_key(rules):
+        references = {
+            "strategy": str((rules or {}).get("strategy") or ""),
+            "people": (rules or {}).get("people") or [],
+            "movies": (rules or {}).get("reference_movies") or [],
+        }
+        raw = json.dumps(references, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+    def _keyword_analysis_get(self, key):
+        cache = self.state.get("keyword_analysis_cache") or {}
+        row = cache.get(str(key)) if isinstance(cache, dict) else None
+        if not isinstance(row, dict):
+            return None
+        cached_at = self._safe_int(row.get("cached_at"), 0)
+        analysis = row.get("analysis")
+        if not cached_at or time.time() - cached_at > self.KEYWORD_ANALYSIS_MAX_AGE_SECONDS:
+            return None
+        return analysis if isinstance(analysis, dict) else None
+
+    def _keyword_analysis_put(self, key, analysis):
+        cache = dict(self.state.get("keyword_analysis_cache") or {})
+        cache[str(key)] = {"cached_at": int(time.time()), "analysis": dict(analysis or {})}
+        ordered = sorted(
+            cache.items(), key=lambda row: self._safe_int((row[1] or {}).get("cached_at"), 0), reverse=True,
+        )
+        self.state["keyword_analysis_cache"] = dict(ordered[:self.KEYWORD_ANALYSIS_MAX_ITEMS])
+        self._save_state()
+
+    def _keyword_candidate_pool(self, rules, limit):
+        strategy = str((rules or {}).get("strategy") or "filtered_discover")
+        analysis = {}
+        external_source = str((rules or {}).get("external_source") or "")
+        if external_source:
+            if not self.mdblist or not getattr(self.mdblist, "api_key", ""):
+                raise RuntimeError(
+                    "%s filters need MDBList. Turn on MDBList and add its API key under Connected Accounts."
+                    % ((rules or {}).get("external_source_label") or "That rating source")
+                )
+            chart_limit = self._safe_int((rules or {}).get("external_chart_limit"), 0)
+            fetch_limit = max(int(limit or 40), chart_limit or 100)
+            cache_key = "%s:%d" % (external_source, fetch_limit)
+            cache = self.state.setdefault("mdblist_chart_cache", {})
+            cached = cache.get(cache_key) if isinstance(cache, dict) else None
+            if isinstance(cached, dict) and time.time() - self._safe_int(cached.get("cached_at"), 0) < 24 * 3600:
+                chart_pool = [row for row in cached.get("movies") or [] if isinstance(row, dict)]
+            else:
+                chart_pool = self.mdblist.catalog_movies(external_source, limit=fetch_limit)
+                cache[cache_key] = {"cached_at": int(time.time()), "movies": chart_pool}
+                if len(cache) > 8:
+                    ordered = sorted(cache.items(), key=lambda row: self._safe_int((row[1] or {}).get("cached_at"), 0), reverse=True)
+                    self.state["mdblist_chart_cache"] = dict(ordered[:8])
+                self._save_state()
+            threshold = float((rules or {}).get("external_rating_min") or 0)
+            if threshold:
+                chart_pool = [row for row in chart_pool if float(row.get("external_rating") or 0) >= threshold]
+            if chart_limit:
+                chart_pool = chart_pool[:chart_limit]
+            base_rules = dict(rules or {})
+            base_rules.update({
+                "external_source": "", "external_source_label": "",
+                "external_chart_limit": 0, "external_rating_min": 0.0,
+            })
+            needs_intersection = any(base_rules.get(key) for key in (
+                "genres", "themes", "year_min", "year_max", "runtime_min", "runtime_max",
+                "rating_min", "language", "country", "people", "reference_movies",
+            ))
+            if needs_intersection:
+                base_pool, analysis = self._keyword_candidate_pool(base_rules, max(limit, min(100, fetch_limit)))
+                allowed = {
+                    (self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0))
+                    for row in base_pool if isinstance(row, dict)
+                }
+                chart_pool = [
+                    row for row in chart_pool
+                    if (self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0)) in allowed
+                ]
+            return chart_pool[:max(1, int(limit or 40))], analysis
+        if strategy in ("similar_people", "recurring_collaborators"):
+            key = self._keyword_analysis_key(rules)
+            analysis = self._keyword_analysis_get(key)
+            if analysis is None:
+                try:
+                    analysis = self.tmdb.analyse_people(rules.get("people") or [], film_limit=15, detail_limit=3)
+                except CatalogueError as exc:
+                    # Keep the list usable if optional deep-detail requests fail:
+                    # exact credits are a narrower but still honest fallback.
+                    resolved = self.tmdb.resolve_people(rules.get("people") or [], maximum=3)
+                    if not resolved:
+                        raise
+                    fallback = dict(rules); fallback["resolved_people"] = resolved
+                    self.record_activity(
+                        "Used a simpler Keyword Match while creator analysis was unavailable",
+                        level="warning", detail=str(exc), notify=False,
+                    )
+                    return self.tmdb.discover_movies(fallback, limit=limit), {"resolved_people": resolved}
+                if not analysis.get("resolved_people"):
+                    raise RuntimeError("curatr could not find the people named in that prompt on TMDB.")
+                self._keyword_analysis_put(key, analysis)
+            pool = self.tmdb.enriched_discovery_pool(rules, analysis, limit=limit)
+        elif strategy == "exact_people":
+            key = self._keyword_analysis_key(rules)
+            analysis = self._keyword_analysis_get(key) or {}
+            resolved = analysis.get("resolved_people") or self.tmdb.resolve_people(rules.get("people") or [], maximum=3)
+            if not resolved:
+                raise RuntimeError("curatr could not find the people named in that prompt on TMDB.")
+            if not analysis.get("resolved_people"):
+                analysis = {"resolved_people": resolved}
+                self._keyword_analysis_put(key, analysis)
+            resolved_rules = dict(rules)
+            resolved_rules["resolved_people"] = resolved
+            pool = self.tmdb.discover_movies(resolved_rules, limit=limit)
+        elif strategy == "similar_films":
+            pool = self.tmdb.recommendation_pool(rules.get("reference_movies") or [], limit=limit)
+            pool = [row for row in pool if candidate_matches(row, rules)]
+        else:
+            pool = self.tmdb.discover_movies(rules, limit=limit)
+        return pool, analysis
+
+    def _generate_keyword_and_write(
+        self, name, prompt, count, rules=None, silent=False, managed_record=None, description=None,
+    ):
+        """Build and persist a list from deterministic rules without calling an AI provider."""
+        self._require_keyword_catalogue()
+        count = max(5, min(50, self._safe_int(count, 20)))
+        rules = rules if isinstance(rules, dict) else parse_prompt(prompt)
+        if self._safe_int(rules.get("version"), 0) < PARSER_VERSION:
+            rules = parse_prompt(prompt)
+        if not rules.get("confidence"):
+            raise RuntimeError("The saved prompt no longer contains a clear Keyword Matching filter.")
+
+        profile = self.state.get("profile") or {}
+        if self._profile_source_available() and self._profile_is_stale():
+            try:
+                self.sync_profile(silent=True)
+                profile = self.state.get("profile") or profile
+            except Exception as exc:
+                self.record_activity("Using cached preferences for Keyword Matching", level="warning", detail=str(exc), notify=False)
+
+        pool_limit = min(100, max(40, count * 3))
+        pool, analysis = self._keyword_candidate_pool(rules, pool_limit)
+        if not pool:
+            raise RuntimeError("Keyword Matching found no films for those filters. Try broadening the prompt.")
+        preference_weights = preferred_genre_ids(profile)
+        pool = sorted(
+            pool, key=lambda row: score_candidate(row, rules, preference_weights, analysis), reverse=True,
+        )
+
+        excluded_ids = self._excluded_movie_ids(profile)
+        excluded_markers = self._excluded_movie_markers(profile)
+        for row in self.state.get("hidden_movies", []):
+            if not isinstance(row, dict):
+                continue
+            try:
+                excluded_ids.add(int(row.get("trakt_id")))
+            except (TypeError, ValueError):
+                pass
+        previous_markers = set()
+        if managed_record:
+            previous_markers = {
+                (self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0))
+                for row in managed_record.get("movies") or [] if isinstance(row, dict)
+            }
+
+        candidates = []
+        resolved_ids = set()
+        for item in pool:
+            title, year = item.get("title", ""), item.get("year")
+            marker = (self._normalise_title(title), self._safe_int(year, 0))
+            if marker in previous_markers and len(pool) > count:
+                continue
+            was_cached, movie = self._movie_cache_lookup(title, year)
+            if not was_cached:
+                try:
+                    matches = self.trakt.search_movies(title, year)
+                except TraktError as exc:
+                    if exc.status_code == 429 and candidates:
+                        break
+                    raise
+                movie = self._select_movie_match(matches, title, year)
+                if movie:
+                    self._cache_movie(title, year, movie)
+                else:
+                    self._cache_movie_miss(title, year)
+            if not movie:
+                continue
+            ids = movie.get("ids") or {}
+            try:
+                trakt_id = int(ids.get("trakt"))
+            except (TypeError, ValueError):
+                continue
+            movie_marker = (self._normalise_title(movie.get("title")), self._safe_int(movie.get("year"), 0))
+            tmdb_id = str(ids.get("tmdb") or "")
+            imdb_id = str(ids.get("imdb") or "").casefold()
+            if (
+                trakt_id in excluded_ids or trakt_id in resolved_ids
+                or (tmdb_id and tmdb_id in excluded_markers["tmdb"])
+                or (imdb_id and imdb_id in excluded_markers["imdb"])
+                or movie_marker in excluded_markers["title_year"]
+            ):
+                continue
+            resolved_ids.add(trakt_id)
+            local_movie = self._compact_movie(movie)
+            reason_labels = {
+                "similar_people": "Shares catalogue signals with the referenced creators",
+                "recurring_collaborators": "Matches recurring collaborators from the referenced creators",
+                "exact_people": "Matches the named actor or director",
+                "similar_films": "Related to the referenced films and saved filters",
+            }
+            local_movie["match_reason"] = reason_labels.get(
+                str(rules.get("strategy") or ""), "Matched the saved Keyword Matching filters",
+            )
+            candidates.append({"trakt_id": trakt_id, "movie": local_movie})
+            if len(candidates) >= count:
+                break
+        if not candidates:
+            raise RuntimeError(
+                "Keyword Matching could not find any new unwatched films. Try broader filters or request fewer films."
+            )
+
+        previous = managed_record or {}
+        record = dict(previous)
+        now = int(time.time())
+        record.update({
+            "local_id": previous.get("local_id") or uuid.uuid4().hex,
+            "name": name, "prompt": prompt,
+            "description": str(description).strip() if description is not None else str(previous.get("description") or ""),
+            "count": count, "updated_at": now, "local_changed_at": now,
+            "last_result_count": len(candidates), "movies": [row["movie"] for row in candidates],
+            "recommendations": [], "grounded_candidate_count": len(pool),
+            "generation_method": "keyword", "keyword_rules": rules,
+            "keyword_strategy": str(rules.get("strategy") or "filtered_discover"),
+        })
+        if "sync_to_trakt" not in record:
+            record["sync_to_trakt"] = bool(self._sync_enabled() and self._has_oauth())
+        if "artwork" not in record:
+            record["artwork"] = normalise_list_art({})
+        if "regeneration_enabled" not in record:
+            record["regeneration_enabled"] = self._default_regeneration_enabled()
+        if "regeneration_interval_hours" not in record:
+            record["regeneration_interval_hours"] = self._default_regeneration_interval()
+        record.setdefault("regeneration_last_attempt_at", 0)
+        if "trakt_refresh_enabled" not in record:
+            record["trakt_refresh_enabled"] = bool(record.get("sync_to_trakt") and self._default_trakt_refresh_enabled())
+        record.setdefault("trakt_refresh_interval_hours", self._default_trakt_refresh_interval())
+        record.setdefault("trakt_refresh_cycle_at", self._safe_int(record.get("trakt_synced_at"), 0))
+        record.setdefault("trakt_last_attempt_at", 0)
+        self._store_managed_record(record, managed_record)
+        self._save_state()
+
+        if not managed_record and record.get("sync_to_trakt") and self._has_oauth():
+            try:
+                record = self.sync_list_to_trakt(record.get("local_id"), silent=True)
+            except Exception as exc:
+                self.record_activity("%s created in Kodi; initial Trakt copy was skipped" % name, level="warning", detail=str(exc), notify=False)
+        if not silent:
+            action = "created" if not managed_record else "refreshed"
+            self.record_activity("%s %s locally with %d films using Keyword Matching" % (name, action, len(candidates)), notify=True)
+        return record
 
     def _generate_and_write(
         self, name, prompt, count, silent=False, managed_record=None,
@@ -3844,6 +4300,7 @@ class Curator:
             "movies": [row["movie"] for row in candidates],
             "recommendations": [row["recommendation"] for row in candidates],
             "grounded_candidate_count": len(grounded_pool),
+            "generation_method": "ai",
         })
         if compact_references:
             record["reference_movies"] = compact_references
@@ -3919,7 +4376,7 @@ class Curator:
                         except Exception:
                             pass
                     return item
-            return self.trakt.create_list(name, description or "AI-generated personalised recommendations.")
+            return self.trakt.create_list(name, description or "Personalised recommendations created by curatr.")
 
         same_name = None
         for item in remote_lists:
@@ -3942,7 +4399,7 @@ class Curator:
                 return same_name
             name = self._unique_list_name(name, remote_lists)
 
-        return self.trakt.create_list(name, description or "AI-generated personalised recommendations.")
+        return self.trakt.create_list(name, description or "Personalised recommendations created by curatr.")
 
     def _sync_list_movies(self, list_id, desired_ids):
         current_items = self.trakt.list_items(list_id, extended=False)
@@ -4385,7 +4842,7 @@ class Curator:
                 )
                 try:
                     self.record_activity(
-                        "Automatic AI refresh failed for %s" % (record.get("name") or "curatr list"),
+                        "Automatic refresh failed for %s" % (record.get("name") or "curatr list"),
                         level="error", detail=str(exc), notify=False,
                     )
                 except Exception:
@@ -4447,7 +4904,7 @@ class Curator:
         if regenerated or trakt_synced or failures:
             parts = []
             if regenerated:
-                parts.append("%d AI refreshed" % regenerated)
+                parts.append("%d list(s) refreshed" % regenerated)
             if trakt_synced:
                 parts.append("%d Trakt updated" % trakt_synced)
             if failures:
@@ -4498,6 +4955,13 @@ class Curator:
     def _require_ai(self):
         if not self.ai.api_key:
             raise RuntimeError("Add your %s API key in Settings before creating a list." % getattr(self.ai, "provider_name", "AI"))
+
+    def _require_keyword_catalogue(self):
+        if self.tmdb is None or not getattr(self.tmdb, "api_key", ""):
+            raise RuntimeError(
+                "Keyword Matching needs TMDB for its movie catalogue. Enable TMDB and add a TMDB API key "
+                "under Metadata in Settings; no AI key or linked account is required."
+            )
 
     def _profile_is_stale(self):
         profile = self.state.get("profile") or {}

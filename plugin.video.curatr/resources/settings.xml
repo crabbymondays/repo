@@ -30,7 +30,7 @@
                 </setting>
                 <setting id="ai_import_key" type="action" label="32620" help="32621">
                     <level>0</level>
-                    <data>RunScript($ID,import_api_key,ai)</data>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_ai_key)</data>
                     <control type="button" format="action"><close>true</close></control>
                 </setting>
             </group>
@@ -134,9 +134,7 @@
                         <step>1</step>
                         <maximum>50</maximum>
                     </constraints>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32310</heading></control>
                 </setting>
             </group>
         </category>
@@ -151,7 +149,7 @@
                     <control type="edit" format="string"><heading>32525</heading><hidden>true</hidden></control>
                 </setting>
                 <setting id="tmdb_import_key" type="action" label="32622" help="32623">
-                    <level>0</level><data>RunScript($ID,import_api_key,tmdb)</data>
+                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_tmdb_key)</data>
                     <control type="button" format="action"><close>true</close></control>
                 </setting>
                 <setting id="tmdb_region" type="string" label="32527" help="32528">
@@ -160,7 +158,7 @@
                     <control type="edit" format="string"><heading>32527</heading></control>
                 </setting>
                 <setting id="tmdb_test" type="action" label="32529" help="32530">
-                    <level>0</level><data>RunScript($ID,test_tmdb)</data>
+                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=test_tmdb)</data>
                     <dependencies><dependency type="enable" setting="tmdb_enabled">true</dependency></dependencies>
                     <control type="button" format="action"><close>false</close></control>
                 </setting>
@@ -181,7 +179,7 @@
                 </setting>
                 <setting id="trakt_connect" type="action" label="32030" help="32031">
                     <level>0</level>
-                    <data>RunScript($ID,auth)</data>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=auth)</data>
                     <control type="button" format="action">
                         <close>true</close>
                     </control>
@@ -209,11 +207,11 @@
                     <control type="edit" format="string"><heading>32534</heading><hidden>true</hidden></control>
                 </setting>
                 <setting id="mdblist_import_key" type="action" label="32624" help="32625">
-                    <level>0</level><data>RunScript($ID,import_api_key,mdblist)</data>
+                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_mdblist_key)</data>
                     <control type="button" format="action"><close>true</close></control>
                 </setting>
                 <setting id="mdblist_choose_lists" type="action" label="32542" help="32543">
-                    <level>0</level><data>RunScript($ID,choose_mdblist_lists)</data>
+                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_mdblist_lists)</data>
                     <dependencies><dependency type="enable" setting="mdblist_enabled">true</dependency></dependencies>
                     <control type="button" format="action"><close>true</close></control>
                 </setting>
@@ -228,7 +226,7 @@
                     <control type="edit" format="string"><heading>32536</heading></control>
                 </setting>
                 <setting id="mdblist_test" type="action" label="32538" help="32539">
-                    <level>0</level><data>RunScript($ID,test_mdblist)</data>
+                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=test_mdblist)</data>
                     <dependencies><dependency type="enable" setting="mdblist_enabled">true</dependency></dependencies>
                     <control type="button" format="action"><close>false</close></control>
                 </setting>
@@ -249,9 +247,7 @@
                         <step>1</step>
                         <maximum>720</maximum>
                     </constraints>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32044</heading></control>
                 </setting>
             </group>
             <group id="2" label="32321">
@@ -273,9 +269,7 @@
                         <step>1</step>
                         <maximum>720</maximum>
                     </constraints>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32048</heading></control>
                 </setting>
             </group>
         </category>
@@ -325,9 +319,7 @@
                         <step>50</step>
                         <maximum>1000</maximum>
                     </constraints>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32018</heading></control>
                 </setting>
                 <setting id="liked_rating_min" type="integer" label="32020" help="32021">
                     <level>0</level>
@@ -337,9 +329,7 @@
                         <step>1</step>
                         <maximum>10</maximum>
                     </constraints>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32020</heading></control>
                 </setting>
                 <setting id="profile_refresh_hours" type="integer" label="32022" help="32023">
                     <level>0</level>
@@ -349,9 +339,7 @@
                         <step>1</step>
                         <maximum>168</maximum>
                     </constraints>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32022</heading></control>
                 </setting>
                 <setting id="taste_fingerprint_refresh_hours" type="integer" label="32132" help="32133">
                     <level>0</level>
@@ -361,25 +349,12 @@
                         <step>24</step>
                         <maximum>720</maximum>
                     </constraints>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32132</heading></control>
                 </setting>
             </group>
         </category>
         <category id="appearance" label="32600" help="32601">
             <group id="1">
-                <setting id="menu_icon_style" type="integer" label="32602" help="32603">
-                    <level>0</level>
-                    <default>0</default>
-                    <constraints>
-                        <options>
-                            <option label="32604">0</option>
-                            <option label="32605">1</option>
-                        </options>
-                    </constraints>
-                    <control type="spinner" format="string" />
-                </setting>
                 <setting id="menu_background_style" type="integer" label="32606" help="32607">
                     <level>0</level>
                     <default>0</default>
@@ -429,9 +404,7 @@
                     <dependencies>
                         <dependency type="enable" setting="notifications_enabled">true</dependency>
                     </dependencies>
-                    <control type="slider" format="integer">
-                        <popup>true</popup>
-                    </control>
+                    <control type="edit" format="integer"><heading>32208</heading></control>
                 </setting>
             </group>
         </category>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<window type="dialog">
+    <defaultcontrol always="true">101</defaultcontrol>
+    <coordinates><system>1</system><origin x="0" y="0" /></coordinates>
+    <controls>
+        <control type="image">
+            <left>0</left><top>0</top><width>1920</width><height>1080</height>
+            <texture colordiffuse="EF0F1018">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
+        </control>
+        <control type="label">
+            <left>140</left><top>54</top><width>1640</width><height>62</height>
+            <font>font30</font><textcolor>FFFFFFFF</textcolor><align>center</align>
+            <label>Keyword Matching</label>
+        </control>
+        <control type="image" id="14">
+            <left>270</left><top>140</top><width>1380</width><height>600</height>
+            <texture colordiffuse="B91B1B28">special://home/addons/plugin.video.curatr/resources/media/keyword_panel.svg</texture>
+        </control>
+        <control type="label">
+            <left>360</left><top>184</top><width>1200</width><height>42</height>
+            <font>font13</font><textcolor>FFD2CDDA</textcolor><label>YOUR REQUEST</label>
+        </control>
+        <control type="textbox" id="11">
+            <left>360</left><top>232</top><width>1200</width><height>128</height>
+            <font>font30</font><textcolor>FFF4F1F7</textcolor><label></label>
+        </control>
+        <control type="image">
+            <left>360</left><top>382</top><width>1200</width><height>2</height>
+            <texture colordiffuse="3DFFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
+        </control>
+        <control type="label">
+            <left>360</left><top>414</top><width>1200</width><height>42</height>
+            <font>font13</font><textcolor>FFD2CDDA</textcolor><label>LOOKING FOR</label>
+        </control>
+        <control type="label" id="12">
+            <left>360</left><top>610</top><width>1200</width><height>44</height>
+            <font>font13</font><textcolor>FFE2DEE8</textcolor><align>center</align><label></label>
+        </control>
+        <control type="label" id="13">
+            <left>360</left><top>660</top><width>1200</width><height>38</height>
+            <font>font13</font><textcolor>FFA7A1AF</textcolor><align>center</align>
+            <label>Watched, rated and hidden films will be excluded  •  No AI will be used</label>
+        </control>
+        <control type="button" id="100">
+            <left>545</left><top>780</top><width>390</width><height>82</height>
+            <font>font13</font><label>Edit Prompt</label><align>center</align><aligny>center</aligny>
+            <texturefocus colordiffuse="FF7653B9">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturefocus>
+            <texturenofocus colordiffuse="663B3544">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="button" id="101">
+            <left>985</left><top>780</top><width>390</width><height>82</height>
+            <font>font13</font><label>Create List</label><align>center</align><aligny>center</aligny>
+            <texturefocus colordiffuse="FF7653B9">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturefocus>
+            <texturenofocus colordiffuse="663B3544">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+    </controls>
+</window>

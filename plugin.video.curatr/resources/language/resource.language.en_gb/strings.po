@@ -115,7 +115,7 @@ msgid "Refresh Every (hours)"
 msgstr ""
 
 msgctxt "#32045"
-msgid "How often new lists should re-run their saved AI prompt by default. Each list can have its own interval."
+msgid "How often new lists should re-run their saved prompt and creation method by default. Each list can have its own interval."
 msgstr ""
 
 msgctxt "#32046"
@@ -243,7 +243,7 @@ msgid "Show automatic refresh notifications"
 msgstr ""
 
 msgctxt "#32205"
-msgid "Show a notification when scheduled AI refreshes or Trakt updates finish in the background."
+msgid "Show a notification when scheduled list refreshes or Trakt updates finish in the background."
 msgstr ""
 
 msgctxt "#32206"
@@ -279,7 +279,7 @@ msgid "How many films a Quick Pick mood should generate."
 msgstr ""
 
 msgctxt "#32320"
-msgid "AI refresh"
+msgid "List refresh"
 msgstr ""
 
 msgctxt "#32321"
@@ -457,7 +457,7 @@ msgid "Welcome to curatr"
 msgstr ""
 
 msgctxt "#32401"
-msgid "Welcome to curatr. Choose an AI service and add its API key before creating your first list. curatr can personalise results from your Kodi Library, while Trakt remains optional for additional history and list syncing.\n\nOpen Settings now?"
+msgid "Welcome to curatr. You can create lists with Keyword Matching and TMDB, or add an AI service for more nuanced requests. curatr can use your Kodi Library for preferences, while Trakt remains optional for additional history and list syncing.\n\nOpen Settings now?"
 msgstr ""
 
 msgctxt "#32402"
@@ -493,11 +493,11 @@ msgid "Quick picks, saved prompts and more ways to browse recommendations."
 msgstr ""
 
 msgctxt "#32416"
-msgid "Your preferences, Trakt connection, AI usage and recent activity."
+msgid "Your preferences, linked account status, usage and recent activity."
 msgstr ""
 
 msgctxt "#32417"
-msgid "Choose your AI provider, optional movie sources, Trakt setup, defaults and notifications."
+msgid "Choose services, metadata, linked accounts, defaults and notifications."
 msgstr ""
 
 msgctxt "#32418"
@@ -644,22 +644,6 @@ msgctxt "#32601"
 msgid "Choose how curatr menus look. These options do not change artwork assigned to your lists."
 msgstr ""
 
-msgctxt "#32602"
-msgid "Menu Icons"
-msgstr ""
-
-msgctxt "#32603"
-msgid "Use the original clean white icons or the curatr colour theme."
-msgstr ""
-
-msgctxt "#32604"
-msgid "Clean White"
-msgstr ""
-
-msgctxt "#32605"
-msgid "curatr Colour"
-msgstr ""
-
 msgctxt "#32606"
 msgid "Menu Background"
 msgstr ""
@@ -706,4 +690,12 @@ msgstr ""
 
 msgctxt "#32625"
 msgid "Choose a small text file containing only your MDBList API key."
+msgstr ""
+
+msgctxt "#32640"
+msgid "Privacy & Data"
+msgstr ""
+
+msgctxt "#32641"
+msgid "See what curatr stores locally and what optional services receive."
 msgstr ""
