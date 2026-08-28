@@ -70,6 +70,27 @@ class TMDBClient:
             rows = (self._get("/search/movie", params).get("results") or [])
         return rows[0] if rows and isinstance(rows[0], dict) else None
 
+    def search_collections(self, query, limit=10):
+        data = self._get("/search/collection", {
+            "query": str(query or "").strip(), "include_adult": "false",
+            "language": "en-GB", "region": self.region,
+        })
+        rows = data.get("results") or [] if isinstance(data, dict) else []
+        return [row for row in rows if isinstance(row, dict) and row.get("id") and row.get("name")][:max(1, min(20, int(limit)))]
+
+    def collection_movies(self, query, limit=100):
+        rows = self.search_collections(query, limit=8)
+        if not rows:
+            return [], None
+        wanted = re.sub(r"\b(?:collection|franchise|saga|series|films?|movies?)\b", "", str(query or ""), flags=re.I).strip()
+        exact = [row for row in rows if re.sub(r"\bcollection\b", "", str(row.get("name") or ""), flags=re.I).strip().casefold() == wanted.casefold()]
+        chosen = (exact or rows)[0]
+        data = self._get("/collection/%s" % int(chosen["id"]), {"language": "en-GB"})
+        parts = [self._compact(row) for row in data.get("parts") or [] if isinstance(row, dict)]
+        parts = [row for row in parts if row.get("title")]
+        parts.sort(key=lambda row: (int(row.get("year") or 9999), row.get("title") or ""))
+        return parts[:max(1, min(250, int(limit)))], chosen
+
     def search_people(self, query, limit=20):
         data = self._get("/search/person", {
             "query": str(query or "").strip(), "include_adult": "false",
@@ -271,18 +292,22 @@ class TMDBClient:
         if not people and rules.get("people"):
             people = self.resolve_people(rules.get("people"), maximum=3)
         if people:
-            person_ids = [str(person.get("id")) for person in people if person.get("id")]
-            if not person_ids:
+            role_ids = {"director": [], "crew": [], "cast": [], "other": []}
+            for person in people:
+                if not person.get("id"):
+                    continue
+                role = str(person.get("role") or rules.get("person_role") or "").lower()
+                bucket = role if role in ("director", "crew", "cast") else "other"
+                role_ids[bucket].append(str(person["id"]))
+            if not any(role_ids.values()):
                 return []
-            role = str(people[0].get("role") or rules.get("person_role") or "")
-            if role == "director":
-                params["with_crew"] = "|".join(person_ids)
-            elif role == "cast":
-                params["with_cast"] = "|".join(person_ids)
-            elif role == "crew":
-                params["with_crew"] = "|".join(person_ids)
-            else:
-                params["with_people"] = "|".join(person_ids)
+            crew_ids = role_ids["director"] + role_ids["crew"]
+            if crew_ids:
+                params["with_crew"] = "|".join(crew_ids)
+            if role_ids["cast"]:
+                params["with_cast"] = "|".join(role_ids["cast"])
+            if role_ids["other"]:
+                params["with_people"] = "|".join(role_ids["other"])
         params.update({key: value for key, value in (extra_params or {}).items() if value not in (None, "", [])})
 
         wanted = max(20, min(100, int(limit)))

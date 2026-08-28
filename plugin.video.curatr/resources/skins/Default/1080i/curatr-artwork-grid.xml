@@ -83,12 +83,12 @@
             <pagecontrol>300</pagecontrol><scrolltime>180</scrolltime>
             <itemlayout width="560" height="360">
                 <control type="image">
-                    <left>14</left><top>8</top><width>532</width><height>299</height>
+                    <left>14</left><top>8</top><width>532</width><height>294</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture colordiffuse="551F1F2A">special://home/addons/plugin.video.curatr/resources/media/pixel_16x9.png</texture>
                 </control>
                 <control type="image">
-                    <left>20</left><top>14</top><width>520</width><height>293</height>
+                    <left>20</left><top>14</top><width>520</width><height>282</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
@@ -105,12 +105,12 @@
                     <texture colordiffuse="FF9A67FF">special://home/addons/plugin.video.curatr/resources/media/pixel_16x9.png</texture>
                 </control>
                 <control type="image">
-                    <left>14</left><top>8</top><width>532</width><height>299</height>
+                    <left>14</left><top>8</top><width>532</width><height>294</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture colordiffuse="FF20202B">special://home/addons/plugin.video.curatr/resources/media/pixel_16x9.png</texture>
                 </control>
                 <control type="image">
-                    <left>20</left><top>14</top><width>520</width><height>293</height>
+                    <left>20</left><top>14</top><width>520</width><height>282</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>

@@ -3,7 +3,7 @@
 import re
 import time
 
-PARSER_VERSION = 6
+PARSER_VERSION = 10
 MAX_REFERENCES = 3
 
 GENRES = {
@@ -79,7 +79,7 @@ def _clean_reference(value):
     # splitting on "and", otherwise a prompt such as "directed by the Coen
     # brothers thrillers and crime" turns those genres into extra people.
     value = re.sub(
-        r"\s+(?:(?:in|and)\s+)?(?:(?:films?|movies?)\s+)?(?:released|rated|from|between|before|after|under|over|with a rating|that (?:are|aren't|are not)|which (?:are|aren't|are not)|but)\b.*$",
+        r"\s+(?:(?:in|and)\s+)?(?:(?:films?|movies?)\s+)?(?:released|rated|from|between|before|after|under|over|with a rating|with good reviews|with high ratings|that (?:are|aren't|are not)|which (?:are|aren't|are not)|but)\b.*$",
         "", str(value or ""), flags=re.I,
     )
     value = re.sub(
@@ -119,6 +119,8 @@ def _looks_like_cast_reference(value):
     blocked = (
         "rating", "score", "runtime", "subtitles", "dubbing", "twist", "ending",
         "violence", "action scenes", "good reviews", "high ratings", "low ratings",
+        "strong reviews", "great reviews", "positive reviews", "dark atmosphere",
+        "happy ending", "sad ending", "fast pace", "slow pace",
     )
     return not any(_contains(lowered, phrase) for phrase in blocked)
 
@@ -138,7 +140,63 @@ def parse_prompt(prompt, current_year=None):
         "avoid_mainstream": False, "prefer_blockbusters": False,
         "external_source": "", "external_source_label": "",
         "external_chart_limit": 0, "external_rating_min": 0.0,
+        "collection_query": "", "collection_name": "",
+        "history_mode": "", "history_days": 0,
+        "history_plays": 0, "history_comparison": "",
     }
+
+    explicit_collection = re.search(
+        r"\b(?:the\s+)?(.+?)\s+(?:collection|franchise|saga|trilogy)\b", original, re.I,
+    )
+    all_movies = re.search(r"^\s*all\s+(.+?)\s+(?:films?|movies?)\s*$", original, re.I)
+    collection_value = (explicit_collection or all_movies)
+    if collection_value:
+        candidate = _clean_reference(collection_value.group(1))
+        lowered = candidate.casefold()
+        if candidate and not any(_contains(lowered, alias) for alias in GENRES):
+            rules["collection_query"] = candidate
+            rules["collection_name"] = candidate
+            rules["strategy"] = "collection"
+
+    number_words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+    history_text = re.sub(r"\bonce\b", "one time", text)
+    history_text = re.sub(r"\btwice\b", "two times", history_text)
+    number_token = r"(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)"
+    stale = re.search(
+        r"(?:haven['’]?t|have not|not)\s+(?:watched|seen|viewed)(?:\s+\w+){0,3}\s+(?:in|for)\s+" + number_token + r"\s+(years?|months?)",
+        history_text, re.I,
+    ) or re.search(r"last\s+(?:watched|seen|viewed)\s+(?:over|more than|at least)\s+" + number_token + r"\s+(years?|months?)\s+ago", history_text, re.I)
+    if stale:
+        amount = int(stale.group(1)) if stale.group(1).isdigit() else number_words.get(stale.group(1), 0)
+        rules["history_mode"] = "stale"
+        rules["history_days"] = amount * (365 if stale.group(2).startswith("year") else 30)
+        rules["exclude_watched"] = False
+    plays = re.search(
+        r"(?:watched|seen|viewed)\s+(?:(?:it|them)\s+)?(at least|more than|over|exactly|only)?\s*" + number_token + r"\s+(?:times?|plays?|viewings?)",
+        history_text, re.I,
+    )
+    if plays:
+        comparison = (plays.group(1) or ("only" if re.search(r"\bonly\s+(?:watched|seen|viewed)\b", history_text) else "at least")).casefold()
+        amount = int(plays.group(2)) if plays.group(2).isdigit() else number_words.get(plays.group(2), 0)
+        rules["history_mode"] = "plays"
+        rules["history_plays"] = amount
+        rules["history_comparison"] = "exact" if comparison in ("exactly", "only") else ("gt" if comparison in ("more than", "over") else "gte")
+        rules["exclude_watched"] = False
+    if re.search(r"\bnever\s+(?:watched|seen|viewed)\b|\b(?:haven['’]?t|have not)\s+(?:watched|seen|viewed)\s+(?:it\s+)?before\b|\bnew to me\b", history_text, re.I):
+        rules["history_mode"] = "never"
+        rules["exclude_watched"] = True
+
+    # Person captures deliberately run against a copy with recognised viewing
+    # history clauses removed. Otherwise a prompt such as "films by Stephen
+    # King I've seen twice" treats the history wording as part of the name.
+    person_source = re.sub(
+        r"\s+\b(?:(?:i|we)(?:['’]ve|\s+have)\s+)?(?:watched|seen|viewed)\s+"
+        r"(?:(?:it|them)\s+)?(?:(?:at\s+least|more\s+than|over|exactly|only)\s+)?"
+        r"(?:\d{1,3}|once|twice|one|two|three|four|five|six|seven|eight|nine|ten)"
+        r"(?:\s+(?:times?|plays?|viewings?))?\b",
+        "", original, flags=re.I,
+    ).strip()
     for alias, (genre_id, label) in sorted(GENRES.items(), key=lambda row: -len(row[0])):
         if _contains(text, alias) and genre_id not in rules["genres"]:
             rules["genres"].append(genre_id); rules["genre_labels"].append(label)
@@ -213,43 +271,63 @@ def parse_prompt(prompt, current_year=None):
     for label, (code, display) in COUNTRIES.items():
         if _contains(text, label): rules["country"], rules["country_label"] = code, display; break
 
-    recurring = _capture(original, [
+    recurring = _capture(person_source, [
         r"\b(?:actors?|cast|collaborators?)\s+(?:often|frequently|commonly)\s+(?:used by|working with)\s+(.+)$",
         r"\b(?:recurring|frequent)\s+(?:actors?|cast|collaborators?)\s+(?:of|for|with)\s+(.+)$",
     ])
-    similar_directors = _capture(original, [
+    similar_directors = _capture(person_source, [
         r"\b(?:similar to|like)\s+(?:films?|movies?)\s+by\s+(.+)$",
         r"\b(?:films?|movies?)\s+(?:similar to|like)\s+(?:films?|movies?)\s+by\s+(.+)$",
         r"\b(?:films?|movies?)\s+by\s+(?:directors?|filmmakers?)\s+(?:similar to|like)\s+(.+)$",
         r"\b(?:directors?|filmmakers?)\s+(?:similar to|like)\s+(.+)$",
         r"\b(?:films?|movies?)\s+(?:in the style of)\s+(.+)$",
     ])
-    similar_actors = _capture(original, [r"\b(?:actors?|performers?)\s+(?:similar to|like)\s+(.+)$"])
-    similar_creatives = _capture(original, [
+    similar_actors = _capture(person_source, [r"\b(?:actors?|performers?)\s+(?:similar to|like)\s+(.+)$"])
+    similar_creatives = _capture(person_source, [
         r"\b(?:cinematography|screenplays?|writing|creative work)\s+(?:similar to|like)\s+(.+)$",
     ])
-    exact_directors = _capture(original, [r"\b(?:directed by|from (?:the )?directors?|films? by|movies? by)\s+(.+)$"])
-    exact_cast = _capture(original, [r"\b(?:starring|featuring|with (?:the )?actors?)\s+(.+)$"])
+    mixed_people_match = re.search(
+        r"(?:\b(?:films?|movies?)\s+(?:directed\s+)?by|\bdirected\s+by|^\s*by)\s+(.+?)\s+(?:starring|featuring|with)\s+(.+)$",
+        person_source, re.I,
+    )
+    mixed_directors, mixed_cast = [], []
+    if mixed_people_match:
+        mixed_directors = _split_references(mixed_people_match.group(1))
+        cast_value = re.sub(r"\s+in\s*$", "", _clean_reference(mixed_people_match.group(2)), flags=re.I)
+        if _looks_like_cast_reference(cast_value):
+            mixed_cast = _split_references(cast_value)
+        else:
+            mixed_directors = []
+    exact_directors = _capture(person_source, [r"\b(?:directed by|from (?:the )?directors?|films? by|movies? by)\s+(.+)$"])
+    exact_cast = _capture(person_source, [r"\b(?:starring|featuring|with (?:the )?actors?)\s+(.+)$"])
     if not exact_cast:
-        natural_cast = _capture(original, [r"\b(?:films?|movies?)\s+with\s+(.+)$"])
+        natural_cast = _capture(person_source, [r"\bwith\s+(.+)$"])
         if _looks_like_cast_reference(natural_cast):
             exact_cast = natural_cast
     names, role, strategy = [], "", ""
-    if recurring: names, role, strategy = _split_references(recurring), "director", "recurring_collaborators"
+    if mixed_directors and mixed_cast:
+        rules["people"] = (
+            [{"query": name, "role": "director"} for name in mixed_directors]
+            + [{"query": name, "role": "cast"} for name in mixed_cast]
+        )[:MAX_REFERENCES]
+        rules["person_query"] = rules["people"][0]["query"]
+        rules["person_role"], rules["strategy"] = "director", "exact_people"
+    elif recurring: names, role, strategy = _split_references(recurring), "director", "recurring_collaborators"
     elif similar_directors: names, role, strategy = _split_references(similar_directors), "director", "similar_people"
     elif similar_actors: names, role, strategy = _split_references(similar_actors), "cast", "similar_people"
     elif similar_creatives: names, role, strategy = _split_references(similar_creatives), "crew", "similar_people"
     elif exact_directors: names, role, strategy = _split_references(exact_directors), "director", "exact_people"
     elif exact_cast: names, role, strategy = _split_references(exact_cast), "cast", "exact_people"
-    if names:
+    if names and not rules["people"]:
         rules["people"] = [{"query": name, "role": role} for name in names]
         rules["person_query"], rules["person_role"], rules["strategy"] = names[0], role, strategy
-    else:
-        reference = _capture(original, [r"\b(?:films?|movies?)?\s*(?:like|similar to)\s+(.+)$"])
+    if strategy not in ("similar_people", "recurring_collaborators"):
+        reference = _capture(person_source, [r"\b(?:films?|movies?)?\s*(?:like|similar to)\s+(.+)$"])
         references = _split_references(reference)
         if references:
             rules["reference_movies"] = [{"title": title, "year": 0} for title in references]
-            rules["reference_title"], rules["strategy"] = references[0], "similar_films"
+            rules["reference_title"] = references[0]
+            rules["strategy"] = "reference_people" if rules.get("people") else "similar_films"
 
     avoid_terms = (
         "less mainstream", "not mainstream", "avoid blockbusters", "not huge blockbusters",
@@ -265,6 +343,7 @@ def parse_prompt(prompt, current_year=None):
         "genres", "themes", "year_min", "year_max", "runtime_min", "runtime_max", "rating_min",
         "language", "country", "people", "reference_movies", "avoid_mainstream", "prefer_blockbusters",
         "external_source", "external_chart_limit", "external_rating_min",
+        "collection_query", "history_mode",
     ))
     rules["confidence"] = min(1.0, meaningful / 3.0)
     rules["display_parts"] = confirmation_parts(rules)
@@ -281,34 +360,51 @@ def confirmation_parts(rules):
             value = "%s %.1f%s" % (rules["external_source_label"], float(rules["external_rating_min"]), suffix)
         else:
             value = rules["external_source_label"]
-        parts.append({"text": value.replace(".0+", "+").replace(".0%", "%"), "kind": "number", "connector": "from"})
+        parts.append({"text": value.replace(".0+", "+").replace(".0%", "%"), "kind": "number", "connector": "from", "field": "external"})
+    if rules.get("collection_query"):
+        parts.append({"text": rules.get("collection_name") or rules.get("collection_query"), "kind": "film", "connector": "collection", "field": "collection"})
     if rules.get("country_label"):
-        parts.append({"text": rules["country_label"], "kind": "place", "connector": ""})
+        parts.append({"text": rules["country_label"], "kind": "place", "connector": "", "field": "country"})
     genre_text = ", ".join((rules.get("theme_labels") or []) + (rules.get("genre_labels") or []))
-    if genre_text: parts.append({"text": genre_text, "kind": "genre", "connector": ""})
+    if genre_text: parts.append({"text": genre_text, "kind": "genre", "connector": "", "field": "genres"})
     people = rules.get("people") or []
     if people:
-        strategy, role = rules.get("strategy"), people[0].get("role")
-        if strategy == "similar_people":
-            connector = "similar to films by" if role == "director" else ("similar to work by" if role == "crew" else "similar to")
-        elif strategy == "recurring_collaborators": connector = "using recurring collaborators of"
-        else: connector = "directed by" if role == "director" else ("by" if role == "crew" else "starring")
+        strategy, previous_role = rules.get("strategy"), ""
         for index, person in enumerate(people):
-            parts.append({"text": person.get("name") or person.get("query") or "", "kind": "person", "connector": connector if index == 0 else "and"})
+            role = person.get("role")
+            if index and role == previous_role:
+                connector = "and"
+            elif strategy == "similar_people":
+                connector = "similar to films by" if role == "director" else ("similar to work by" if role == "crew" else "similar to")
+            elif strategy == "recurring_collaborators":
+                connector = "using recurring collaborators of"
+            else:
+                connector = "directed by" if role == "director" else ("by" if role == "crew" else "starring")
+            parts.append({"text": person.get("name") or person.get("query") or "", "kind": "person", "connector": connector, "field": "person", "index": index})
+            previous_role = role
     for index, movie in enumerate(rules.get("reference_movies") or []):
-        parts.append({"text": movie.get("title") or "", "kind": "film", "connector": "similar to" if index == 0 else "and"})
+        parts.append({"text": movie.get("title") or "", "kind": "film", "connector": "similar to" if index == 0 else "and", "field": "reference", "index": index})
     if rules.get("language_label") and not rules.get("country_label"):
-        parts.append({"text": rules["language_label"], "kind": "place", "connector": "in"})
+        parts.append({"text": rules["language_label"], "kind": "place", "connector": "in", "field": "language"})
     if rules.get("year_min") or rules.get("year_max"):
-        if rules.get("year_min") and rules.get("year_max"): value, connector = "%s–%s" % (rules["year_min"], rules["year_max"]), "from"
+        if rules.get("year_min") and rules.get("year_max"): value, connector = "%s-%s" % (rules["year_min"], rules["year_max"]), "from"
         elif rules.get("year_min"): value, connector = "%s onwards" % rules["year_min"], "from"
         else: value, connector = "before %s" % rules["year_max"], "released"
-        parts.append({"text": value, "kind": "year", "connector": connector})
-    if rules.get("rating_min"): parts.append({"text": "%.1f+" % float(rules["rating_min"]), "kind": "number", "connector": "rated"})
-    if rules.get("runtime_max"): parts.append({"text": "%d minutes" % int(rules["runtime_max"]), "kind": "runtime", "connector": "under"})
-    elif rules.get("runtime_min"): parts.append({"text": "%d minutes" % int(rules["runtime_min"]), "kind": "runtime", "connector": "over"})
-    if rules.get("avoid_mainstream"): parts.append({"text": "less mainstream", "kind": "genre", "connector": "favouring"})
-    elif rules.get("prefer_blockbusters"): parts.append({"text": "major blockbusters", "kind": "genre", "connector": "favouring"})
+        parts.append({"text": value, "kind": "year", "connector": connector, "field": "year"})
+    if rules.get("rating_min"): parts.append({"text": "%.1f+" % float(rules["rating_min"]), "kind": "number", "connector": "rated", "field": "rating"})
+    if rules.get("runtime_max"): parts.append({"text": "%d minutes" % int(rules["runtime_max"]), "kind": "runtime", "connector": "under", "field": "runtime"})
+    elif rules.get("runtime_min"): parts.append({"text": "%d minutes" % int(rules["runtime_min"]), "kind": "runtime", "connector": "over", "field": "runtime"})
+    if rules.get("avoid_mainstream"): parts.append({"text": "less mainstream", "kind": "genre", "connector": "favouring", "field": "mainstream"})
+    elif rules.get("prefer_blockbusters"): parts.append({"text": "major blockbusters", "kind": "genre", "connector": "favouring", "field": "mainstream"})
+    if rules.get("history_mode") == "stale":
+        days = int(rules.get("history_days") or 0)
+        value = "over %d years ago" % max(1, days // 365) if days >= 365 else "over %d months ago" % max(1, days // 30)
+        parts.append({"text": value, "kind": "year", "connector": "last watched", "field": "history"})
+    elif rules.get("history_mode") == "plays":
+        comparison = {"gt": "more than", "exact": "exactly"}.get(rules.get("history_comparison"), "at least")
+        parts.append({"text": "%s %d times" % (comparison, int(rules.get("history_plays") or 0)), "kind": "number", "connector": "watched", "field": "history"})
+    elif rules.get("history_mode") == "never":
+        parts.append({"text": "before", "kind": "year", "connector": "not watched", "field": "history"})
     return [part for part in parts if part.get("text")]
 
 

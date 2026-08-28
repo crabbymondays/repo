@@ -3,11 +3,11 @@
 Artwork is bundled with the add-on. The user-facing name and canonical Kodi add-on ID are **curatr** and `plugin.video.curatr`.
 
 ## Addon artwork
-- `icon.png` — 512×512 PNG.
-- `fanart.jpg` — branded 1920×1080 artwork for Kodi's add-on information view.
-- `icon_addon_v2.png` and `fanart_addon_v2.jpg` — versioned metadata copies published separately for repository browsing.
-- `resources/media/fanart_menu_clean_v2.jpg` — 1920×1080 unbranded in-menu fanart with clear space for Kodi labels.
-- `resources/media/splash_centered_v2.png` — bright centred 1920×1080 curatr splash artwork matching the main add-on fanart.
+- `icon.png`: 512×512 PNG.
+- `fanart.jpg`: branded 1920×1080 artwork for Kodi's add-on information view.
+- `icon_addon_v2.png` and `fanart_addon_v2.jpg`: versioned metadata copies published separately for repository browsing.
+- `resources/media/fanart_menu_clean_v4.jpg`: 1920×1080 unbranded in-menu fanart with clear space for Kodi labels.
+- `resources/media/splash_centered_v2.png`: bright centred 1920×1080 curatr splash artwork matching the main add-on fanart.
 
 ## Menu icons
 Menu icons live in `resources/media/` as 512×512 transparent PNGs. The global
@@ -17,7 +17,7 @@ colour menu set in `theme_curatr_v2/`.
 Files include:
 - `menu_my_lists.png`
 - `menu_explore.png`
-- `menu_taste.png`
+- Versioned navigation glyphs live under `resources/media/menu_v4/`, including `menu_taste_v2.png` and `menu_privacy.png`.
 - `menu_settings.png`
 - `menu_create.png`
 - `menu_manage.png`
@@ -36,7 +36,7 @@ Files include:
 - `menu_list.png`
 
 ## Global menu fanart
-All navigation items use the same `fanart_menu_clean_v2.jpg`. The abstract
+All navigation items use the selected versioned menu background. The default is `fanart_menu_clean_v4.jpg`. The abstract
 background leaves the normal Kodi label area clear. Menu icons remain separate and
 are never assigned as `thumb` or fanart, preventing skins from enlarging an
 individual glyph into a full-screen background.

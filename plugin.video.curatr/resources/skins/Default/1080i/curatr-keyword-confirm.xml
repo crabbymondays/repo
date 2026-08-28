@@ -29,8 +29,16 @@
             <texture colordiffuse="3DFFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
         </control>
         <control type="label">
-            <left>360</left><top>414</top><width>1200</width><height>42</height>
-            <font>font13</font><textcolor>FFD2CDDA</textcolor><label>LOOKING FOR</label>
+            <left>360</left><top>414</top><width>190</width><height>42</height>
+            <font>font13</font><textcolor>FFD2CDDA</textcolor><label>LOOKING FOR  •</label>
+        </control>
+        <control type="button" id="102">
+            <left>548</left><top>414</top><width>170</width><height>42</height>
+            <font>font13</font><label>EDIT TAGS</label><align>left</align><aligny>center</aligny>
+            <textcolor>FFBDB7C7</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+            <onleft>102</onleft><onright>102</onright><onup>102</onup><ondown>100</ondown>
+            <texturefocus>special://home/addons/plugin.video.curatr/resources/media/keyword_controls_v5/header_action.png</texturefocus>
+            <texturenofocus>special://home/addons/plugin.video.curatr/resources/media/keyword_controls_v5/header_action.png</texturenofocus>
         </control>
         <control type="label" id="12">
             <left>360</left><top>610</top><width>1200</width><height>44</height>
@@ -43,13 +51,15 @@
         </control>
         <control type="button" id="100">
             <left>545</left><top>780</top><width>390</width><height>82</height>
-            <font>font13</font><label>Edit Prompt</label><align>center</align><aligny>center</aligny>
+            <font>font13</font><label>Edit Request</label><align>center</align><aligny>center</aligny>
+            <onup>102</onup><onright>101</onright>
             <texturefocus colordiffuse="FF7653B9">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturefocus>
             <texturenofocus colordiffuse="663B3544">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
         </control>
         <control type="button" id="101">
             <left>985</left><top>780</top><width>390</width><height>82</height>
             <font>font13</font><label>Create List</label><align>center</align><aligny>center</aligny>
+            <onup>102</onup><onleft>100</onleft>
             <texturefocus colordiffuse="FF7653B9">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturefocus>
             <texturenofocus colordiffuse="663B3544">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
         </control>

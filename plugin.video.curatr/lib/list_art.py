@@ -109,7 +109,7 @@ def resolved_sources(addon, record):
 
     fanart = ""
     if state["fanart_mode"] == "default":
-        fanart = _media(addon, "fanart_menu_clean_v2.jpg")
+        fanart = _media(addon, "fanart_menu_clean_v4.jpg")
     elif state["fanart_mode"] in ("item", "person", "custom"):
         fanart = state["fanart_source"]
     else:
@@ -126,10 +126,10 @@ def summary(record):
     state = normalise_state(record.get("artwork"))
     automatic = suggest_key(record.get("name"), record.get("prompt"))
     if state["icon_mode"] == "auto":
-        icon = "Automatic (%s — White)" % label(automatic)
+        icon = "Automatic (%s: White)" % label(automatic)
     elif state["icon_mode"] == "bundled":
         style = "Genre Colours" if state["icon_style"] == "genre_colours" else "White"
-        icon = "%s — %s" % (label(state["icon_key"]), style)
+        icon = "%s: %s" % (label(state["icon_key"]), style)
     elif state["icon_mode"] == "custom" and state["icon_label"]:
         icon = state["icon_label"]
     else:

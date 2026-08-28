@@ -23,6 +23,7 @@ BASE_URL = sys.argv[0]
 HANDLE = int(sys.argv[1])
 ADDON_PATH = xbmcvfs.translatePath(ADDON.getAddonInfo("path"))
 MEDIA_PATH = os.path.join(ADDON_PATH, "resources", "media")
+MENU_BACKGROUND_STYLE = "0"
 
 
 def _loc(string_id, fallback):
@@ -57,10 +58,64 @@ def _safe_int(value, default=0):
         return default
 
 
+def _relative_time(timestamp, verb="Refreshed"):
+    value = _safe_int(timestamp, 0)
+    if not value:
+        return "Not refreshed yet" if verb == "Refreshed" else "Not updated yet"
+    seconds = max(0, int(time.time()) - value)
+    if seconds < 90:
+        return "%s just now" % verb
+    minutes = seconds // 60
+    if minutes < 60:
+        return "%s %d minute%s ago" % (verb, minutes, "" if minutes == 1 else "s")
+    hours = seconds // 3600
+    if hours < 24:
+        return "%s %d hour%s ago" % (verb, hours, "" if hours == 1 else "s")
+    days = seconds // 86400
+    if days == 1:
+        return "%s yesterday" % verb
+    if days < 14:
+        return "%s %d days ago" % (verb, days)
+    weeks = max(2, days // 7)
+    if weeks < 9:
+        return "%s %d weeks ago" % (verb, weeks)
+    months = max(2, days // 30)
+    return "%s %d months ago" % (verb, months)
+
+
+def _summary_plot(summary, description=""):
+    summary = str(summary or "").strip()
+    description = str(description or "").strip()
+    return "%s\n\n%s" % (summary, description) if description else summary
+
+
+def _list_metadata(record):
+    movies = [row for row in record.get("movies", []) if isinstance(row, dict)]
+    count = len(movies) or _safe_int(record.get("last_result_count"), 0)
+    method = "Keyword Matching" if str(record.get("generation_method") or "ai").lower() == "keyword" else "Personalised"
+    summary = "%d film%s • %s • %s" % (
+        count, "" if count == 1 else "s", method,
+        _relative_time(record.get("updated_at"), "Refreshed"),
+    )
+    description = str(record.get("description") or "").strip()
+    return summary, _summary_plot(summary, description)
+
+
+def _folder_metadata(folder):
+    count = len([row for row in folder.get("entries", []) if isinstance(row, dict)])
+    summary = "%d item%s • %s" % (
+        count, "" if count == 1 else "s", _relative_time(folder.get("updated_at"), "Updated"),
+    )
+    return summary, _summary_plot(summary, folder.get("description"))
+
+
 def _existing_art(filename):
     if not filename:
         return ""
-    path = os.path.join(MEDIA_PATH, filename)
+    # Menu glyphs live in a versioned directory so Kodi/Xbox cannot reuse a
+    # stale texture merely because a published filename stayed the same.
+    relative = os.path.join("menu_v4", filename) if str(filename).startswith("menu_") else filename
+    path = os.path.join(MEDIA_PATH, relative)
     return path if xbmcvfs.exists(path) else ""
 
 
@@ -68,14 +123,14 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
     # Keep navigation glyphs as item icons while every menu entry uses the
     # same restrained global background. Never promote an icon or per-menu
     # image to fanart: many TV skins display that artwork full-screen.
-    background_style = str(ADDON.getSetting("menu_background_style") or "0")
+    background_style = str(MENU_BACKGROUND_STYLE or "0")
     icon = _existing_art(icon_name)
 
     background_names = {
-        "0": "fanart_menu_clean_v2.jpg",
-        "1": "background_1_v2.jpg",
-        "2": "background_2_v2.jpg",
-        "3": "background_3_v2.jpg",
+        "0": "fanart_menu_clean_v4.jpg",
+        "1": "background_1_v4.jpg",
+        "2": "background_2_v4.jpg",
+        "3": "background_3_v4.jpg",
     }
     fanart = _existing_art(background_names.get(background_style, background_names["0"]))
 
@@ -98,10 +153,13 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
             pass
 
 
-def _add_folder(label, action, plot="", context_items=None, icon_name="", fanart_name="", art=None, **params):
+def _add_folder(label, action, plot="", context_items=None, icon_name="", fanart_name="", art=None, tagline="", **params):
     item = xbmcgui.ListItem(label=label, offscreen=True)
     try:
-        item.setInfo("video", {"title": label, "plot": plot or ""})
+        info = {"title": label, "plot": plot or ""}
+        if tagline:
+            info["tagline"] = tagline
+        item.setInfo("video", info)
     except Exception:
         pass
     try:
@@ -109,6 +167,8 @@ def _add_folder(label, action, plot="", context_items=None, icon_name="", fanart
         tag.setTitle(label)
         if plot:
             tag.setPlot(plot)
+        if tagline:
+            tag.setTagLine(tagline)
     except Exception:
         pass
     _apply_menu_art(item, icon_name, fanart_name, custom_art=art)
@@ -134,7 +194,10 @@ def _add_action(label, command, plot="", icon_name="", fanart_name=""):
     except Exception:
         pass
     _apply_menu_art(item, icon_name, fanart_name)
-    xbmcplugin.addDirectoryItem(HANDLE, _url(action="run", command=command), item, isFolder=False)
+    # These rows open dialogs or perform commands; they are navigation items,
+    # not playable videos. This prevents Kodi adding Play, Queue and watched
+    # actions to Settings and similar controls.
+    xbmcplugin.addDirectoryItem(HANDLE, _url(action="run", command=command), item, isFolder=True)
 
 
 def _managed_records(curator):
@@ -177,18 +240,18 @@ def _root(curator):
     )
     _add_folder(
         _loc(32412, "Preferences & Activity"), "taste_activity",
-        _loc(32416, "Your preferences, Trakt connection, AI usage and recent activity."),
-        icon_name="menu_taste.png", fanart_name="fanart_taste.jpg",
+        _loc(32416, "View your preferences, connections, usage and recent activity."),
+        icon_name="menu_taste_v2.png", fanart_name="fanart_taste.jpg",
     )
     _add_action(
         _loc(32413, "Settings"), "settings",
-        _loc(32417, "Choose your AI provider, Trakt setup, defaults and notifications."),
-        icon_name="menu_manage.png", fanart_name="fanart_settings.jpg",
+        _loc(32417, "Set up services, defaults, appearance and notifications."),
+        icon_name="menu_settings.png", fanart_name="fanart_settings.jpg",
     )
     _add_action(
         _loc(32640, "Privacy & Data"), "privacy",
         _loc(32641, "See what curatr stores locally and what optional services receive."),
-        icon_name="menu_settings.png", fanart_name="fanart_settings.jpg",
+        icon_name="menu_privacy.png", fanart_name="fanart_settings.jpg",
     )
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
@@ -198,9 +261,9 @@ def _my(curator):
     _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_list.png", fanart_name="fanart_my_lists.jpg")
     _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create.png", fanart_name="fanart_create.jpg")
     _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png", fanart_name="fanart_my_lists.jpg")
-    _add_folder("Widget Folders", "folders", "Group curatr lists and direct plugin shortcuts into lightweight, customisable widget folders.", icon_name="menu_widget_folders.png")
+    _add_folder("Folders", "folders", "Organise lists and shortcuts into custom folders for browsing or widgets.", icon_name="menu_widget_folders.png")
     _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Refresh every saved list using its chosen creation method."), icon_name="menu_refresh.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden movies and Widget Folders."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
+    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden movies and folders."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -210,7 +273,7 @@ def _explore(curator):
     _add_action(_loc(32431, "Saved Prompts"), "templates", _loc(32434, "Reuse and manage prompts you have saved for later."), icon_name="menu_templates.png", fanart_name="fanart_explore.jpg")
     _add_folder("All Picks", "all", "Browse recommendations from all your current lists.", icon_name="menu_all.png", fanart_name="fanart_explore.jpg")
     _add_folder("Latest Picks", "fresh", "See recommendations from the list refreshed most recently.", icon_name="menu_fresh.png", fanart_name="fanart_explore.jpg")
-    _add_folder("Surprise Me", "random", "Browse a different selection from your current lists.", icon_name="menu_random.png", fanart_name="fanart_explore.jpg", limit="10")
+    _add_folder("Surprise Me", "random", "Browse a random selection from your lists.", icon_name="menu_random.png", fanart_name="fanart_explore.jpg", limit="10")
     _add_action(_loc(32432, "Hidden Movies"), "hidden", _loc(32435, "Review movies you have asked curatr not to recommend."), icon_name="menu_hidden.png", fanart_name="fanart_explore.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
@@ -218,11 +281,11 @@ def _explore(curator):
 def _taste_activity(curator):
     xbmcplugin.setPluginCategory(HANDLE, _loc(32412, "Preferences & Activity"))
     _add_action(_loc(32440, "Refresh Preferences"), "sync", _loc(32446, "Update the ratings and watch history curatr uses."), icon_name="menu_refresh.png", fanart_name="fanart_taste.jpg")
-    _add_action(_loc(32441, "View My Preferences"), "taste", _loc(32447, "See the information curatr uses when choosing recommendations."), icon_name="menu_taste.png", fanart_name="fanart_taste.jpg")
-    _add_action(_loc(32442, "AI Usage"), "usage", _loc(32448, "See request and token totals reported by your AI provider."), icon_name="menu_usage.png", fanart_name="fanart_info.jpg")
-    _add_action(_loc(32443, "Recent Activity"), "activity", _loc(32449, "See recent list refreshes, Trakt updates and errors."), icon_name="menu_activity.png", fanart_name="fanart_info.jpg")
+    _add_action(_loc(32441, "View My Preferences"), "taste", _loc(32447, "See the information curatr uses when choosing recommendations."), icon_name="menu_taste_v2.png", fanart_name="fanart_taste.jpg")
+    _add_action(_loc(32442, "AI Usage"), "usage", _loc(32448, "See usage statistics reported by your AI provider."), icon_name="menu_usage.png", fanart_name="fanart_info.jpg")
+    _add_action(_loc(32443, "Recent Activity"), "activity", _loc(32449, "See recent actions, updates and errors."), icon_name="menu_activity.png", fanart_name="fanart_info.jpg")
     _add_action(_loc(32444, "Check Trakt Connection"), "status", _loc(32450, "Check the Trakt account or public profile currently in use."), icon_name="menu_trakt.png", fanart_name="fanart_trakt.jpg")
-    _add_action(_loc(32445, "Connect / Reconnect Trakt"), "auth", _loc(32451, "Link curatr to Trakt when you want it to write Trakt lists directly."), icon_name="menu_trakt.png", fanart_name="fanart_trakt.jpg")
+    _add_action(_loc(32445, "Connect / Reconnect Trakt"), "auth", _loc(32451, "Opens an activation window to link your Trakt account."), icon_name="menu_trakt.png", fanart_name="fanart_trakt.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -237,51 +300,46 @@ def _lists(curator):
             if not local_id:
                 continue
             name = str(record.get("name") or "curatr list")
-            plot = str(record.get("description") or "").strip()
-            if not plot:
-                plot = "A personalised curatr list. Add a description in List settings."
+            tagline, plot = _list_metadata(record)
             context = [
                 ("Refresh this list", _plugin_command("refresh_list", list_id=local_id)),
                 ("Sync to Trakt", _plugin_command("sync_list", list_id=local_id)),
                 ("Use contents as AI reference", _plugin_command("create_related_local", list_id=local_id)),
-                ("List settings", _plugin_command("edit_list", list_id=local_id)),
+                ("Add to Folder", _plugin_command("folder_add_list", list_id=local_id)),
                 ("Artwork", _plugin_command("artwork_list", list_id=local_id)),
-                ("Add to Widget Folder", _plugin_command("folder_add_list", list_id=local_id)),
+                ("List settings", _plugin_command("edit_list", list_id=local_id)),
                 ("Delete this list", _plugin_command("delete_list", list_id=local_id)),
             ]
             _add_folder(
                 name, "list", plot=plot, context_items=context,
                 icon_name="menu_list.png", fanart_name="fanart_my_lists.jpg",
-                art=_record_art(curator, record),
+                art=_record_art(curator, record), tagline=tagline,
                 list_id=local_id, name=name
             )
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
 def _folders(curator):
-    xbmcplugin.setPluginCategory(HANDLE, "Widget Folders")
+    xbmcplugin.setPluginCategory(HANDLE, "Folders")
     folders = curator.widget_folders()
-    _add_action("Create a Widget Folder", "folder_create", "Create a lightweight folder for curatr lists, linked account lists and external plugin shortcuts.", icon_name="menu_add_folder.png")
+    _add_action("Create a Folder", "folder_create", "Create a fully customisable folder for your lists. Supported sources include curatr, Kodi Library, Trakt, MDBList and add-on paths.", icon_name="menu_add_folder.png")
     if folders:
         for folder in folders:
             folder_id = str(folder.get("id") or "")
             if not folder_id:
                 continue
-            name = str(folder.get("name") or "Widget Folder")
-            plot = str(folder.get("description") or "").strip() or "A custom curatr Widget Folder."
+            name = str(folder.get("name") or "Folder")
+            tagline, plot = _folder_metadata(folder)
             context = [
-                ("Manage folder", _plugin_command("folder_manage", folder_id=folder_id)),
-                ("Add a curatr list", _plugin_command("folder_add_list_to", folder_id=folder_id)),
-                ("Add from Trakt", _plugin_command("folder_add_trakt", folder_id=folder_id)),
-                ("Add from MDBList", _plugin_command("folder_add_mdblist", folder_id=folder_id)),
-                ("Add an external shortcut", _plugin_command("folder_add_path", folder_id=folder_id)),
-                ("Import Kodi Favourite", _plugin_command("folder_import_favourite", folder_id=folder_id)),
+                ("Artwork", _plugin_command("folder_artwork", folder_id=folder_id)),
+                ("Folder settings", _plugin_command("folder_manage", folder_id=folder_id)),
+                ("Delete folder", _plugin_command("folder_delete", folder_id=folder_id)),
             ]
             _add_folder(
                 name, "folder", plot=plot, context_items=context,
-                art=_record_art(curator, folder), folder_id=folder_id,
+                art=_record_art(curator, folder), tagline=tagline, folder_id=folder_id,
             )
-        _add_action("Manage Widget Folders", "folders_manage", "Create, edit, reorder or delete Widget Folders.", icon_name="menu_manage.png")
+        _add_action("Manage Folders", "folders_manage", "Create, edit, reorder or delete folders.", icon_name="menu_manage.png")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -290,7 +348,7 @@ def _add_external_shortcut(curator, folder, entry):
     if not path:
         return False
     name = str(entry.get("name") or "External Shortcut")
-    plot = str(entry.get("description") or "").strip() or "Opens the original Kodi add-on path directly."
+    plot = str(entry.get("description") or "").strip() or "Opens the specified path directly."
     item = xbmcgui.ListItem(label=name, offscreen=True)
     try:
         item.setInfo("video", {"title": name, "plot": plot})
@@ -309,8 +367,9 @@ def _add_external_shortcut(curator, folder, entry):
         available = True
     try:
         item.addContextMenuItems([
-            ("Edit shortcut", _plugin_command("folder_edit_entry", folder_id=folder_id, entry_id=entry_id)),
-            ("Manage folder", _plugin_command("folder_manage", folder_id=folder_id)),
+            ("Artwork", _plugin_command("folder_entry_artwork", folder_id=folder_id, entry_id=entry_id)),
+            ("Shortcut settings", _plugin_command("folder_edit_entry", folder_id=folder_id, entry_id=entry_id)),
+            ("Remove from folder", _plugin_command("folder_remove_entry", folder_id=folder_id, entry_id=entry_id)),
         ])
     except Exception:
         pass
@@ -324,7 +383,16 @@ def _add_provider_list_folder(curator, folder, entry):
         return False
     name = str(entry.get("name") or ("Trakt list" if provider == "trakt" else "MDBList list"))
     service = "Trakt" if provider == "trakt" else "MDBList"
-    plot = str(entry.get("description") or "").strip() or "Linked directly to your %s account." % service
+    cache_key = curator._provider_cache_key(provider, entry.get("provider_list_id"))
+    cached = (curator.state.get("linked_list_cache") or {}).get(cache_key) or {}
+    cached_movies = cached.get("movies") if isinstance(cached, dict) else []
+    count = len(cached_movies) if isinstance(cached_movies, list) and cached_movies else _safe_int(entry.get("item_count"), 0)
+    tagline = "%d film%s • %s • %s" % (
+        count, "" if count == 1 else "s", service,
+        _relative_time(cached.get("cached_at"), "Refreshed"),
+    )
+    description = str(entry.get("description") or "").strip() or "Linked directly to your %s account." % service
+    plot = _summary_plot(tagline, description)
     folder_id = str(folder.get("id") or "")
     entry_id = str(entry.get("id") or "")
     context = [
@@ -332,12 +400,13 @@ def _add_provider_list_folder(curator, folder, entry):
             action="linked_list", folder_id=folder_id, entry_id=entry_id, force="1",
         )),
         ("Use contents as AI reference", _plugin_command("create_related_provider", folder_id=folder_id, entry_id=entry_id)),
-        ("Manage folder item", _plugin_command("folder_edit_entry", folder_id=folder_id, entry_id=entry_id)),
-        ("Manage folder", _plugin_command("folder_manage", folder_id=folder_id)),
+        ("Artwork", _plugin_command("folder_entry_artwork", folder_id=folder_id, entry_id=entry_id)),
+        ("Item settings", _plugin_command("folder_edit_entry", folder_id=folder_id, entry_id=entry_id)),
+        ("Remove from folder", _plugin_command("folder_remove_entry", folder_id=folder_id, entry_id=entry_id)),
     ]
     _add_folder(
         name, "linked_list", plot=plot, context_items=context,
-        art=_record_art(curator, entry), folder_id=folder_id, entry_id=entry_id,
+        art=_record_art(curator, entry), tagline=tagline, folder_id=folder_id, entry_id=entry_id,
     )
     return True
 
@@ -345,8 +414,8 @@ def _add_provider_list_folder(curator, folder, entry):
 def _folder(curator, params):
     folder = curator.widget_folder_by_id(params.get("folder_id"))
     if not folder:
-        raise RuntimeError("That Widget Folder no longer exists.")
-    xbmcplugin.setPluginCategory(HANDLE, str(folder.get("name") or "Widget Folder"))
+        raise RuntimeError("That folder no longer exists.")
+    xbmcplugin.setPluginCategory(HANDLE, str(folder.get("name") or "Folder"))
     added = 0
     for entry in folder.get("entries", []):
         if not isinstance(entry, dict):
@@ -357,20 +426,22 @@ def _folder(curator, params):
                 continue
             local_id = curator._record_key(record)
             name = str(record.get("name") or "curatr list")
-            plot = str(record.get("description") or "").strip() or "A personalised curatr list."
+            tagline, plot = _list_metadata(record)
             context = [
+                ("Refresh this list", _plugin_command("refresh_list", list_id=local_id)),
                 ("List settings", _plugin_command("edit_list", list_id=local_id)),
                 ("Use contents as AI reference", _plugin_command("create_related_local", list_id=local_id)),
-                ("Manage folder item", _plugin_command("folder_edit_entry", folder_id=str(folder.get("id") or ""), entry_id=str(entry.get("id") or ""))),
+                ("Artwork", _plugin_command("artwork_list", list_id=local_id)),
+                ("Remove from folder", _plugin_command("folder_remove_entry", folder_id=str(folder.get("id") or ""), entry_id=str(entry.get("id") or ""))),
             ]
-            _add_folder(name, "list", plot=plot, context_items=context, art=_record_art(curator, record), list_id=local_id, name=name)
+            _add_folder(name, "list", plot=plot, context_items=context, art=_record_art(curator, record), tagline=tagline, list_id=local_id, name=name)
             added += 1
         elif entry.get("type") == "external_path" and _add_external_shortcut(curator, folder, entry):
             added += 1
         elif entry.get("type") == "provider_list" and _add_provider_list_folder(curator, folder, entry):
             added += 1
     if not added:
-        _add_folder("Manage this folder", "folder_manage", "Add a curatr list or browse an external add-on path.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
+        _add_folder("Manage this folder", "folder_manage", "Add items to this folder.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -621,14 +692,11 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
         if recommendation_actions:
             context.extend([
                 ("Why this pick?", "RunPlugin(%s)" % why_url),
-                ("Never recommend this", "RunPlugin(%s)" % hide_url),
+                ("Hide Movie", "RunPlugin(%s)" % hide_url),
             ])
         if list_id:
             refresh_url = _url(action="refresh_list", list_id=str(list_id))
             context.append(("Refresh this list", "RunPlugin(%s)" % refresh_url))
-        if trakt_id:
-            context.append(("Movie details", "RunPlugin(%s)" % info_url))
-        context.append(("curatr settings", _plugin_command("run", command="settings")))
         item.addContextMenuItems(context)
     except Exception as exc:
         xbmc.log("curatr context menu skipped: %s" % exc, xbmc.LOGDEBUG)
@@ -698,9 +766,9 @@ def _render_movies(curator, rows, category):
             xbmc.log("curatr movie row skipped: %s" % exc, xbmc.LOGWARNING)
 
     if not rows:
-        _add_action("No picks are currently in this view", "update", "Refresh your lists, then refresh this folder.")
+        _add_action("No items to show", "update", "Refresh your lists, then refresh this folder.")
     elif not added:
-        _add_action("Picks could not be displayed", "update", "The local list exists. Refresh it, or check Recent Activity for details.")
+        _add_action("Items could not be displayed", "update", "The local list exists. Refresh it, or check Recent Activity for details.")
 
     # Sort constants vary slightly between Kodi builds/platforms.  In
     # particular, some Kodi 21 builds expose SORT_METHOD_VIDEO_YEAR but not
@@ -786,6 +854,7 @@ def _run_command(curator, command):
         "test_mdblist": curator.test_mdblist_interactive,
         "choose_mdblist_lists": curator.choose_mdblist_lists_interactive,
         "privacy": curator.show_privacy_and_data,
+        "choose_menu_background": curator.choose_menu_background_interactive,
     }
     function = actions.get(command)
     if not function:
@@ -816,18 +885,24 @@ def _info(curator, params):
     ids = movie.get("ids") or {}
     pieces.append(
         "Trakt: %s\nTMDb: %s\nIMDb: %s"
-        % (ids.get("trakt") or "—", ids.get("tmdb") or "—", ids.get("imdb") or "—")
+        % (ids.get("trakt") or "Not available", ids.get("tmdb") or "Not available", ids.get("imdb") or "Not available")
     )
     xbmcgui.Dialog().textviewer(heading, "\n\n".join(pieces))
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
 def main():
+    global MENU_BACKGROUND_STYLE
     params = _params()
     action = params.get("action") or "root"
     curator = None
     try:
         curator = Curator(ADDON)
+        MENU_BACKGROUND_STYLE = str(
+            curator.state.get("menu_background_style")
+            or ADDON.getSetting("menu_background_style")
+            or "0"
+        )
         before = list_signature(curator.state)
         if action == "root":
             curator.maybe_show_first_run()
@@ -846,6 +921,14 @@ def main():
             _folder(curator, params)
         elif action == "folder_manage":
             curator.manage_widget_folder_interactive(params.get("folder_id") or "")
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
+        elif action == "folder_artwork":
+            curator.edit_widget_folder_artwork_interactive(params.get("folder_id") or "")
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
+        elif action == "folder_delete":
+            curator.delete_widget_folder_interactive(params.get("folder_id") or "")
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
             refresh_if_changed(before, curator.state)
         elif action == "folder_add_list":
@@ -874,6 +957,18 @@ def main():
             refresh_if_changed(before, curator.state)
         elif action == "folder_edit_entry":
             curator.edit_widget_folder_entry_interactive(
+                params.get("folder_id") or "", params.get("entry_id") or ""
+            )
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
+        elif action == "folder_entry_artwork":
+            curator.edit_widget_folder_entry_artwork_interactive(
+                params.get("folder_id") or "", params.get("entry_id") or ""
+            )
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
+        elif action == "folder_remove_entry":
+            curator.remove_widget_folder_entry_interactive(
                 params.get("folder_id") or "", params.get("entry_id") or ""
             )
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)

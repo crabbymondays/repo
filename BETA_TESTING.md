@@ -89,6 +89,12 @@ Please test on Kodi 21 Omega where possible.
 - List rename, description, prompt, artwork, refresh and deletion
 - Home-screen widget refresh after every list change
 - Create, edit, reorder and delete Widget Folders
+- Focus list widgets and confirm the summary shows film count, creation method and a relative refresh time
+- Confirm list context menus keep Artwork and Delete while List Settings does not repeat them
+- Confirm folder context menus contain Artwork, Folder settings and Delete folder without repeating every add action
+- For a Trakt/MDBList entry and a compatible external plug-in path, open Artwork and try Choose fanart from contents
+- Open Settings > Appearance > Choose Menu Background and confirm the visual landscape grid changes the menu background
+- Try `Films by Christopher Nolan with Cillian Murphy in` and confirm separate director and actor tags appear
 - Confirm Widget Folders and Create a Widget Folder use their dedicated icons
 - Add curatr lists and direct external `plugin://` shortcuts to folders
 - Browse an installed video add-on, move through its folders and use Choose This Path

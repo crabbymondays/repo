@@ -47,7 +47,7 @@ msgid "Maximum number of rating and viewing entries kept locally from each enabl
 msgstr ""
 
 msgctxt "#32020"
-msgid "Strong-like rating (1–10)"
+msgid "Strong-like rating (1-10)"
 msgstr ""
 
 msgctxt "#32021"
@@ -493,11 +493,11 @@ msgid "Quick picks, saved prompts and more ways to browse recommendations."
 msgstr ""
 
 msgctxt "#32416"
-msgid "Your preferences, linked account status, usage and recent activity."
+msgid "View your preferences, connections, usage and recent activity."
 msgstr ""
 
 msgctxt "#32417"
-msgid "Choose services, metadata, linked accounts, defaults and notifications."
+msgid "Set up services, defaults, appearance and notifications."
 msgstr ""
 
 msgctxt "#32418"
@@ -537,7 +537,7 @@ msgid "Find fresh recommendations for all your saved lists."
 msgstr ""
 
 msgctxt "#32427"
-msgid "Save or restore a backup of your lists, prompts, hidden movies and Widget Folders."
+msgid "Save or restore a backup of your lists, prompts, hidden movies and folders."
 msgstr ""
 
 msgctxt "#32430"
@@ -617,11 +617,11 @@ msgid "See the information curatr uses when choosing recommendations."
 msgstr ""
 
 msgctxt "#32448"
-msgid "See how many AI requests and tokens curatr has used."
+msgid "See usage statistics reported by your AI provider."
 msgstr ""
 
 msgctxt "#32449"
-msgid "See recent list updates and any problems."
+msgid "See recent actions, updates and errors."
 msgstr ""
 
 msgctxt "#32450"
@@ -629,7 +629,7 @@ msgid "Check which Trakt account is connected."
 msgstr ""
 
 msgctxt "#32451"
-msgid "Link curatr to Trakt when you want it to write Trakt lists directly."
+msgid "Opens an activation window to link your Trakt account."
 msgstr ""
 
 msgctxt "#32490"
@@ -645,11 +645,11 @@ msgid "Choose how curatr menus look. These options do not change artwork assigne
 msgstr ""
 
 msgctxt "#32606"
-msgid "Menu Background"
+msgid "Choose Menu Background"
 msgstr ""
 
 msgctxt "#32607"
-msgid "Choose the background shown while browsing curatr menus."
+msgid "Open a visual picker for the background shown while browsing curatr menus."
 msgstr ""
 
 msgctxt "#32608"
