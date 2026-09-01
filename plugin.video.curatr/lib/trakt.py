@@ -82,10 +82,14 @@ class TraktClient:
         )
 
     def _request_raw(self, method, url, path_label, **kwargs):
-        try:
-            return self.session.request(method, url, timeout=30, **kwargs)
-        except requests.RequestException as exc:
-            raise TraktError("Could not contact Trakt: %s" % exc, path=path_label)
+        attempts = 3 if str(method).upper() == "GET" else 1
+        for attempt in range(attempts):
+            try:
+                return self.session.request(method, url, timeout=30, **kwargs)
+            except requests.RequestException as exc:
+                if attempt + 1 >= attempts:
+                    raise TraktError("Could not contact Trakt: %s" % exc, path=path_label)
+                time.sleep(0.35 * (2 ** attempt))
 
     def _token_expiring(self):
         access_token = self.token_store.get("access_token")
@@ -207,15 +211,29 @@ class TraktClient:
         # Minimal/default metadata is sufficient for taste analysis and saves bandwidth.
         return self._paged("/users/me/ratings/movies", limit, extended=False, auth=True)
 
+    def ratings_shows(self, limit=300):
+        return self._paged("/users/me/ratings/shows", limit, extended=False, auth=True)
+
     def watched_movies(self, limit=300):
         return self._paged("/users/me/watched/movies", limit, extended=False, auth=True)
+
+    def watched_shows(self, limit=300):
+        return self._paged("/users/me/watched/shows", limit, extended=False, auth=True)
 
     def ratings_movies_for_user(self, username, limit=300):
         path = "/users/%s/ratings/movies" % quote(str(username), safe="")
         return self._paged(path, limit, extended=False, auth=False)
 
+    def ratings_shows_for_user(self, username, limit=300):
+        path = "/users/%s/ratings/shows" % quote(str(username), safe="")
+        return self._paged(path, limit, extended=False, auth=False)
+
     def watched_movies_for_user(self, username, limit=300):
         path = "/users/%s/watched/movies" % quote(str(username), safe="")
+        return self._paged(path, limit, extended=False, auth=False)
+
+    def watched_shows_for_user(self, username, limit=300):
+        path = "/users/%s/watched/shows" % quote(str(username), safe="")
         return self._paged(path, limit, extended=False, auth=False)
 
     def movie_people(self, trakt_id):
@@ -229,9 +247,29 @@ class TraktClient:
             params["years"] = int(year)
         return self.request("GET", "/search/movie", auth=False, params=params)
 
+    def search_shows(self, query, year=None):
+        params = {"query": query, "extended": "full"}
+        if year:
+            params["years"] = int(year)
+        return self.request("GET", "/search/show", auth=False, params=params)
+
+    def search_tmdb(self, tmdb_id, media_type="movie"):
+        kind = "show" if media_type == "show" else "movie"
+        data = self.request(
+            "GET", "/search/tmdb/%s" % quote(str(tmdb_id), safe=""),
+            auth=False, params={"type": kind},
+        )
+        return data if isinstance(data, list) else []
+
     def movie_summary(self, trakt_id):
         return self.request(
             "GET", "/movies/%s" % quote(str(trakt_id), safe=""),
+            auth=False, params={"extended": "full"}
+        )
+
+    def show_summary(self, trakt_id):
+        return self.request(
+            "GET", "/shows/%s" % quote(str(trakt_id), safe=""),
             auth=False, params={"extended": "full"}
         )
 
@@ -271,8 +309,9 @@ class TraktClient:
             "/users/me/lists/%s" % quote(str(list_id), safe=""),
         )
 
-    def list_items(self, list_id, limit=5000, extended=False):
-        path = "/users/me/lists/%s/items/movie" % quote(str(list_id), safe="")
+    def list_items(self, list_id, limit=5000, extended=False, media_type="all"):
+        item_type = media_type if media_type in ("movies", "shows") else "all"
+        path = "/users/me/lists/%s/items/%s" % (quote(str(list_id), safe=""), item_type)
         return self._paged(path, limit, extended=extended, auth=True)
 
     def add_movies(self, list_id, trakt_ids):
@@ -293,6 +332,24 @@ class TraktClient:
             "POST",
             "/users/me/lists/%s/items/remove" % quote(str(list_id), safe=""),
             json={"movies": [{"ids": {"trakt": item_id}} for item_id in ids]},
+        )
+
+    def add_shows(self, list_id, trakt_ids):
+        ids = self._unique_int_ids(trakt_ids)
+        if not ids:
+            return {}
+        return self.request(
+            "POST", "/users/me/lists/%s/items" % quote(str(list_id), safe=""),
+            json={"shows": [{"ids": {"trakt": item_id}} for item_id in ids]},
+        )
+
+    def remove_shows(self, list_id, trakt_ids):
+        ids = self._unique_int_ids(trakt_ids)
+        if not ids:
+            return {}
+        return self.request(
+            "POST", "/users/me/lists/%s/items/remove" % quote(str(list_id), safe=""),
+            json={"shows": [{"ids": {"trakt": item_id}} for item_id in ids]},
         )
 
     @staticmethod

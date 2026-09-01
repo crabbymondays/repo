@@ -164,6 +164,44 @@
                 </setting>
             </group>
         </category>
+        <category id="playback" label="32700" help="32701">
+            <group id="1" label="32702">
+                <setting id="movie_player_status" type="string" label="32703" help="32704">
+                    <level>0</level><default>Automatic</default><enable>false</enable>
+                    <constraints><allowempty>false</allowempty></constraints>
+                    <control type="edit" format="string"><heading>32703</heading></control>
+                </setting>
+                <setting id="choose_movie_player" type="action" label="32705" help="32706">
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_movie_player)</data>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
+            </group>
+            <group id="2" label="32707">
+                <setting id="show_player_status" type="string" label="32708" help="32709">
+                    <level>0</level><default>Automatic</default><enable>false</enable>
+                    <constraints><allowempty>false</allowempty></constraints>
+                    <control type="edit" format="string"><heading>32708</heading></control>
+                </setting>
+                <setting id="choose_show_player" type="action" label="32710" help="32711">
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_show_player)</data>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
+            </group>
+            <group id="3" label="32712">
+                <setting id="community_players_url" type="string" label="32713" help="32714">
+                    <level>1</level><default>https://codeload.github.com/slrwin/tmdbh.players/zip/refs/heads/master</default>
+                    <constraints><allowempty>false</allowempty></constraints>
+                    <control type="edit" format="string"><heading>32713</heading></control>
+                </setting>
+                <setting id="install_community_players" type="action" label="32715" help="32716">
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=install_community_players)</data>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
+            </group>
+        </category>
         <category id="trakt" label="32010" help="32011">
             <group id="1" label="32012">
                 <setting id="trakt_status" type="string" label="32024" help="32025">
@@ -359,6 +397,43 @@
                     <level>0</level>
                     <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_menu_background)</data>
                     <control type="button" format="action"><close>true</close></control>
+                </setting>
+            </group>
+        </category>
+        <category id="context_menu" label="32800" help="32801">
+            <group id="1">
+                <setting id="context_menu_enabled" type="boolean" label="32802" help="32803">
+                    <level>0</level><default>true</default><control type="toggle" />
+                </setting>
+            </group>
+            <group id="2" label="32804">
+                <setting id="context_add_to_list" type="boolean" label="32805" help="32806">
+                    <level>0</level><default>true</default>
+                    <dependencies><dependency type="enable" setting="context_menu_enabled">true</dependency></dependencies>
+                    <control type="toggle" />
+                </setting>
+                <setting id="context_add_to_folder" type="boolean" label="32807" help="32808">
+                    <level>0</level><default>true</default>
+                    <dependencies><dependency type="enable" setting="context_menu_enabled">true</dependency></dependencies>
+                    <control type="toggle" />
+                </setting>
+                <setting id="context_find_similar" type="boolean" label="32809" help="32810">
+                    <level>0</level><default>true</default>
+                    <dependencies><dependency type="enable" setting="context_menu_enabled">true</dependency></dependencies>
+                    <control type="toggle" />
+                </setting>
+            </group>
+            <group id="3" label="32811">
+                <setting id="context_similar_method" type="string" label="32812" help="32813">
+                    <level>0</level><default>keyword</default>
+                    <constraints><options><option label="32814">keyword</option><option label="32815">ai</option></options></constraints>
+                    <dependencies><dependency type="enable" setting="context_find_similar">true</dependency></dependencies>
+                    <control type="spinner" format="string" />
+                </setting>
+                <setting id="context_similar_count" type="integer" label="32816" help="32817">
+                    <level>0</level><default>20</default><constraints><minimum>5</minimum><step>1</step><maximum>50</maximum></constraints>
+                    <dependencies><dependency type="enable" setting="context_find_similar">true</dependency></dependencies>
+                    <control type="edit" format="integer"><heading>32816</heading></control>
                 </setting>
             </group>
         </category>

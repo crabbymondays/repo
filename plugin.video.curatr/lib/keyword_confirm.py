@@ -34,19 +34,21 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
     FILTER_EDIT_ID = 102
     PLUS_ID = 1900
 
-    def __new__(cls, addon_path, prompt, rules, footer):
+    def __new__(cls, addon_path, prompt, rules, footer, edit_existing=False):
         return super().__new__(cls, "curatr-keyword-confirm.xml", addon_path, "Default", "1080i")
 
-    def __init__(self, addon_path, prompt, rules, footer):
+    def __init__(self, addon_path, prompt, rules, footer, edit_existing=False):
         self.addon_path = addon_path
         self.prompt = str(prompt or "")
         self.rules = dict(rules or {})
         self.footer = str(footer or "")
+        self.edit_existing = bool(edit_existing)
         self.result = None
         self.edit_mode = False
         self.dynamic_controls = []
         self.filter_groups = []
         self.control_actions = {}
+        self.action_controls = {}
 
     @staticmethod
     def _text_width(text, chip=False):
@@ -64,6 +66,7 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         self.dynamic_controls = []
         self.filter_groups = []
         self.control_actions = {}
+        self.action_controls = {}
 
     def _add_label(self, x, y, width, text, colour="0xFFD7D3DF"):
         control = xbmcgui.ControlLabel(x, y, width, 50, str(text or ""), font="font13", textColor=colour, alignment=4)
@@ -108,6 +111,8 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         minus_id, text_id = minus.getId(), tag_text.getId()
         self.control_actions[minus_id] = ("remove", index)
         self.control_actions[text_id] = ("edit", index)
+        self.action_controls[minus_id] = minus
+        self.action_controls[text_id] = tag_text
         self.filter_groups.append({"ids": (minus_id, text_id), "controls": (minus, tag_text), "images": images, "normal": background, "focused": focused})
 
     def _build_flow(self):
@@ -139,13 +144,26 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
             self.addControl(plus); self.dynamic_controls.append(plus)
             plus_id = plus.getId()
             self.control_actions[plus_id] = ("add", -1)
+            self.action_controls[plus_id] = plus
             focusable = [control for group in self.filter_groups for control in group["controls"]] + [plus]
-            for position, control_id in enumerate(focusable):
-                control = control_id
+            header = self.getControl(self.FILTER_EDIT_ID)
+            prompt = self.getControl(self.PROMPT_EDIT_ID)
+            create = self.getControl(self.CREATE_ID)
+            for position, control in enumerate(focusable):
                 control.setNavigation(
-                    control, control,
+                    header, create,
                     focusable[position - 1], focusable[(position + 1) % len(focusable)],
                 )
+            header.setNavigation(header, focusable[0], header, header)
+            prompt.setNavigation(focusable[-1], prompt, prompt, create)
+            create.setNavigation(focusable[-1], create, prompt, create)
+        else:
+            header = self.getControl(self.FILTER_EDIT_ID)
+            prompt = self.getControl(self.PROMPT_EDIT_ID)
+            create = self.getControl(self.CREATE_ID)
+            header.setNavigation(header, prompt, header, header)
+            prompt.setNavigation(header, prompt, prompt, create)
+            create.setNavigation(header, create, prompt, create)
         return y + 60
 
     def _position_summary(self, flow_bottom):
@@ -160,10 +178,14 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         self.getControl(self.CREATE_ID).setPosition(985, button_y)
         self.getControl(14).setHeight(max(740, exclusion_y + 80) - 140)
 
-    def _refresh_flow(self, focus_id=None):
+    def _refresh_flow(self, focus_id=None, focus_first_action=False):
         self._position_summary(self._build_flow())
+        if focus_first_action and self.control_actions:
+            focus_id = next(iter(self.control_actions))
         if focus_id:
-            try: self.setFocus(self.getControl(focus_id))
+            try:
+                control = self.action_controls.get(focus_id) or self.getControl(focus_id)
+                self.setFocus(control)
             except Exception: pass
         self._sync_focus_visuals()
 
@@ -181,13 +203,15 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
             self.getControl(11).setText(self.prompt)
             self.getControl(12).setLabel(self.footer)
             if self.rules.get("history_mode") in ("stale", "plays"):
-                exclusion = "Rated and hidden films will be excluded  •  Viewing history filter active  •  No AI will be used"
+                exclusion = "Rated and hidden items will be excluded  •  Viewing history filter active  •  No AI will be used"
             elif self.rules.get("history_mode") == "never":
-                exclusion = "Previously watched, rated and hidden films will be excluded  •  No AI will be used"
+                exclusion = "Previously watched, rated and hidden items will be excluded  •  No AI will be used"
             else:
-                exclusion = "Watched, rated and hidden films will be excluded  •  No AI will be used"
+                exclusion = "Watched, rated and hidden items will be excluded  •  No AI will be used"
             self.getControl(13).setLabel(exclusion)
-            self.getControl(self.FILTER_EDIT_ID).setLabel("EDIT TAGS")
+            self.getControl(self.PROMPT_EDIT_ID).setLabel("EDIT REQUEST" if self.edit_existing else "EDIT PROMPT")
+            self.getControl(self.FILTER_EDIT_ID).setLabel("EDIT FILTERS")
+            self.getControl(self.CREATE_ID).setLabel("SAVE CHANGES" if self.edit_existing else "CREATE LIST")
             self._refresh_flow()
             self.setFocus(self.getControl(self.CREATE_ID))
         except Exception:
@@ -243,7 +267,7 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         if not self.rules.get("rating_min"): options.append(("Rating", "rating"))
         if not (self.rules.get("runtime_min") or self.rules.get("runtime_max")): options.append(("Runtime", "runtime"))
         if not self.rules.get("collection_query") and len(self.rules.get("people") or []) < 3: options.extend((("Actor", "actor"), ("Director", "director")))
-        if not self.rules.get("collection_query") and len(self.rules.get("reference_movies") or []) < 3: options.append(("Reference film", "reference"))
+        if not self.rules.get("collection_query") and len(self.rules.get("reference_movies") or []) < 3: options.append(("Reference", "reference"))
         if not self.rules.get("collection_query") and not self.rules.get("people") and not self.rules.get("reference_movies"): options.append(("Collection", "collection"))
         if not self.rules.get("language"): options.append(("Language", "language"))
         if not self.rules.get("country"): options.append(("Country", "country"))
@@ -287,13 +311,13 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
             self.result = "edit"; self.close()
         elif control_id == self.CREATE_ID:
             if not confirmation_parts(self.rules):
-                xbmcgui.Dialog().ok("Keyword Matching", "Add at least one filter before creating the list.")
+                xbmcgui.Dialog().ok("Keyword Matching", "Add at least one filter before saving the list.")
                 return
             self.result = "create"; self.close()
         elif control_id == self.FILTER_EDIT_ID:
             self.edit_mode = not self.edit_mode
-            self.getControl(self.FILTER_EDIT_ID).setLabel("DONE" if self.edit_mode else "EDIT TAGS")
-            self._refresh_flow(next(reversed(self.control_actions), None) if self.edit_mode else self.CREATE_ID)
+            self.getControl(self.FILTER_EDIT_ID).setLabel("DONE" if self.edit_mode else "EDIT FILTERS")
+            self._refresh_flow(self.CREATE_ID if not self.edit_mode else None, focus_first_action=self.edit_mode)
         elif control_id in self.control_actions:
             action, index = self.control_actions[control_id]
             parts = confirmation_parts(self.rules)
@@ -302,23 +326,23 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
             elif action == "add": self._add_filter()
             self.rules["display_parts"] = confirmation_parts(self.rules)
             self.rules["confidence"] = min(1.0, len(self.rules["display_parts"]) / 3.0)
-            self._refresh_flow(next(reversed(self.control_actions), None) if action == "add" else None)
+            self._refresh_flow(focus_first_action=True)
 
     def onAction(self, action):
         if action.getId() in _BACK_ACTIONS:
             if self.edit_mode:
                 self.edit_mode = False
-                self.getControl(self.FILTER_EDIT_ID).setLabel("EDIT TAGS")
+                self.getControl(self.FILTER_EDIT_ID).setLabel("EDIT FILTERS")
                 self._refresh_flow(self.CREATE_ID)
             else: self.close()
         elif action.getId() in _NAV_ACTIONS:
             self._sync_focus_visuals()
 
 
-def confirm_keyword_rules(addon_path, prompt, rules, footer=""):
+def confirm_keyword_rules(addon_path, prompt, rules, footer="", edit_existing=False):
     window = None
     try:
-        window = KeywordConfirmWindow(addon_path, prompt, rules, footer)
+        window = KeywordConfirmWindow(addon_path, prompt, rules, footer, edit_existing)
         window.doModal(); result = window.result
         if isinstance(rules, dict) and isinstance(window.rules, dict):
             rules.clear(); rules.update(window.rules)
@@ -332,7 +356,10 @@ def confirm_keyword_rules(addon_path, prompt, rules, footer=""):
     message = format_rules(rules)
     if footer: message = "%s\n\n%s" % (message, footer)
     try:
-        choice = xbmcgui.Dialog().yesnocustom("Keyword Matching", message, "Edit Prompt", nolabel="Cancel", yeslabel="Create List")
+        edit_label = "Edit Request" if edit_existing else "Edit Prompt"
+        save_label = "Save Changes" if edit_existing else "Create List"
+        choice = xbmcgui.Dialog().yesnocustom("Keyword Matching", message, edit_label, nolabel="Cancel", yeslabel=save_label)
         return "edit" if choice == 2 else ("create" if choice == 1 else None)
     except (AttributeError, TypeError):
-        return "create" if xbmcgui.Dialog().yesno("Keyword Matching", message, nolabel="Cancel", yeslabel="Create List") else None
+        save_label = "Save Changes" if edit_existing else "Create List"
+        return "create" if xbmcgui.Dialog().yesno("Keyword Matching", message, nolabel="Cancel", yeslabel=save_label) else None

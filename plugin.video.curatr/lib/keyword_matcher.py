@@ -412,7 +412,7 @@ def format_rules(rules):
     fragments = ["%s %s" % (part.get("connector") or "", part.get("text") or "") for part in confirmation_parts(rules)]
     sentence = " ".join(fragment.strip() for fragment in fragments if fragment.strip()).strip()
     if sentence: sentence = sentence[0].upper() + sentence[1:]
-    return (sentence or "Your recognised filters") + "\n\nWatched, rated and hidden films will be excluded.\nNo AI will be used."
+    return (sentence or "Your recognised filters") + "\n\nWatched, rated and hidden items will be excluded.\nNo AI will be used."
 
 
 def preferred_genre_ids(profile):

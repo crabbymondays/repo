@@ -45,36 +45,44 @@ class BaseAIClient:
         )
         return self.validate_fingerprint(result)
 
-    def recommend(self, prompt, taste_context, count):
+    def recommend(self, prompt, taste_context, count, content_type="movies"):
         self._require_api_key()
         count = max(1, min(60, int(count)))
         schema = self.recommendation_schema(count)
+        content_type = content_type if content_type in ("movies", "shows", "both") else "movies"
+        target = {
+            "movies": "feature films only",
+            "shows": "whole television shows only; never seasons or episodes",
+            "both": "a suitable mix of feature films and whole television shows; never seasons or episodes",
+        }[content_type]
         instructions = (
-            "You are the recommendation brain for a personal Kodi movie curator. "
+            "You are the recommendation brain for a personal Kodi film and television curator. "
             "Use the reusable taste fingerprint as evidence, not as rigid genre filters. Infer patterns across films "
             "collectively: directors, themes, tone, pacing, cinematography, performances, story structure, era, "
             "country and other meaningful qualities. Follow the natural-language request precisely. "
-            "The addon will independently verify every movie against Trakt and will reject anything already watched "
-            "or rated. Avoid the recent-watch examples, previous recommendations and any never-recommend entries supplied "
+            "The addon will independently verify every result against Trakt and will reject unavailable or excluded items. "
+            "Avoid the recent-watch examples, previous recommendations and any never-recommend entries supplied "
             "in the context so candidate slots are not wasted and refreshed lists produce genuinely fresh choices. "
             "When a VERIFIED CANDIDATE POOL is supplied, strongly prefer suitable films from it because those titles and "
             "years were grounded by an external catalogue. You may go outside it when the user's request clearly needs it; "
             "never recommend an unsuitable film merely because it appears in that pool. "
             "Prefer genuinely strong personal matches over generic popular picks unless the request calls for them. "
-            "Return only real feature films and use their original release year."
+            "Return %s. Use a film's original release year or a show's first-air year. "
+            "Set media_type to movie or show for every result."
+            % target
         )
         taste_text = "REUSABLE TASTE CONTEXT:\n%s" % json.dumps(
             taste_context, ensure_ascii=False, separators=(",", ":")
         )
         request_text = (
-            "USER REQUEST:\n%s\n\nReturn up to %d strong candidate movies. Give enough variety for Trakt "
+            "USER REQUEST:\n%s\n\nReturn up to %d strong candidates. Give enough variety for Trakt "
             "verification to discard ambiguous or already-seen matches." % (prompt, count)
         )
         result = self._structured_request(
             instructions,
             taste_text,
             schema,
-            "movie_recommendations",
+            "media_recommendations",
             usage_kind="recommendation",
             extra_input=[{"role": "user", "content": request_text}],
         )
@@ -178,8 +186,9 @@ class BaseAIClient:
                             "title": {"type": "string"},
                             "year": {"type": "integer"},
                             "reason": {"type": "string"},
+                            "media_type": {"type": "string", "enum": ["movie", "show"]},
                         },
-                        "required": ["title", "year", "reason"],
+                        "required": ["title", "year", "reason", "media_type"],
                         "additionalProperties": False,
                     },
                 },
@@ -306,15 +315,18 @@ class BaseAIClient:
                 continue
             if not title or year < 1880 or year > 2100:
                 continue
-            key = (title.casefold(), year)
+            media_type = str(item.get("media_type") or "movie").strip().lower()
+            if media_type not in ("movie", "show"):
+                continue
+            key = (media_type, title.casefold(), year)
             if key in seen:
                 continue
             seen.add(key)
-            cleaned.append({"title": title, "year": year, "reason": reason})
+            cleaned.append({"title": title, "year": year, "reason": reason, "media_type": media_type})
             if len(cleaned) >= count:
                 break
         if not cleaned:
-            raise AIError("The AI provider returned no valid movie recommendations.")
+            raise AIError("The AI provider returned no valid recommendations.")
         return {
             "list_name": str(result.get("list_name") or "").strip(),
             "description": str(result.get("description") or "").strip(),

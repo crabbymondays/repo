@@ -246,7 +246,7 @@ class Curator:
     def _migrate_local_list_state(self):
         """Keep list definitions backward compatible while separating AI regeneration from Trakt refresh.
 
-        v0.9 splits the old per-list "auto refresh" into two independent schedules:
+        Per-list refresh and Trakt sync use independent schedules:
         AI regeneration (re-run the saved prompt) and Trakt list refresh (push the
         current local recommendations to Trakt without calling the AI).
         """
@@ -349,6 +349,12 @@ class Curator:
             if "description" not in record:
                 record["description"] = ""
                 changed = True
+            content_type = str(record.get("content_type") or "movies").lower()
+            if content_type not in ("movies", "shows", "both"):
+                content_type = "movies"
+            if record.get("content_type") != content_type:
+                record["content_type"] = content_type
+                changed = True
             normalised_art = normalise_list_art(record.get("artwork"))
             if record.get("artwork") != normalised_art:
                 record["artwork"] = normalised_art
@@ -357,7 +363,7 @@ class Curator:
                 record["local_changed_at"] = self._safe_int(record.get("updated_at"), 0)
                 changed = True
 
-            # Migrate the v0.8 auto-refresh settings into AI regeneration.
+            # Preserve refresh behaviour from installations using the combined schedule.
             if "regeneration_enabled" not in record:
                 record["regeneration_enabled"] = bool(record.get("auto_refresh_enabled", default_regen))
                 changed = True
@@ -370,9 +376,7 @@ class Curator:
                 record["regeneration_last_attempt_at"] = self._safe_int(record.get("auto_last_attempt_at"), 0)
                 changed = True
 
-            # A v0.8 list that auto-refreshed and synced to Trakt effectively did
-            # both operations together. Preserve that behaviour on upgrade by
-            # enabling the Trakt schedule too; otherwise use the new default.
+            # Lists that refreshed and synced together retain both behaviours.
             if "trakt_refresh_enabled" not in record:
                 legacy_auto = bool(record.get("auto_refresh_enabled", False))
                 inherited = bool(record.get("sync_to_trakt") and legacy_auto)
@@ -1153,6 +1157,38 @@ class Curator:
             })
         return movies, source, username
 
+    def _trakt_show_history(self, limit, source, username):
+        if source == "oauth":
+            ratings = self.trakt.ratings_shows(limit)
+            watched = self.trakt.watched_shows(limit)
+        else:
+            ratings = self.trakt.ratings_shows_for_user(username, limit)
+            try:
+                watched = self.trakt.watched_shows_for_user(username, limit)
+            except TraktError:
+                watched = []
+        rating_rows, watched_rows = [], []
+        for row in ratings:
+            show = row.get("show", {}) if isinstance(row, dict) else {}
+            if not isinstance(show, dict) or not show.get("title"):
+                continue
+            rating_rows.append({
+                "title": show.get("title"), "year": show.get("year"),
+                "rating": row.get("rating"), "ids": dict(show.get("ids") or {}),
+                "media_type": "show",
+            })
+        for row in watched:
+            show = row.get("show", {}) if isinstance(row, dict) else {}
+            if not isinstance(show, dict) or not show.get("title"):
+                continue
+            watched_rows.append({
+                "title": show.get("title"), "year": show.get("year"),
+                "playcount": max(1, self._safe_int(row.get("plays"), 1)),
+                "last_watched_at": str(row.get("last_watched_at") or ""),
+                "ids": dict(show.get("ids") or {}), "media_type": "show",
+            })
+        return rating_rows, watched_rows
+
     def _preference_identity_tokens(self, movie):
         tokens = []
         ids = (movie.get("ids") or {}) if isinstance(movie, dict) else {}
@@ -1276,6 +1312,8 @@ class Curator:
         username = str(self.state.get("trakt_username") or "").strip()
         trakt_source = ""
         kodi_total = 0
+        show_ratings = []
+        shows_watched = []
 
         if mode in ("both", "kodi"):
             try:
@@ -1292,6 +1330,10 @@ class Curator:
             try:
                 trakt_movies, trakt_source, username = self._trakt_preference_movies(limit)
                 source_movies.extend(trakt_movies)
+                try:
+                    show_ratings, shows_watched = self._trakt_show_history(limit, trakt_source, username)
+                except Exception as exc:
+                    xbmc.log("curatr Trakt TV history skipped: %s" % exc, xbmc.LOGWARNING)
                 if trakt_movies:
                     sources_used.append("trakt")
             except Exception as exc:
@@ -1396,6 +1438,8 @@ class Curator:
             "watched": watched_rows,
             "library": library_rows,
             "strong_likes": strong_likes[:100],
+            "show_ratings": show_ratings,
+            "shows_watched": shows_watched,
             "favourite_directors": favourite_directors[:20],
             "favourite_actors": favourite_actors[:12],
             "liked_rating_threshold": liked_min,
@@ -1459,12 +1503,28 @@ class Curator:
         if method_choice < 0:
             return None
         generation_method = "keyword" if method_choice == 1 else "ai"
+        type_choice = xbmcgui.Dialog().select(
+            "What should this list contain?",
+            ["Movies only", "TV Shows only", "Movies & TV Shows"],
+        )
+        if type_choice < 0:
+            return None
+        content_type = ("movies", "shows", "both")[type_choice]
         keyword_rules = None
         if generation_method == "ai":
             self._require_ai()
         else:
             self._require_keyword_catalogue()
             keyword_rules = parse_prompt(prompt)
+            if content_type == "shows" and (
+                keyword_rules.get("people") or keyword_rules.get("reference_movies") or keyword_rules.get("collection_query")
+            ):
+                xbmcgui.Dialog().ok(
+                    self.name,
+                    "Keyword Matching cannot reliably match TV shows from named people, collections or references yet. "
+                    "Choose AI for this request, or use filters such as genre, year, rating, country or language.",
+                )
+                return None
             if not keyword_rules.get("confidence"):
                 xbmcgui.Dialog().ok(
                     self.name,
@@ -1488,7 +1548,7 @@ class Curator:
         description = str(description or "").strip()
 
         default_count = max(5, min(50, self._safe_int(preset_count, 20)))
-        count_text = xbmcgui.Dialog().numeric(0, "How many films? (5-50)", defaultt=str(default_count))
+        count_text = xbmcgui.Dialog().numeric(0, "How many items? (5-50)", defaultt=str(default_count))
         if not count_text or not str(count_text).strip():
             return None
         try:
@@ -1498,7 +1558,7 @@ class Curator:
             return None
 
         if generation_method == "keyword":
-            footer = "Create '%s' with %d films" % (name, count)
+            footer = "Create '%s' with %d items" % (name, count)
             while True:
                 decision = confirm_keyword_rules(
                     xbmcvfs.translatePath(self.addon.getAddonInfo("path")),
@@ -1523,7 +1583,7 @@ class Curator:
                     return None
                 break
         else:
-            summary = "Create '%s' with %d films?" % (name, count)
+            summary = "Create '%s' with %d items?" % (name, count)
             if description:
                 summary += "\n\nDescription: %s" % self._shorten_text(description, 160)
             summary += "\n\nOne AI recommendation request will be made when you choose Create List."
@@ -1536,14 +1596,16 @@ class Curator:
             if not confirmed:
                 return None
 
-        self._notify("Finding %d films for %s…" % (count, name))
+        self._notify("Finding %d items for %s…" % (count, name))
         if generation_method == "keyword":
             result = self._generate_keyword_and_write(
-                name, prompt, count, keyword_rules, managed_record=managed, description=description,
+                name, prompt, count, keyword_rules, managed_record=managed,
+                description=description, content_type=content_type,
             )
         else:
             result = self._generate_and_write(
-                name, prompt, count, managed_record=managed, description=description
+                name, prompt, count, managed_record=managed, description=description,
+                content_type=content_type,
             )
         return result
 
@@ -1568,15 +1630,15 @@ class Curator:
             if not title or marker in seen:
                 continue
             seen.add(marker)
-            references.append({"title": title, "year": year})
+            references.append({"title": title, "year": year, "media_type": str(movie.get("media_type") or "movie")})
             if len(references) >= 30:
                 break
         if len(references) < 2:
-            raise RuntimeError("That list does not contain enough identifiable films to use as an AI reference.")
+            raise RuntimeError("That list does not contain enough identifiable items to use as an AI reference.")
 
         instruction = xbmcgui.Dialog().input(
             "What should curatr find?",
-            defaultt="Find more films like these. Keep the strongest shared qualities without repeating the reference films.",
+            defaultt="Find more titles like these. Keep the strongest shared qualities without repeating the references.",
         )
         if not instruction or not instruction.strip():
             return None
@@ -1589,9 +1651,13 @@ class Curator:
             xbmcgui.Dialog().ok(self.name, "A curatr list already uses that name. Choose a different name so the original is not replaced.")
             return None
         description = xbmcgui.Dialog().input(
-            "List description (optional)", defaultt="More films inspired by %s." % source_name,
+            "List description (optional)", defaultt="More recommendations inspired by %s." % source_name,
         )
-        count_text = xbmcgui.Dialog().numeric(0, "How many films? (5-50)", defaultt="20")
+        type_choice = xbmcgui.Dialog().select("What should the new list contain?", ["Movies only", "TV Shows only", "Movies & TV Shows"])
+        if type_choice < 0:
+            return None
+        content_type = ("movies", "shows", "both")[type_choice]
+        count_text = xbmcgui.Dialog().numeric(0, "How many items? (5-50)", defaultt="20")
         if not count_text or not str(count_text).strip():
             return None
         try:
@@ -1600,7 +1666,7 @@ class Curator:
             xbmcgui.Dialog().ok(self.name, "Enter a number between 5 and 50.")
             return None
         confirmation = (
-            "Create '%s' with %d new films using up to %d titles from '%s' as a reference?"
+            "Create '%s' with %d new items using up to %d titles from '%s' as a reference?"
             "\n\nThis makes one AI recommendation request and does not change the original list."
             % (name, count, len(references), source_name)
         )
@@ -1614,10 +1680,10 @@ class Curator:
             confirmed = xbmcgui.Dialog().yesno(self.name, confirmation)
         if not confirmed:
             return None
-        self._notify("Finding %d related films…" % count)
+        self._notify("Finding %d related items…" % count)
         return self._generate_and_write(
             name, instruction, count, description=str(description or "").strip(),
-            reference_movies=references,
+            reference_movies=references, content_type=content_type,
         )
 
     @staticmethod
@@ -1662,6 +1728,7 @@ class Curator:
 
         name = record.get("name") or "My Picks"
         method = str(record.get("generation_method") or "ai").lower()
+        content_type = str(record.get("content_type") or "movies").lower()
         if not silent:
             self._notify("Refreshing %s%s…" % (name, " with Keyword Matching" if method == "keyword" else ""))
         if method == "keyword":
@@ -1670,26 +1737,26 @@ class Curator:
                 rules = parse_prompt(record.get("prompt") or "")
             result = self._generate_keyword_and_write(
                 name, record.get("prompt") or "", self._safe_int(record.get("count"), 20),
-                rules, silent=True, managed_record=record,
+                rules, silent=True, managed_record=record, content_type=content_type,
             )
         else:
             result = self._generate_and_write(
                 name,
-                record.get("prompt") or "Recommend films for me.",
+                record.get("prompt") or "Recommend something for me.",
                 self._safe_int(record.get("count"), 20),
                 silent=True,
-                managed_record=record,
+                managed_record=record, content_type=content_type,
             )
         if not silent:
             self.record_activity(
-                "%s refreshed in Kodi with %d films"
+                "%s refreshed in Kodi with %d items"
                 % (result.get("name") or name, self._safe_int(result.get("last_result_count"), 0)),
                 notify=True,
             )
         return result
 
     def edit_list_interactive(self, list_id):
-        """Backward-compatible entry point; v0.8 exposes one setting at a time."""
+        """Retain the edit entry point used by existing plugin routes."""
         return self.list_settings_interactive(list_id)
 
     def _edit_list_name(self, list_id):
@@ -1730,26 +1797,46 @@ class Curator:
         record = self._managed_record_by_id(list_id)
         if not record:
             raise RuntimeError("That list has already been removed.")
-        current_prompt = str(record.get("prompt") or "Recommend films for me.")
-        new_prompt = xbmcgui.Dialog().input("List prompt", defaultt=current_prompt)
-        if not new_prompt or not new_prompt.strip():
-            return record
-        updated = dict(record)
-        updated["prompt"] = new_prompt.strip()
-        if str(updated.get("generation_method") or "ai").lower() == "keyword":
-            rules = parse_prompt(updated["prompt"])
+        is_keyword = str(record.get("generation_method") or "ai").lower() == "keyword"
+        noun = "request" if is_keyword else "prompt"
+        current_prompt = str(record.get("prompt") or "Recommend something for me.")
+        new_prompt = current_prompt
+        while True:
+            new_prompt = xbmcgui.Dialog().input("Edit %s" % noun.title(), defaultt=new_prompt)
+            if not new_prompt or not new_prompt.strip():
+                return record
+            new_prompt = new_prompt.strip()
+            if not is_keyword:
+                break
+            rules = parse_prompt(new_prompt)
             if not rules.get("confidence"):
                 xbmcgui.Dialog().ok(
                     self.name,
-                    "That prompt does not contain a clear Keyword Matching filter. The existing prompt was kept.",
+                    "That request does not contain a clear Keyword Matching filter. The existing request was kept.",
                 )
                 return record
+            addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
+            decision = confirm_keyword_rules(
+                addon_path, new_prompt, rules,
+                footer="Save Changes updates this list and refreshes its items.",
+                edit_existing=True,
+            )
+            if decision == "edit":
+                continue
+            if decision != "create":
+                return record
+            break
+        updated = dict(record)
+        updated["prompt"] = new_prompt
+        if is_keyword:
             updated["keyword_rules"] = rules
         updated["edited_at"] = int(time.time())
         self._store_managed_record(updated, record)
         self._save_state()
-        self.record_activity("Saved prompt for %s" % (updated.get("name") or "curatr list"), notify=True)
-        return updated
+        self.record_activity(
+            "Saved %s for %s" % (noun, updated.get("name") or "curatr list"), notify=not is_keyword,
+        )
+        return self.refresh_list(self._record_key(updated), silent=False) if is_keyword else updated
 
     def _edit_list_description(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -1776,7 +1863,7 @@ class Curator:
         if not record:
             raise RuntimeError("That list has already been removed.")
         current_count = max(5, min(50, self._safe_int(record.get("count"), 20)))
-        count_text = xbmcgui.Dialog().numeric(0, "Number of films (5-50)", defaultt=str(current_count))
+        count_text = xbmcgui.Dialog().numeric(0, "Number of items (5-50)", defaultt=str(current_count))
         if not count_text:
             return record
         try:
@@ -1788,7 +1875,7 @@ class Curator:
         updated["edited_at"] = int(time.time())
         self._store_managed_record(updated, record)
         self._save_state()
-        self.record_activity("Movie count for %s set to %d" % (updated.get("name") or "curatr list", new_count), notify=True)
+        self.record_activity("Item count for %s set to %d" % (updated.get("name") or "curatr list", new_count), notify=True)
         return updated
 
     def _toggle_list_trakt_sync(self, list_id):
@@ -2042,7 +2129,7 @@ class Curator:
         entries = []
         for movie, source in choices:
             label = "%s%s" % (
-                movie.get("title") or "Film artwork",
+                movie.get("title") or "Item artwork",
                 " (%s)" % movie.get("year") if movie.get("year") else "",
             )
             entries.append({"label": label, "source": source, "preview_source": preview_paths.get(source) or source})
@@ -2228,7 +2315,7 @@ class Curator:
                     "label": "%s%s: list-item fanart" % (movie.get("title") or "Untitled", " (%s)" % movie.get("year") if movie.get("year") else ""),
                     "source": source, "mode": "item", "icon_key": "",
                     "art_label": "%s%s" % (
-                        movie.get("title") or "Film artwork",
+                        movie.get("title") or "Item artwork",
                         " (%s)" % movie.get("year") if movie.get("year") else "",
                     ),
                 })
@@ -2281,7 +2368,7 @@ class Curator:
                 ("fanart", "Fanart: %s" % fanart),
             ]
             actions.extend([
-                ("suggest", "Find a person or film suggestion"),
+                ("suggest", "Find a person, movie or show"),
                 ("reset", "Reset icon and fanart to Automatic"),
             ])
             choice = xbmcgui.Dialog().select(
@@ -2328,14 +2415,19 @@ class Curator:
                 trakt_update = "Every %d hour(s)" % self._safe_int(record.get("trakt_refresh_interval_hours"), 24)
 
         icon_art, fanart_art, fanart_style = list_art_summary(record)
+        request_label = "Request" if str(record.get("generation_method") or "ai").lower() == "keyword" else "Prompt"
+        content_label = {"movies": "Movies only", "shows": "TV Shows only", "both": "Movies & TV Shows"}.get(
+            str(record.get("content_type") or "movies"), "Movies only",
+        )
         text = (
-            "List: %s\n\nDescription:\n%s\n\nFilms requested: %d\nSaved: %s\n\nIcon: %s\nFanart: %s\nFanart style: %s\n\n"
+            "List: %s\n\nDescription:\n%s\n\nItems requested: %d\nContent: %s\nSaved: %s\n\nIcon: %s\nFanart: %s\nFanart style: %s\n\n"
             "Creation method: %s\nGrounded candidates considered: %d\n\nAuto Refresh: %s\nLast refresh: %s\n\n"
-            "Trakt Sync: %s\nLast sync: %s\n\nPrompt:\n%s"
+            "Trakt Sync: %s\nLast sync: %s\n\n%s:\n%s"
             % (
                 record.get("name") or "curatr list",
                 record.get("description") or "Not set",
                 self._safe_int(record.get("count"), 20),
+                content_label,
                 self._list_storage_label(record),
                 icon_art,
                 fanart_art,
@@ -2346,6 +2438,7 @@ class Curator:
                 when(record.get("updated_at")),
                 trakt_update,
                 when(record.get("trakt_synced_at")),
+                request_label,
                 record.get("prompt") or "",
             )
         )
@@ -2430,26 +2523,28 @@ class Curator:
 
             regen_enabled = bool(record.get("regeneration_enabled"))
             regen_interval = self._safe_int(record.get("regeneration_interval_hours"), self._default_regeneration_interval())
-            sync_state = "ON" if record.get("sync_to_trakt") else "OFF"
             trakt_refresh_enabled = bool(record.get("trakt_refresh_enabled"))
             trakt_interval = self._safe_int(record.get("trakt_refresh_interval_hours"), self._default_trakt_refresh_interval())
-            trakt_refresh_label = "ON" if record.get("sync_to_trakt") and trakt_refresh_enabled else "OFF"
-            method_label = "Keyword Matching" if str(record.get("generation_method") or "ai").lower() == "keyword" else "AI"
+            is_keyword = str(record.get("generation_method") or "ai").lower() == "keyword"
+            method_label = "Keyword Matching" if is_keyword else "AI"
+            content_type = str(record.get("content_type") or "movies")
+            content_label = {"movies": "Movies only", "shows": "TV Shows only", "both": "Movies & TV Shows"}.get(content_type, "Movies only")
+            request_label = "Request" if is_keyword else "Prompt"
+            refresh_schedule = self._format_interval(regen_interval) if regen_enabled else "Never"
+            sync_schedule = self._format_interval(trakt_interval) if record.get("sync_to_trakt") and trakt_refresh_enabled else "Never"
 
             choices = [
                 "List name: %s" % (record.get("name") or "curatr list"),
                 "Description: %s" % self._shorten_text(record.get("description") or "Not set", 70),
-                "Prompt: %s" % self._shorten_text(record.get("prompt") or "", 70),
-                "Number of films: %d" % self._safe_int(record.get("count"), 20),
+                "Edit %s: %s" % (request_label, self._shorten_text(record.get("prompt") or "", 70)),
+                "Number of items: %d" % self._safe_int(record.get("count"), 20),
                 "Creation method: %s" % method_label,
-                "Save a copy to Trakt: %s" % sync_state,
-                "Auto Refresh: %s" % ("ON" if regen_enabled else "OFF"),
-                "Refresh Every: %s" % self._format_interval(regen_interval),
-                "Trakt Sync: %s" % trakt_refresh_label,
-                "Sync Every: %s" % self._format_interval(trakt_interval),
-                "Refresh this list",
+                "Content: %s" % content_label,
+                "Refresh This List",
+                "Auto Refresh: %s" % refresh_schedule,
                 "Sync to Trakt",
-                "Save this prompt as a template",
+                "Auto Sync: %s" % sync_schedule,
+                "Save this %s as a template" % request_label.lower(),
                 "View list details",
             ]
             choice = xbmcgui.Dialog().select("List settings: %s" % (record.get("name") or "curatr list"), choices)
@@ -2467,29 +2562,71 @@ class Curator:
             elif choice == 4:
                 self._edit_list_generation_method(key)
             elif choice == 5:
-                self._toggle_list_trakt_sync(key)
+                self._edit_list_content_type(key)
             elif choice == 6:
-                self._toggle_list_regeneration(key)
+                self.refresh_list(key, silent=False)
             elif choice == 7:
-                self._edit_list_regeneration_interval(key)
+                self._edit_list_refresh_schedule(key)
             elif choice == 8:
-                self._toggle_list_trakt_refresh(key)
+                synced = self.sync_list_to_trakt_interactive(key)
+                if synced:
+                    current = self._managed_record_by_id(key)
+                    if current and not current.get("sync_to_trakt"):
+                        self.set_list_trakt_sync(key, True)
             elif choice == 9:
-                self._edit_list_trakt_refresh_interval(key)
+                self._edit_list_sync_schedule(key)
             elif choice == 10:
-                return self.refresh_list(key, silent=False)
-            elif choice == 11:
-                current = self._managed_record_by_id(key)
-                if not current.get("sync_to_trakt"):
-                    xbmcgui.Dialog().ok(self.name, "Turn on 'Save a copy to Trakt' for this list first.")
-                elif not self._has_oauth():
-                    xbmcgui.Dialog().ok(self.name, "Updating a Trakt copy needs curatr to be connected to Trakt.")
-                else:
-                    self.sync_list_to_trakt(key, silent=False)
-            elif choice == 12:
                 self.save_list_prompt_as_template(key)
-            elif choice == 13:
+            elif choice == 11:
                 self._view_list_settings(key)
+
+    def _edit_list_content_type(self, list_id):
+        record = self._managed_record_by_id(list_id)
+        if not record:
+            raise RuntimeError("That list has already been removed.")
+        values = ("movies", "shows", "both")
+        current = str(record.get("content_type") or "movies")
+        choice = xbmcgui.Dialog().select(
+            "List content", ["Movies only", "TV Shows only", "Movies & TV Shows"],
+            preselect=values.index(current) if current in values else 0,
+        )
+        if choice < 0 or values[choice] == current:
+            return record
+        if values[choice] == "shows" and str(record.get("generation_method") or "ai") == "keyword":
+            rules = record.get("keyword_rules") or parse_prompt(record.get("prompt") or "")
+            if rules.get("people") or rules.get("reference_movies") or rules.get("collection_query"):
+                xbmcgui.Dialog().ok(
+                    self.name,
+                    "This Keyword Matching request uses named people, a collection or reference films. "
+                    "Change the creation method to AI before making it TV Shows only.",
+                )
+                return record
+        updated = dict(record)
+        updated["content_type"] = values[choice]
+        updated["edited_at"] = int(time.time())
+        self._store_managed_record(updated, record)
+        self._save_state()
+        self.record_activity("Updated content type for %s" % (updated.get("name") or "curatr list"), notify=True)
+        content_label = {
+            "movies": "Movies only",
+            "shows": "TV Shows only",
+            "both": "Movies & TV Shows",
+        }[updated["content_type"]]
+        message = (
+            "Content changed to %s.\n\nWould you like to refresh this list now?"
+            % content_label
+        )
+        if str(updated.get("generation_method") or "ai").lower() == "ai":
+            message += "\n\nRefreshing will make one AI recommendation request."
+        try:
+            refresh_now = xbmcgui.Dialog().yesno(
+                self.name, message, nolabel="Not Now", yeslabel="Refresh Now",
+            )
+        except TypeError:
+            refresh_now = xbmcgui.Dialog().yesno(self.name, message)
+        if refresh_now:
+            return self.refresh_list(self._record_key(updated), silent=False)
+        return updated
 
     def _edit_list_generation_method(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -2516,13 +2653,13 @@ class Curator:
             if not rules.get("confidence"):
                 xbmcgui.Dialog().ok(
                     self.name,
-                    "The saved prompt does not contain a clear Keyword Matching filter. Edit the prompt first, "
+                    "The saved request does not contain a clear Keyword Matching filter. Edit the request first, "
                     "using details such as genre, decade, runtime, rating, actor or director.",
                 )
                 return record
             if not xbmcgui.Dialog().yesno(
                 self.name,
-                "Use Keyword Matching for future refreshes?\n\n%s\n\nThe current films will stay unchanged until the next refresh."
+                "Use Keyword Matching for future refreshes?\n\n%s\n\nThe current items will stay unchanged until the next refresh."
                 % format_rules(rules),
             ):
                 return record
@@ -2547,7 +2684,11 @@ class Curator:
     @staticmethod
     def _format_interval(hours):
         hours = max(1, int(hours or 1))
-        labels = {6: "Every 6 hours", 12: "Every 12 hours", 24: "Every day", 72: "Every 3 days", 168: "Every week"}
+        labels = {
+            6: "Every 6 hours", 12: "Every 12 hours", 24: "Every day",
+            72: "Every 3 days", 168: "Every week", 336: "Every 2 weeks",
+            720: "Every month",
+        }
         return labels.get(hours, "Every %d hours" % hours)
 
     def _choose_interval_hours(self, heading, current):
@@ -2566,6 +2707,62 @@ class Curator:
             return max(1, min(720, int(value)))
         except (TypeError, ValueError):
             return current
+
+    def _choose_schedule_hours(self, heading, enabled, current):
+        values = [0, 24, 72, 168, 336, 720]
+        labels = ["Never", "Every day", "Every 3 days", "Every week", "Every 2 weeks", "Every month"]
+        selected = current if enabled else 0
+        try:
+            preselect = values.index(selected)
+        except ValueError:
+            preselect = 1 if enabled else 0
+        choice = xbmcgui.Dialog().select(heading, labels, preselect=preselect)
+        return None if choice < 0 else values[choice]
+
+    def _edit_list_refresh_schedule(self, list_id):
+        record = self._managed_record_by_id(list_id)
+        if not record:
+            raise RuntimeError("That list has already been removed.")
+        hours = self._choose_schedule_hours(
+            "Auto Refresh", bool(record.get("regeneration_enabled")),
+            self._safe_int(record.get("regeneration_interval_hours"), 24),
+        )
+        if hours is None:
+            return record
+        updated = dict(record)
+        updated["regeneration_enabled"] = bool(hours)
+        if hours:
+            updated["regeneration_interval_hours"] = hours
+        updated["regeneration_last_attempt_at"] = 0
+        self._store_managed_record(updated, record)
+        self._save_state()
+        return updated
+
+    def _edit_list_sync_schedule(self, list_id):
+        record = self._managed_record_by_id(list_id)
+        if not record:
+            raise RuntimeError("That list has already been removed.")
+        hours = self._choose_schedule_hours(
+            "Auto Sync", bool(record.get("trakt_refresh_enabled")),
+            self._safe_int(record.get("trakt_refresh_interval_hours"), 24),
+        )
+        if hours is None:
+            return record
+        if hours and not record.get("sync_to_trakt"):
+            xbmcgui.Dialog().ok(self.name, "Sync this list to Trakt once before turning on Auto Sync.")
+            return record
+        if hours and not self._has_oauth():
+            xbmcgui.Dialog().ok(self.name, "Auto Sync needs curatr to be connected to Trakt.")
+            return record
+        updated = dict(record)
+        updated["trakt_refresh_enabled"] = bool(hours)
+        if hours:
+            updated["trakt_refresh_interval_hours"] = hours
+            updated["trakt_refresh_cycle_at"] = int(time.time())
+        updated["trakt_last_attempt_at"] = 0
+        self._store_managed_record(updated, record)
+        self._save_state()
+        return updated
 
     # ---------- Saved prompts / hide list / backup ----------
 
@@ -2594,7 +2791,7 @@ class Curator:
         prompt = xbmcgui.Dialog().input("Saved prompt")
         if not prompt or not prompt.strip():
             return None
-        count_text = xbmcgui.Dialog().numeric(0, "Default number of films (5-50)", defaultt="20")
+        count_text = xbmcgui.Dialog().numeric(0, "Default number of items (5-50)", defaultt="20")
         count = max(5, min(50, self._safe_int(count_text, 20)))
         return self._save_prompt_template(name.strip(), prompt.strip(), count)
 
@@ -2611,7 +2808,7 @@ class Curator:
     def prompt_templates_interactive(self):
         while True:
             templates = [row for row in self.state.get("prompt_templates", []) if isinstance(row, dict)]
-            choices = ["Create a new saved prompt"] + ["%s: %d films" % (row.get("name") or "Saved Prompt", self._safe_int(row.get("count"), 20)) for row in templates]
+            choices = ["Create a new saved prompt"] + ["%s: %d items" % (row.get("name") or "Saved Prompt", self._safe_int(row.get("count"), 20)) for row in templates]
             choice = xbmcgui.Dialog().select("Saved Prompts", choices)
             if choice < 0:
                 return None
@@ -2623,7 +2820,7 @@ class Curator:
                 "Create a list from this prompt",
                 "Edit template name",
                 "Edit prompt",
-                "Edit default film count",
+                "Edit default item count",
                 "Delete saved prompt",
             ])
             if action < 0:
@@ -2639,7 +2836,7 @@ class Curator:
                 value = xbmcgui.Dialog().input("Saved prompt", defaultt=str(template.get("prompt") or ""))
                 if value and value.strip(): updated["prompt"] = value.strip()
             elif action == 3:
-                value = xbmcgui.Dialog().numeric(0, "Default number of films (5-50)", defaultt=str(self._safe_int(template.get("count"), 20)))
+                value = xbmcgui.Dialog().numeric(0, "Default number of items (5-50)", defaultt=str(self._safe_int(template.get("count"), 20)))
                 if value: updated["count"] = max(5, min(50, self._safe_int(value, 20)))
             elif action == 4:
                 if xbmcgui.Dialog().yesno(self.name, "Delete the saved prompt '%s'?" % (template.get("name") or "Saved Prompt")):
@@ -2655,26 +2852,28 @@ class Curator:
             return ""
         ids = movie.get("ids") or {}
         trakt_id = ids.get("trakt") if isinstance(ids, dict) else None
+        prefix = "show:" if str(movie.get("media_type") or "movie") == "show" else ""
         if trakt_id not in (None, ""):
-            return "trakt:%s" % trakt_id
+            return "%strakt:%s" % (prefix, trakt_id)
         title = str(movie.get("title") or "").strip().casefold()
         year = Curator._safe_int(movie.get("year"), 0)
-        return "title:%s:%s" % (title, year) if title else ""
+        return "%stitle:%s:%s" % (prefix, title, year) if title else ""
 
     def is_movie_hidden(self, movie):
         marker = self._movie_marker(movie)
         return bool(marker and any(str(row.get("marker") or "") == marker for row in self.state.get("hidden_movies", []) if isinstance(row, dict)))
 
-    def hide_movie(self, trakt_id="", title="", year=0, confirm=True):
-        movie = {"title": title, "year": self._safe_int(year, 0), "ids": {"trakt": trakt_id}}
+    def hide_movie(self, trakt_id="", title="", year=0, confirm=True, media_type="movie"):
+        media_type = "show" if media_type == "show" else "movie"
+        movie = {"title": title, "year": self._safe_int(year, 0), "ids": {"trakt": trakt_id}, "media_type": media_type}
         marker = self._movie_marker(movie)
         if not marker:
             return False
-        if confirm and not xbmcgui.Dialog().yesno(self.name, "Hide '%s'?\n\nIt will be removed from current curatr lists and excluded from future recommendations." % (title or "this movie")):
+        if confirm and not xbmcgui.Dialog().yesno(self.name, "Hide '%s'?\n\nIt will be removed from current curatr lists and excluded from future recommendations." % (title or "this item")):
             return False
         hidden = [row for row in self.state.get("hidden_movies", []) if isinstance(row, dict)]
         if not any(row.get("marker") == marker for row in hidden):
-            hidden.append({"marker": marker, "trakt_id": trakt_id, "title": title, "year": self._safe_int(year, 0), "hidden_at": int(time.time())})
+            hidden.append({"marker": marker, "trakt_id": trakt_id, "title": title, "year": self._safe_int(year, 0), "media_type": media_type, "hidden_at": int(time.time())})
         self.state["hidden_movies"] = hidden[-500:]
         for record in self.state.get("ai_lists", []):
             if not isinstance(record, dict):
@@ -2688,7 +2887,7 @@ class Curator:
             for rec in record.get("recommendations", []):
                 if not isinstance(rec, dict):
                     continue
-                if str(rec.get("title") or "").strip().casefold() == str(title or "").strip().casefold() and self._safe_int(rec.get("year"), 0) == self._safe_int(year, 0):
+                if str(rec.get("media_type") or "movie") == media_type and str(rec.get("title") or "").strip().casefold() == str(title or "").strip().casefold() and self._safe_int(rec.get("year"), 0) == self._safe_int(year, 0):
                     continue
                 recs.append(rec)
             record["recommendations"] = recs
@@ -2700,20 +2899,20 @@ class Curator:
         while True:
             hidden = [row for row in self.state.get("hidden_movies", []) if isinstance(row, dict)]
             if not hidden:
-                xbmcgui.Dialog().ok("Hidden Movies", "You haven't hidden any movies yet.\n\nUse 'Hide Movie' from a movie's context menu.")
+                xbmcgui.Dialog().ok("Hidden", "You haven't hidden any movies or TV shows yet.\n\nUse the Hide action from an item's context menu.")
                 return None
-            labels = ["%s%s" % (row.get("title") or "Unknown movie", " (%s)" % row.get("year") if row.get("year") else "") for row in hidden]
-            labels.append("Restore all hidden movies")
-            choice = xbmcgui.Dialog().select("Hidden Movies", labels)
+            labels = ["%s%s%s" % (row.get("title") or "Unknown item", " (%s)" % row.get("year") if row.get("year") else "", " • TV Show" if row.get("media_type") == "show" else "") for row in hidden]
+            labels.append("Restore all hidden items")
+            choice = xbmcgui.Dialog().select("Hidden", labels)
             if choice < 0:
                 return None
             if choice == len(hidden):
-                if xbmcgui.Dialog().yesno(self.name, "Allow all hidden movies to be recommended again?"):
+                if xbmcgui.Dialog().yesno(self.name, "Allow all hidden items to be recommended again?"):
                     self.state["hidden_movies"] = []
                     self._save_state()
                 continue
             row = hidden[choice]
-            if xbmcgui.Dialog().yesno(self.name, "Allow '%s' to be recommended again?" % (row.get("title") or "this movie")):
+            if xbmcgui.Dialog().yesno(self.name, "Allow '%s' to be recommended again?" % (row.get("title") or "this item")):
                 self.state["hidden_movies"] = [item for item in hidden if item.get("marker") != row.get("marker")]
                 self._save_state()
 
@@ -2911,6 +3110,57 @@ class Curator:
         self.record_activity("Added %s to %s" % (record.get("name") or "curatr list", updated.get("name")), notify=True)
         return updated
 
+    def add_media_to_list_interactive(self, media):
+        """Add a selected Kodi list item to an existing compatible curatr list."""
+        media = dict(media or {})
+        media_type = "show" if str(media.get("media_type") or "movie") == "show" else "movie"
+        title = str(media.get("title") or "").strip()
+        if not title:
+            raise RuntimeError("curatr could not read the selected title.")
+        compatible = []
+        for row in self.state.get("ai_lists", []):
+            if not isinstance(row, dict):
+                continue
+            content_type = str(row.get("content_type") or "movies")
+            if content_type == "both" or (media_type == "movie" and content_type == "movies") or (media_type == "show" and content_type == "shows"):
+                compatible.append(row)
+        if not compatible:
+            raise RuntimeError("Create a compatible curatr list first.")
+        choice = xbmcgui.Dialog().select("Add to curatr List", [str(row.get("name") or "curatr list") for row in compatible])
+        if choice < 0:
+            return None
+        record = compatible[choice]
+        ids = dict(media.get("ids") or {})
+        marker = (media_type, self._normalise_title(title), self._safe_int(media.get("year"), 0))
+        for existing in record.get("movies", []):
+            if not isinstance(existing, dict):
+                continue
+            existing_ids = existing.get("ids") or {}
+            same_id = any(ids.get(key) and str(ids.get(key)) == str(existing_ids.get(key)) for key in ("tmdb", "imdb", "tvdb"))
+            existing_marker = (
+                str(existing.get("media_type") or "movie"), self._normalise_title(existing.get("title")),
+                self._safe_int(existing.get("year"), 0),
+            )
+            if same_id or existing_marker == marker:
+                xbmcgui.Dialog().ok(self.name, "%s is already in %s." % (title, record.get("name") or "that list"))
+                return record
+        compact = self._compact_movie(media)
+        compact["media_type"] = media_type
+        updated = dict(record)
+        updated["movies"] = [dict(row) for row in record.get("movies", []) if isinstance(row, dict)] + [compact]
+        updated["count"] = max(self._safe_int(record.get("count"), 0), len(updated["movies"]))
+        updated["last_result_count"] = len(updated["movies"])
+        updated["local_changed_at"] = updated["updated_at"] = int(time.time())
+        self._store_managed_record(updated, record)
+        self._save_state()
+        if updated.get("sync_to_trakt") and self._has_oauth():
+            try:
+                updated = self.sync_list_to_trakt(updated.get("local_id"), silent=True)
+            except Exception as exc:
+                self.record_activity("Added %s locally; Trakt sync was skipped" % title, level="warning", detail=str(exc), notify=False)
+        self.record_activity("Added %s to %s" % (title, updated.get("name") or "curatr list"), notify=True)
+        return updated
+
     def add_provider_list_to_widget_folder_interactive(self, folder_id, provider):
         """Add a lightweight account-list reference without copying its contents."""
         folder = self.widget_folder_by_id(folder_id)
@@ -3025,9 +3275,15 @@ class Curator:
                 if not self._has_oauth():
                     raise RuntimeError("Reconnect Trakt to open this linked list.")
                 response = self.trakt.list_items(provider_list_id, limit=250, extended=True)
-                movies = [
-                    row.get("movie") for row in response if isinstance(row, dict) and isinstance(row.get("movie"), dict)
-                ]
+                movies = []
+                for row in response if isinstance(response, list) else []:
+                    if not isinstance(row, dict):
+                        continue
+                    item = row.get("show") if isinstance(row.get("show"), dict) else row.get("movie")
+                    if isinstance(item, dict):
+                        item = dict(item)
+                        item["media_type"] = "show" if isinstance(row.get("show"), dict) else "movie"
+                        movies.append(item)
             elif provider == "mdblist":
                 if not self.mdblist or not self.mdblist.api_key:
                     raise RuntimeError("Connect MDBList in Settings to perform this action.")
@@ -3194,6 +3450,46 @@ class Curator:
         self.record_activity("Added external shortcut to %s" % updated.get("name"), notify=True)
         return updated
 
+    def add_external_shortcut_interactive(self, path, suggested_name="", suggested_thumbnail=""):
+        """Store a selected Kodi add-on folder without reopening curatr's path browser."""
+        path = self._valid_external_plugin_path(path)
+        if not path:
+            raise RuntimeError("Only complete plugin:// folder paths can be added to curatr folders.")
+        folders = self.widget_folders()
+        if not folders:
+            if not xbmcgui.Dialog().yesno(self.name, "Create a curatr folder first?"):
+                return None
+            if not self.create_widget_folder_interactive():
+                return None
+            folders = self.widget_folders()
+        choice = xbmcgui.Dialog().select("Add to curatr Folder", [str(row.get("name") or "Folder") for row in folders])
+        if choice < 0:
+            return None
+        folder = folders[choice]
+        if any(
+            isinstance(row, dict) and row.get("type") == "external_path" and str(row.get("path") or "") == path
+            for row in folder.get("entries", [])
+        ):
+            xbmcgui.Dialog().ok(self.name, "That page is already in this folder.")
+            return folder
+        name = xbmcgui.Dialog().input("Shortcut name", defaultt=str(suggested_name or "").strip())
+        if not name or not str(name).strip():
+            return None
+        artwork = normalise_list_art({"icon_mode": "default", "fanart_mode": "default"})
+        thumbnail = str(suggested_thumbnail or "").strip()
+        if thumbnail.startswith(("special://", "/", "image://", "http://", "https://")):
+            artwork.update({"icon_mode": "custom", "icon_source": thumbnail, "icon_label": str(name).strip()})
+        entry = {
+            "id": uuid.uuid4().hex, "type": "external_path", "name": str(name).strip(),
+            "description": "", "path": path, "artwork": artwork,
+        }
+        updated = dict(folder)
+        updated["entries"] = [dict(row) for row in folder.get("entries", []) if isinstance(row, dict)] + [entry]
+        updated["updated_at"] = int(time.time())
+        self._store_widget_folder(updated, folder)
+        self.record_activity("Added external shortcut to %s" % updated.get("name"), notify=True)
+        return updated
+
     def import_kodi_favourite_interactive(self, folder_id):
         folder = self.widget_folder_by_id(folder_id)
         if not folder:
@@ -3322,7 +3618,7 @@ class Curator:
             if entry.get("type") == "external_path":
                 actions = ["Name", "Description", "Plugin path"] + actions
             elif entry.get("type") == "provider_list":
-                actions = ["Name", "Description", "Refresh cached films"] + actions
+                actions = ["Name", "Description", "Refresh cached items"] + actions
             choice = xbmcgui.Dialog().select(self._folder_entry_label(entry), actions)
             if choice < 0:
                 return folder
@@ -3434,7 +3730,7 @@ class Curator:
             else:
                 self.manage_widget_folder_interactive(folders[choice - 1].get("id"))
 
-    def why_recommended(self, list_id, trakt_id="", title="", year=0):
+    def why_recommended(self, list_id, trakt_id="", title="", year=0, media_type="movie"):
         record = self._managed_record_by_id(list_id) if list_id else None
         if not record:
             # Find the first list containing the movie.
@@ -3442,7 +3738,7 @@ class Curator:
                 if not isinstance(row, dict): continue
                 for movie in row.get("movies", []):
                     ids = movie.get("ids") or {} if isinstance(movie, dict) else {}
-                    if str(ids.get("trakt") or "") == str(trakt_id):
+                    if str((movie or {}).get("media_type") or "movie") == media_type and str(ids.get("trakt") or "") == str(trakt_id):
                         record = row; break
                 if record: break
         movie = None
@@ -3450,6 +3746,7 @@ class Curator:
             for item in record.get("movies", []):
                 if not isinstance(item, dict): continue
                 ids = item.get("ids") or {}
+                if str(item.get("media_type") or "movie") != media_type: continue
                 if trakt_id and str(ids.get("trakt") or "") == str(trakt_id): movie = item; break
                 if not trakt_id and str(item.get("title") or "").casefold() == str(title or "").casefold() and self._safe_int(item.get("year"), 0) == self._safe_int(year, 0): movie = item; break
         reason = str((movie or {}).get("ai_reason") or (movie or {}).get("match_reason") or "").strip()
@@ -3691,7 +3988,7 @@ class Curator:
         if not xbmcgui.Dialog().yesno(
             self.name,
             "Restore this curatr backup?\n\n"
-            "Lists with the same local ID are updated automatically. If a different list has the same name, curatr will ask whether to replace it, keep both, or skip it. Saved prompts, hidden movies and folders are merged and de-duplicated.\n\n"
+            "Lists with the same local ID are updated automatically. If a different list has the same name, curatr will ask whether to replace it, keep both, or skip it. Saved prompts, hidden items and folders are merged and de-duplicated.\n\n"
             "Trakt syncing stays off for restored lists until you enable it again.",
         ):
             return None
@@ -3795,7 +4092,7 @@ class Curator:
                 ", %d skipped" % list_skipped if list_skipped else "",
             ),
             "Saved prompts: %d added, %d updated" % (prompts_added, prompts_updated),
-            "Hidden movies: %d added, %d merged" % (hidden_added, hidden_updated),
+            "Hidden items: %d added, %d merged" % (hidden_added, hidden_updated),
             "Folders: %d added, %d updated" % (folders_added, folders_updated),
             "",
             "Trakt syncing is disabled for restored lists until you enable it again.",
@@ -3815,14 +4112,57 @@ class Curator:
             raise RuntimeError("That list has already been removed.")
         self._require_trakt_write()
         movies = [m for m in (record.get("movies") or []) if isinstance(m, dict)]
-        desired_ids = []
+        desired_movies = []
+        desired_shows = []
+        resolved_movies = []
+        unresolved = []
+        ids_added = False
         for movie in movies:
+            media_type = "show" if str(movie.get("media_type") or "movie") == "show" else "movie"
+            resolved = dict(movie)
+            ids = dict(resolved.get("ids") or {})
             try:
-                desired_ids.append(int((movie.get("ids") or {}).get("trakt")))
+                trakt_id = int(ids.get("trakt"))
             except (TypeError, ValueError):
+                trakt_id = 0
+            if not trakt_id and ids.get("tmdb") not in (None, ""):
+                matches = self.trakt.search_tmdb(ids.get("tmdb"), media_type)
+                match = self._select_media_match(
+                    matches, resolved.get("title") or "", self._safe_int(resolved.get("year"), 0), media_type,
+                )
+                if match:
+                    match_ids = dict(match.get("ids") or {})
+                    try:
+                        trakt_id = int(match_ids.get("trakt"))
+                    except (TypeError, ValueError):
+                        trakt_id = 0
+                    if trakt_id:
+                        ids.update({key: value for key, value in match_ids.items() if value not in (None, "")})
+                        resolved["ids"] = ids
+                        ids_added = True
+            if not trakt_id:
+                unresolved.append(str(resolved.get("title") or "Unknown item"))
+                resolved_movies.append(resolved)
                 continue
-        if not desired_ids:
+            if media_type == "show":
+                desired_shows.append(trakt_id)
+            else:
+                desired_movies.append(trakt_id)
+            resolved_movies.append(resolved)
+        if unresolved:
+            raise RuntimeError(
+                "Trakt could not identify %d item%s in this list: %s"
+                % (len(unresolved), "" if len(unresolved) == 1 else "s", ", ".join(unresolved[:3]))
+            )
+        if not desired_movies and not desired_shows:
             raise RuntimeError("Find some recommendations for this list before syncing it to Trakt.")
+
+        if ids_added:
+            updated_local = dict(record)
+            updated_local["movies"] = resolved_movies
+            self._store_managed_record(updated_local, record)
+            self._save_state()
+            record = updated_local
 
         target = self._resolve_target_list(
             record.get("name") or "My Picks",
@@ -3833,7 +4173,7 @@ class Curator:
         list_id_remote = (target.get("ids") or {}).get("trakt")
         if not list_id_remote:
             raise RuntimeError("Trakt did not return an ID for the target list.")
-        self._sync_list_movies(list_id_remote, desired_ids)
+        self._sync_list_items(list_id_remote, desired_movies, desired_shows)
         updated = dict(record)
         now = int(time.time())
         updated["trakt_id"] = list_id_remote
@@ -3866,10 +4206,10 @@ class Curator:
         """Explain curatr's data flow in plain language from inside Kodi."""
         text = (
             "WHAT STAYS IN KODI\n\n"
-            "Your lists, prompts, preferences, artwork choices, hidden films and settings are stored in Kodi's curatr profile. "
+            "Your lists, prompts, preferences, artwork choices, hidden items and settings are stored in Kodi's curatr profile. "
             "API keys and account tokens are stored there too, but are excluded from curatr backups.\n\n"
             "KEYWORD MATCHING\n\n"
-            "Keyword Matching does not send your prompt or preferences to an AI provider. TMDB or MDBList may still receive "
+            "Keyword Matching does not send your request or preferences to an AI provider. TMDB or MDBList may still receive "
             "the catalogue requests needed for filters you choose.\n\n"
             "WHEN YOU USE AI\n\n"
             "curatr sends your prompt and a limited preference summary to the AI service you selected. It does not send your "
@@ -3931,24 +4271,39 @@ class Curator:
             record = self._managed_record_by_id(list_id)
             if not record:
                 raise RuntimeError("That list has already been removed.")
+            key = self._record_key(record)
             choice = xbmcgui.Dialog().select(
                 record.get("name") or "curatr list",
                 [
                     "List settings",
                     "Refresh this list",
+                    "Sync to Trakt",
+                    "Use list as AI reference",
+                    "Add to Folder",
+                    "Artwork",
                     "View list details",
+                    "Delete this list",
                 ],
             )
             if choice < 0:
                 return None
-            key = self._record_key(record)
             if choice == 0:
-                return self.list_settings_interactive(key)
-            if choice == 1:
-                return self.refresh_list(key, silent=False)
-            if choice == 2:
+                self.list_settings_interactive(key)
+            elif choice == 1:
+                self.refresh_list(key, silent=False)
+            elif choice == 2:
+                self.sync_list_to_trakt_interactive(key)
+            elif choice == 3:
+                return self.create_related_list_interactive(list_id=key)
+            elif choice == 4:
+                self.add_list_to_widget_folder_interactive(list_id=key)
+            elif choice == 5:
+                self.list_artwork_interactive(key)
+            elif choice == 6:
                 self._view_list_settings(key)
-                continue
+            elif choice == 7:
+                if self.delete_list_interactive(key):
+                    return None
 
     def manage_lists_interactive(self):
         records = [row for row in self.state.get("ai_lists", []) if isinstance(row, dict)]
@@ -3970,13 +4325,13 @@ class Curator:
             else:
                 trakt = "Kodi only"
             labels.append(
-                "%s: %d films: %s: %s"
+                "%s: %d items: %s: %s"
                 % (row.get("name") or "curatr list", self._safe_int(row.get("count"), 20), regen, trakt)
             )
         choice = xbmcgui.Dialog().select("My Lists", labels)
         if choice < 0:
             return None
-        return self.list_settings_interactive(self._record_key(records[choice]))
+        return self.manage_list_interactive(self._record_key(records[choice]))
 
     def update_all(self, silent=False):
         records = list(self.state.get("ai_lists", []))
@@ -4012,8 +4367,8 @@ class Curator:
                 self.record_activity("Refreshed %d list(s)" % updated, notify=True)
         return {"updated": updated, "failed": failed}
 
-    def _movie_cache_key(self, title, year):
-        return "%s|%s" % (self._normalise_title(title), str(year or ""))
+    def _movie_cache_key(self, title, year, media_type="movie"):
+        return "%s|%s|%s" % (media_type, self._normalise_title(title), str(year or ""))
 
     @staticmethod
     def _compact_movie(movie):
@@ -4021,13 +4376,37 @@ class Curator:
             return {}
         keep = (
             "title", "year", "ids", "overview", "tagline", "runtime", "released",
-            "certification", "genres", "rating", "votes", "images",
+            "certification", "genres", "rating", "votes", "images", "media_type",
         )
         return {key: movie.get(key) for key in keep if movie.get(key) not in (None, "", [], {})}
 
-    def _movie_cache_lookup(self, title, year):
+    def _keyword_tmdb_item(self, candidate, media_type):
+        """Store a local Keyword Matching result without requiring Trakt."""
+        tmdb_id = candidate.get("tmdb_id")
+        if tmdb_id in (None, ""):
+            return None
+        images = {}
+        poster = self.tmdb.image_url(candidate.get("poster_path"), "w780")
+        fanart = self.tmdb.image_url(candidate.get("backdrop_path"), "w1280")
+        if poster:
+            images["poster"] = {"full": poster}
+        if fanart:
+            images["fanart"] = {"full": fanart}
+        movie = {
+            "title": candidate.get("title"),
+            "year": self._safe_int(candidate.get("year"), 0),
+            "ids": {"tmdb": tmdb_id},
+            "overview": candidate.get("overview"),
+            "rating": candidate.get("rating"),
+            "votes": candidate.get("votes"),
+            "images": images,
+            "media_type": "show" if media_type == "show" else "movie",
+        }
+        return self._compact_movie(movie)
+
+    def _movie_cache_lookup(self, title, year, media_type="movie"):
         cache = self.state.get("movie_resolution_cache") or {}
-        row = cache.get(self._movie_cache_key(title, year)) if isinstance(cache, dict) else None
+        row = cache.get(self._movie_cache_key(title, year, media_type)) if isinstance(cache, dict) else None
         if not isinstance(row, dict):
             return False, None
         cached_at = self._safe_int(row.get("cached_at"), 0)
@@ -4052,17 +4431,17 @@ class Curator:
         )
         self.state["movie_resolution_cache"] = dict(ordered[: self.MOVIE_CACHE_KEEP_ITEMS])
 
-    def _cache_movie(self, title, year, movie):
+    def _cache_movie(self, title, year, movie, media_type="movie"):
         if not isinstance(movie, dict):
             return
         cache = self.state.setdefault("movie_resolution_cache", {})
-        key = self._movie_cache_key(title, year)
+        key = self._movie_cache_key(title, year, media_type)
         cache[key] = {"movie": self._compact_movie(movie), "cached_at": int(time.time())}
         self._trim_movie_cache()
 
-    def _cache_movie_miss(self, title, year):
+    def _cache_movie_miss(self, title, year, media_type="movie"):
         cache = self.state.setdefault("movie_resolution_cache", {})
-        cache[self._movie_cache_key(title, year)] = {"miss": True, "cached_at": int(time.time())}
+        cache[self._movie_cache_key(title, year, media_type)] = {"miss": True, "cached_at": int(time.time())}
         self._trim_movie_cache()
 
     @staticmethod
@@ -4209,17 +4588,135 @@ class Curator:
             pool = self.tmdb.discover_movies(rules, limit=limit)
         return pool, analysis
 
+    def build_similar_preview(self, reference, method="keyword", count=20):
+        """Build an unsaved Find Similar result set from one Kodi item."""
+        reference = dict(reference or {})
+        title = str(reference.get("title") or "").strip()
+        if not title:
+            raise RuntimeError("curatr could not read the selected title.")
+        media_type = "show" if str(reference.get("media_type") or "movie") == "show" else "movie"
+        count = max(5, min(50, self._safe_int(count, 20)))
+        method = "ai" if str(method or "keyword").lower() == "ai" else "keyword"
+        self._require_keyword_catalogue()
+        movies = []
+        recommendations = []
+        if method == "keyword":
+            pool = self.tmdb.similar_titles(reference, limit=min(100, count * 3))
+            for candidate in pool:
+                movie = self._keyword_tmdb_item(candidate, media_type)
+                if not movie:
+                    continue
+                movie["match_reason"] = "Recommended by TMDB from shared catalogue signals"
+                movies.append(movie)
+                if len(movies) >= count:
+                    break
+        else:
+            self._require_ai()
+            content_type = "shows" if media_type == "show" else "movies"
+            prompt = (
+                "Find %s genuinely similar to %s%s. Match tone, themes, atmosphere, style and creative qualities, "
+                "not merely genre. Do not include the reference title."
+                % ("TV shows" if media_type == "show" else "films", title, " (%s)" % reference.get("year") if reference.get("year") else "")
+            )
+            profile = self.state.get("profile") or {}
+            context = self._build_recommendation_context(profile, {})
+            context["reference_movies"] = [{
+                "title": title, "year": self._safe_int(reference.get("year"), 0), "media_type": media_type,
+            }]
+            result = self.ai.recommend(prompt, context, min(60, count + max(8, count // 3)), content_type=content_type)
+            seen = set()
+            for item in result.get("items", []):
+                item_title = str(item.get("title") or "").strip()
+                if not item_title:
+                    continue
+                year = self._safe_int(item.get("year"), 0)
+                match = self.tmdb.search_show(item_title, year) if media_type == "show" else self.tmdb.search_movie(item_title, year)
+                if not match:
+                    continue
+                candidate = self.tmdb._compact_show(match) if media_type == "show" else self.tmdb._compact(match)
+                marker = (self._normalise_title(candidate.get("title")), self._safe_int(candidate.get("year"), 0))
+                if marker in seen or marker[0] == self._normalise_title(title):
+                    continue
+                seen.add(marker)
+                movie = self._keyword_tmdb_item(candidate, media_type)
+                if not movie:
+                    continue
+                if item.get("reason"):
+                    movie["ai_reason"] = str(item.get("reason"))
+                movies.append(movie)
+                recommendations.append(dict(item))
+                if len(movies) >= count:
+                    break
+        if not movies:
+            raise RuntimeError("curatr could not find similar items for that title. Try the other matching method.")
+        return {
+            "title": title, "year": self._safe_int(reference.get("year"), 0), "media_type": media_type,
+            "method": method, "count": count, "movies": movies, "recommendations": recommendations,
+            "reference": reference, "created_at": int(time.time()),
+        }
+
+    def save_similar_preview_interactive(self, preview):
+        """Turn an already generated temporary preview into a normal curatr list."""
+        preview = dict(preview or {})
+        movies = [dict(row) for row in preview.get("movies", []) if isinstance(row, dict)]
+        if not movies:
+            raise RuntimeError("That Find Similar preview has expired. Run it again first.")
+        source_title = str(preview.get("title") or "this title")
+        name = xbmcgui.Dialog().input("Name this list", defaultt="More like %s" % source_title)
+        if not name or not str(name).strip():
+            return None
+        name = str(name).strip()
+        if self._managed_record_by_name(name):
+            raise RuntimeError("A curatr list already uses that name. Choose a different name.")
+        description = xbmcgui.Dialog().input(
+            "List description (optional)", defaultt="Recommendations inspired by %s." % source_title,
+        )
+        method = "ai" if str(preview.get("method") or "keyword") == "ai" else "keyword"
+        media_type = "show" if str(preview.get("media_type") or "movie") == "show" else "movie"
+        now = int(time.time())
+        reference = {"title": source_title, "year": self._safe_int(preview.get("year"), 0), "media_type": media_type}
+        record = {
+            "local_id": uuid.uuid4().hex, "name": name,
+            "prompt": "Find titles similar to %s" % source_title,
+            "description": str(description or "").strip(), "count": len(movies),
+            "updated_at": now, "local_changed_at": now, "last_result_count": len(movies),
+            "movies": movies, "recommendations": list(preview.get("recommendations") or []),
+            "generation_method": method, "content_type": "shows" if media_type == "show" else "movies",
+            "reference_movies": [reference], "artwork": normalise_list_art({}),
+            "sync_to_trakt": bool(self._sync_enabled() and self._has_oauth()),
+            "regeneration_enabled": self._default_regeneration_enabled(),
+            "regeneration_interval_hours": self._default_regeneration_interval(),
+            "regeneration_last_attempt_at": 0,
+            "trakt_refresh_enabled": False,
+            "trakt_refresh_interval_hours": self._default_trakt_refresh_interval(),
+            "trakt_refresh_cycle_at": 0, "trakt_last_attempt_at": 0,
+        }
+        if method == "keyword":
+            record["keyword_rules"] = parse_prompt("similar to %s" % source_title)
+            record["keyword_strategy"] = "similar_films"
+        self._store_managed_record(record)
+        self._save_state()
+        if record.get("sync_to_trakt"):
+            try:
+                record = self.sync_list_to_trakt(record.get("local_id"), silent=True)
+            except Exception as exc:
+                self.record_activity("%s was saved locally; initial Trakt sync was skipped" % name, level="warning", detail=str(exc), notify=False)
+        self.record_activity("Created %s from Find Similar" % name, notify=True)
+        return record
+
     def _generate_keyword_and_write(
-        self, name, prompt, count, rules=None, silent=False, managed_record=None, description=None,
+        self, name, prompt, count, rules=None, silent=False, managed_record=None,
+        description=None, content_type="movies", persist=True,
     ):
         """Build and persist a list from deterministic rules without calling an AI provider."""
         self._require_keyword_catalogue()
         count = max(5, min(50, self._safe_int(count, 20)))
+        content_type = content_type if content_type in ("movies", "shows", "both") else "movies"
         rules = rules if isinstance(rules, dict) else parse_prompt(prompt)
         if self._safe_int(rules.get("version"), 0) < PARSER_VERSION:
             rules = parse_prompt(prompt)
         if not rules.get("confidence"):
-            raise RuntimeError("The saved prompt no longer contains a clear Keyword Matching filter.")
+            raise RuntimeError("The saved request no longer contains a clear Keyword Matching filter.")
 
         profile = self.state.get("profile") or {}
         if self._profile_source_available() and self._profile_is_stale():
@@ -4231,7 +4728,7 @@ class Curator:
 
         pool_limit = min(100, max(40, count * 3))
         history_mode = str(rules.get("history_mode") or "")
-        if history_mode in ("stale", "plays"):
+        if history_mode in ("stale", "plays") and content_type == "movies":
             watched = [row for row in profile.get("watched", []) if isinstance(row, dict) and row.get("title")]
             now = int(time.time())
             pool = []
@@ -4253,18 +4750,46 @@ class Curator:
                 pool.append({"title": row.get("title"), "year": row.get("year"), "tmdb_id": row.get("tmdb_id")})
             analysis = {"history_filter": history_mode}
         else:
-            pool, analysis = self._keyword_candidate_pool(rules, pool_limit)
+            movie_pool, analysis = (self._keyword_candidate_pool(rules, pool_limit) if content_type != "shows" else ([], {}))
+            show_specific_supported = not (
+                rules.get("people") or rules.get("reference_movies") or rules.get("collection_query")
+            )
+            show_pool = (
+                self.tmdb.discover_shows(rules, limit=pool_limit)
+                if content_type != "movies" and show_specific_supported else []
+            )
+            for row in movie_pool:
+                row["media_type"] = "movie"
+            if content_type == "both":
+                pool = []
+                for index in range(max(len(movie_pool), len(show_pool))):
+                    if index < len(movie_pool):
+                        pool.append(movie_pool[index])
+                    if index < len(show_pool):
+                        pool.append(show_pool[index])
+            else:
+                pool = show_pool if content_type == "shows" else movie_pool
         if not pool:
-            raise RuntimeError("Keyword Matching found no films for those filters. Try broadening the prompt.")
+            if content_type == "shows" and not show_specific_supported:
+                raise RuntimeError(
+                    "Keyword Matching cannot reliably match TV shows from named people, collections or reference films yet. "
+                    "Use AI for this request, or use TV filters such as genre, year, rating, country or language."
+                )
+            raise RuntimeError("Keyword Matching found no items for those filters. Try broadening the request.")
         preference_weights = preferred_genre_ids(profile)
         pool = sorted(
             pool, key=lambda row: score_candidate(row, rules, preference_weights, analysis), reverse=True,
         )
 
-        excluded_ids = set() if history_mode in ("stale", "plays") else self._excluded_movie_ids(profile)
-        excluded_markers = {"tmdb": set(), "imdb": set(), "title_year": set()} if history_mode in ("stale", "plays") else self._excluded_movie_markers(profile)
+        history_pool = history_mode in ("stale", "plays") and content_type == "movies"
+        excluded_ids = set() if history_pool else self._excluded_movie_ids(profile)
+        excluded_markers = {"tmdb": set(), "imdb": set(), "title_year": set()} if history_pool else self._excluded_movie_markers(profile)
+        excluded_show_ids = self._excluded_show_ids(profile)
+        excluded_show_markers = self._excluded_show_markers(profile)
         for row in self.state.get("hidden_movies", []):
             if not isinstance(row, dict):
+                continue
+            if str(row.get("media_type") or "movie") != "movie":
                 continue
             try:
                 excluded_ids.add(int(row.get("trakt_id")))
@@ -4273,7 +4798,7 @@ class Curator:
         previous_markers = set()
         if managed_record:
             previous_markers = {
-                (self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0))
+                (str(row.get("media_type") or "movie"), self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0))
                 for row in managed_record.get("movies") or [] if isinstance(row, dict)
             }
 
@@ -4281,25 +4806,31 @@ class Curator:
         resolved_ids = set()
         for item in pool:
             title, year = item.get("title", ""), item.get("year")
+            media_type = str(item.get("media_type") or "movie").lower()
             marker = (self._normalise_title(title), self._safe_int(year, 0))
-            if marker in previous_markers and len(pool) > count:
+            if (media_type, marker[0], marker[1]) in previous_markers and len(pool) > count:
                 continue
-            was_cached, movie = self._movie_cache_lookup(title, year)
-            if not was_cached:
-                try:
-                    matches = self.trakt.search_movies(title, year)
-                except TraktError as exc:
-                    if exc.status_code == 429 and candidates:
-                        break
-                    raise
-                movie = self._select_movie_match(matches, title, year)
-                if movie:
-                    self._cache_movie(title, year, movie)
-                else:
-                    self._cache_movie_miss(title, year)
+            if history_pool:
+                was_cached, movie = self._movie_cache_lookup(title, year, media_type)
+                if not was_cached:
+                    try:
+                        matches = self.trakt.search_movies(title, year)
+                    except TraktError as exc:
+                        if exc.status_code == 429 and candidates:
+                            break
+                        raise
+                    movie = self._select_media_match(matches, title, year, media_type)
+                    if movie:
+                        movie = dict(movie)
+                        movie["media_type"] = media_type
+                        self._cache_movie(title, year, movie, media_type)
+                    else:
+                        self._cache_movie_miss(title, year, media_type)
+            else:
+                movie = self._keyword_tmdb_item(item, media_type)
             if not movie:
                 continue
-            if history_mode in ("stale", "plays"):
+            if history_pool:
                 movie_year = self._safe_int(movie.get("year"), 0)
                 movie_rating = float(movie.get("rating") or 0)
                 movie_runtime = self._safe_int(movie.get("runtime"), 0)
@@ -4315,19 +4846,25 @@ class Curator:
             try:
                 trakt_id = int(ids.get("trakt"))
             except (TypeError, ValueError):
-                continue
+                trakt_id = 0
             movie_marker = (self._normalise_title(movie.get("title")), self._safe_int(movie.get("year"), 0))
             tmdb_id = str(ids.get("tmdb") or "")
             imdb_id = str(ids.get("imdb") or "").casefold()
+            identity = ("tmdb", tmdb_id) if tmdb_id else (("trakt", str(trakt_id)) if trakt_id else ("title", movie_marker))
             if (
-                trakt_id in excluded_ids or trakt_id in resolved_ids
-                or (tmdb_id and tmdb_id in excluded_markers["tmdb"])
-                or (imdb_id and imdb_id in excluded_markers["imdb"])
-                or movie_marker in excluded_markers["title_year"]
+                (media_type == "movie" and trakt_id and trakt_id in excluded_ids) or (media_type, identity) in resolved_ids
+                or (media_type == "show" and trakt_id and trakt_id in excluded_show_ids)
+                or (media_type == "movie" and tmdb_id and tmdb_id in excluded_markers["tmdb"])
+                or (media_type == "movie" and imdb_id and imdb_id in excluded_markers["imdb"])
+                or (media_type == "movie" and movie_marker in excluded_markers["title_year"])
+                or (media_type == "show" and tmdb_id and tmdb_id in excluded_show_markers["tmdb"])
+                or (media_type == "show" and imdb_id and imdb_id in excluded_show_markers["imdb"])
+                or (media_type == "show" and movie_marker in excluded_show_markers["title_year"])
             ):
                 continue
-            resolved_ids.add(trakt_id)
+            resolved_ids.add((media_type, identity))
             local_movie = self._compact_movie(movie)
+            local_movie["media_type"] = media_type
             reason_labels = {
                 "similar_people": "Shares catalogue signals with the referenced creators",
                 "recurring_collaborators": "Matches recurring collaborators from the referenced creators",
@@ -4339,13 +4876,13 @@ class Curator:
             local_movie["match_reason"] = reason_labels.get(
                 str(rules.get("strategy") or ""), "Matched the saved Keyword Matching filters",
             )
-            candidates.append({"trakt_id": trakt_id, "movie": local_movie})
+            candidates.append({"movie": local_movie})
             if len(candidates) >= count:
                 break
         if not candidates:
-            if history_mode in ("stale", "plays"):
+            if history_pool:
                 raise RuntimeError("Keyword Matching found no films in your viewing history for those filters.")
-            raise RuntimeError("Keyword Matching could not find any new unwatched films. Try broader filters or request fewer films.")
+            raise RuntimeError("Keyword Matching could not find any new unwatched items. Try broader filters or request fewer items.")
 
         previous = managed_record or {}
         record = dict(previous)
@@ -4359,6 +4896,7 @@ class Curator:
             "recommendations": [], "grounded_candidate_count": len(pool),
             "generation_method": "keyword", "keyword_rules": rules,
             "keyword_strategy": str(rules.get("strategy") or "filtered_discover"),
+            "content_type": content_type,
         })
         if "sync_to_trakt" not in record:
             record["sync_to_trakt"] = bool(self._sync_enabled() and self._has_oauth())
@@ -4374,6 +4912,8 @@ class Curator:
         record.setdefault("trakt_refresh_interval_hours", self._default_trakt_refresh_interval())
         record.setdefault("trakt_refresh_cycle_at", self._safe_int(record.get("trakt_synced_at"), 0))
         record.setdefault("trakt_last_attempt_at", 0)
+        if not persist:
+            return record
         self._store_managed_record(record, managed_record)
         self._save_state()
 
@@ -4384,15 +4924,16 @@ class Curator:
                 self.record_activity("%s created in Kodi; initial Trakt copy was skipped" % name, level="warning", detail=str(exc), notify=False)
         if not silent:
             action = "created" if not managed_record else "refreshed"
-            self.record_activity("%s %s locally with %d films using Keyword Matching" % (name, action, len(candidates)), notify=True)
+            self.record_activity("%s %s locally with %d items using Keyword Matching" % (name, action, len(candidates)), notify=True)
         return record
 
     def _generate_and_write(
         self, name, prompt, count, silent=False, managed_record=None,
-        description=None, reference_movies=None,
+        description=None, reference_movies=None, content_type="movies", persist=True,
     ):
         self._require_ai()
         count = max(5, min(50, self._safe_int(count, 20)))
+        content_type = content_type if content_type in ("movies", "shows", "both") else "movies"
 
         has_profile_source = self._profile_source_available()
         if has_profile_source and self._profile_is_stale():
@@ -4438,7 +4979,7 @@ class Curator:
             title = str(row.get("title") or "").strip()
             year = self._safe_int(row.get("year"), 0)
             if title:
-                compact_references.append({"title": title, "year": year})
+                compact_references.append({"title": title, "year": year, "media_type": str(row.get("media_type") or "movie")})
             if len(compact_references) >= 30:
                 break
         if compact_references:
@@ -4450,7 +4991,7 @@ class Curator:
         hidden_rows = [row for row in self.state.get("hidden_movies", []) if isinstance(row, dict)]
         if hidden_rows:
             taste_context["never_recommend"] = [
-                {"title": row.get("title"), "year": self._safe_int(row.get("year"), 0)}
+                {"title": row.get("title"), "year": self._safe_int(row.get("year"), 0), "media_type": str(row.get("media_type") or "movie")}
                 for row in hidden_rows[-100:] if row.get("title")
             ]
         if managed_record:
@@ -4461,17 +5002,17 @@ class Curator:
                 title = str(movie.get("title") or "").strip()
                 year = self._safe_int(movie.get("year"), 0)
                 if title and year:
-                    previous.append({"title": title, "year": year})
+                    previous.append({"title": title, "year": year, "media_type": str(movie.get("media_type") or "movie")})
                 if len(previous) >= 50:
                     break
             if previous:
                 taste_context["previous_recommendations_to_avoid"] = previous
 
-        grounded_pool = self._grounded_candidate_pool(fingerprint)
+        grounded_pool = self._grounded_candidate_pool(fingerprint) if content_type != "shows" else []
         if grounded_pool:
             taste_context["verified_candidate_pool"] = grounded_pool
             taste_context["verified_candidate_pool_note"] = (
-                "These are optional real-movie candidates from enabled catalogue/list services. "
+                "These are optional real-title candidates from enabled catalogue and list services. "
                 "Prefer strong matches from this pool, but follow the user's request above all else."
             )
 
@@ -4479,11 +5020,15 @@ class Curator:
         # Trakt verification can still discard ambiguous/watched matches, while
         # smaller candidate sets mean fewer title-resolution API requests.
         candidate_count = min(60, count + max(8, count // 3))
-        result = self.ai.recommend(prompt, taste_context, candidate_count)
+        result = self.ai.recommend(prompt, taste_context, candidate_count, content_type=content_type)
         excluded_ids = self._excluded_movie_ids(profile)
         excluded_markers = self._excluded_movie_markers(profile)
+        excluded_show_ids = self._excluded_show_ids(profile)
+        excluded_show_markers = self._excluded_show_markers(profile)
         for row in self.state.get("hidden_movies", []):
             if not isinstance(row, dict):
+                continue
+            if str(row.get("media_type") or "movie") != "movie":
                 continue
             try:
                 excluded_ids.add(int(row.get("trakt_id")))
@@ -4492,33 +5037,45 @@ class Curator:
         candidates = []
         resolved_ids = set()
         reference_markers = {
-            (self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0))
+            (str(row.get("media_type") or "movie"), self._normalise_title(row.get("title")), self._safe_int(row.get("year"), 0))
             for row in compact_references if row.get("title")
         }
-        reference_titles = {marker[0] for marker in reference_markers}
+        reference_titles = {(marker[0], marker[1]) for marker in reference_markers}
 
         for item in result.get("items", []):
             title = item.get("title", "")
             year = item.get("year")
-            was_cached, movie = self._movie_cache_lookup(title, year)
+            media_type = str(item.get("media_type") or "movie").lower()
+            if content_type == "movies" and media_type != "movie":
+                continue
+            if content_type == "shows" and media_type != "show":
+                continue
+            if media_type not in ("movie", "show"):
+                continue
+            was_cached, movie = self._movie_cache_lookup(title, year, media_type)
             if not was_cached:
                 try:
-                    matches = self.trakt.search_movies(title, year)
+                    matches = (
+                        self.trakt.search_shows(title, year)
+                        if media_type == "show" else self.trakt.search_movies(title, year)
+                    )
                 except TraktError as exc:
                     if exc.status_code == 429 and candidates:
                         break
                     raise
-                movie = self._select_movie_match(matches, title, year)
+                movie = self._select_media_match(matches, title, year, media_type)
                 if movie:
-                    self._cache_movie(title, year, movie)
+                    movie = dict(movie)
+                    movie["media_type"] = media_type
+                    self._cache_movie(title, year, movie, media_type)
                 else:
-                    self._cache_movie_miss(title, year)
+                    self._cache_movie_miss(title, year, media_type)
             if not movie:
                 continue
             movie_marker = (
-                self._normalise_title(movie.get("title")), self._safe_int(movie.get("year"), 0)
+                media_type, self._normalise_title(movie.get("title")), self._safe_int(movie.get("year"), 0)
             )
-            if movie_marker in reference_markers or movie_marker[0] in reference_titles:
+            if movie_marker in reference_markers or (movie_marker[0], movie_marker[1]) in reference_titles:
                 continue
             movie_ids = movie.get("ids") or {}
             trakt_id = movie_ids.get("trakt")
@@ -4529,16 +5086,21 @@ class Curator:
             tmdb_id = str(movie_ids.get("tmdb") or "")
             imdb_id = str(movie_ids.get("imdb") or "").casefold()
             if (
-                trakt_id in excluded_ids or trakt_id in resolved_ids
-                or (tmdb_id and tmdb_id in excluded_markers["tmdb"])
-                or (imdb_id and imdb_id in excluded_markers["imdb"])
-                or movie_marker in excluded_markers["title_year"]
+                (media_type == "movie" and trakt_id in excluded_ids) or (media_type, trakt_id) in resolved_ids
+                or (media_type == "show" and trakt_id in excluded_show_ids)
+                or (media_type == "movie" and tmdb_id and tmdb_id in excluded_markers["tmdb"])
+                or (media_type == "movie" and imdb_id and imdb_id in excluded_markers["imdb"])
+                or (media_type == "movie" and movie_marker[1:] in excluded_markers["title_year"])
+                or (media_type == "show" and tmdb_id and tmdb_id in excluded_show_markers["tmdb"])
+                or (media_type == "show" and imdb_id and imdb_id in excluded_show_markers["imdb"])
+                or (media_type == "show" and movie_marker[1:] in excluded_show_markers["title_year"])
             ):
                 continue
-            resolved_ids.add(trakt_id)
+            resolved_ids.add((media_type, trakt_id))
             # Preserve the AI reason locally; skins can surface it later without
             # another provider request.
             local_movie = self._compact_movie(movie)
+            local_movie["media_type"] = media_type
             if item.get("reason"):
                 local_movie["ai_reason"] = str(item.get("reason"))
             candidates.append({"trakt_id": trakt_id, "recommendation": item, "movie": local_movie})
@@ -4547,7 +5109,7 @@ class Curator:
 
         if not candidates:
             raise RuntimeError(
-                "curatr couldn't find enough new matches this time. Try a broader prompt or ask for fewer films."
+                "curatr couldn't find enough new matches this time. Try a broader prompt or ask for fewer items."
             )
 
         previous = managed_record or {}
@@ -4570,6 +5132,7 @@ class Curator:
             "recommendations": [row["recommendation"] for row in candidates],
             "grounded_candidate_count": len(grounded_pool),
             "generation_method": "ai",
+            "content_type": content_type,
         })
         if compact_references:
             record["reference_movies"] = compact_references
@@ -4595,6 +5158,9 @@ class Curator:
             record["trakt_refresh_cycle_at"] = self._safe_int(record.get("trakt_synced_at"), 0)
         if "trakt_last_attempt_at" not in record:
             record["trakt_last_attempt_at"] = 0
+
+        if not persist:
+            return record
 
         self._store_managed_record(record, managed_record)
         self._save_state()
@@ -4624,7 +5190,7 @@ class Curator:
             if not managed_record and record.get("trakt_synced_at"):
                 storage += " + initially synced to Trakt"
             self.record_activity(
-                "%s %s %s with %d films" % (record["name"], action_word, storage, len(candidates)),
+                "%s %s %s with %d items" % (record["name"], action_word, storage, len(candidates)),
                 notify=True,
             )
         return record
@@ -4671,33 +5237,27 @@ class Curator:
         return self.trakt.create_list(name, description or "Personalised recommendations created by curatr.")
 
     def _sync_list_movies(self, list_id, desired_ids):
+        return self._sync_list_items(list_id, desired_ids, [])
+
+    def _sync_list_items(self, list_id, desired_movies, desired_shows):
         current_items = self.trakt.list_items(list_id, extended=False)
-        current_ids = set()
+        current_movies, current_shows = set(), set()
         for row in current_items:
-            movie = row.get("movie", {}) if isinstance(row, dict) else {}
-            trakt_id = movie.get("ids", {}).get("trakt")
-            try:
-                current_ids.add(int(trakt_id))
-            except (TypeError, ValueError):
-                continue
+            for media_type, bucket in (("movie", current_movies), ("show", current_shows)):
+                item = row.get(media_type, {}) if isinstance(row, dict) else {}
+                try:
+                    bucket.add(int((item.get("ids") or {}).get("trakt")))
+                except (AttributeError, TypeError, ValueError):
+                    pass
 
-        desired = []
-        desired_set = set()
-        for value in desired_ids:
-            try:
-                value = int(value)
-            except (TypeError, ValueError):
-                continue
-            if value not in desired_set:
-                desired_set.add(value)
-                desired.append(value)
-
-        to_add = [value for value in desired if value not in current_ids]
-        to_remove = [value for value in current_ids if value not in desired_set]
-        if to_add:
-            self.trakt.add_movies(list_id, to_add)
-        if to_remove:
-            self.trakt.remove_movies(list_id, to_remove)
+        wanted_movies = set(self.trakt._unique_int_ids(desired_movies))
+        wanted_shows = set(self.trakt._unique_int_ids(desired_shows))
+        add_movies, remove_movies = wanted_movies - current_movies, current_movies - wanted_movies
+        add_shows, remove_shows = wanted_shows - current_shows, current_shows - wanted_shows
+        if add_movies: self.trakt.add_movies(list_id, add_movies)
+        if remove_movies: self.trakt.remove_movies(list_id, remove_movies)
+        if add_shows: self.trakt.add_shows(list_id, add_shows)
+        if remove_shows: self.trakt.remove_shows(list_id, remove_shows)
 
     def _managed_record_by_name(self, name):
         wanted = (name or "").strip().casefold()
@@ -4739,6 +5299,10 @@ class Curator:
 
     @classmethod
     def _select_movie_match(cls, matches, requested_title, requested_year):
+        return cls._select_media_match(matches, requested_title, requested_year, "movie")
+
+    @classmethod
+    def _select_media_match(cls, matches, requested_title, requested_year, media_type):
         if not isinstance(matches, list):
             return None
         wanted_title = cls._normalise_title(requested_title)
@@ -4750,17 +5314,17 @@ class Curator:
         exact_year = []
         nearby_year = []
         for result in matches:
-            movie = result.get("movie", {}) if isinstance(result, dict) else {}
-            if cls._normalise_title(movie.get("title")) != wanted_title:
+            item = result.get(media_type, {}) if isinstance(result, dict) else {}
+            if cls._normalise_title(item.get("title")) != wanted_title:
                 continue
             try:
-                movie_year = int(movie.get("year"))
+                item_year = int(item.get("year"))
             except (TypeError, ValueError):
-                movie_year = None
-            if wanted_year is None or movie_year == wanted_year:
-                exact_year.append(movie)
-            elif movie_year is not None and abs(movie_year - wanted_year) <= 1:
-                nearby_year.append(movie)
+                item_year = None
+            if wanted_year is None or item_year == wanted_year:
+                exact_year.append(item)
+            elif item_year is not None and abs(item_year - wanted_year) <= 1:
+                nearby_year.append(item)
         if exact_year:
             return exact_year[0]
         if nearby_year:
@@ -4801,6 +5365,35 @@ class Curator:
                     markers["title_year"].add((title, year))
         return markers
 
+    @staticmethod
+    def _excluded_show_ids(profile):
+        ids = set()
+        for bucket in ("shows_watched", "show_ratings"):
+            for item in (profile or {}).get(bucket, []):
+                try:
+                    ids.add(int((item.get("ids") or {}).get("trakt")))
+                except (AttributeError, TypeError, ValueError):
+                    pass
+        return ids
+
+    @classmethod
+    def _excluded_show_markers(cls, profile):
+        markers = {"tmdb": set(), "imdb": set(), "title_year": set()}
+        for bucket in ("shows_watched", "show_ratings"):
+            for item in (profile or {}).get(bucket, []):
+                if not isinstance(item, dict):
+                    continue
+                ids = item.get("ids") or {}
+                if ids.get("tmdb") not in (None, ""):
+                    markers["tmdb"].add(str(ids.get("tmdb")))
+                if ids.get("imdb"):
+                    markers["imdb"].add(str(ids.get("imdb")).casefold())
+                title = cls._normalise_title(item.get("title"))
+                year = cls._safe_int(item.get("year"), 0)
+                if title:
+                    markers["title_year"].add((title, year))
+        return markers
+
     # ---------- Compact reusable AI taste fingerprint ----------
 
     def _ensure_taste_fingerprint(self, profile=None, force=False):
@@ -4822,7 +5415,7 @@ class Curator:
             # spending an API call on a pseudo-precise profile. The current
             # request can still drive recommendations while exclusions stay local.
             fingerprint = {
-                "summary": "Limited personal rating history; rely mainly on the user's current request until more films are rated.",
+                "summary": "Limited personal rating history; rely mainly on the user's current request until more items are rated.",
                 "core_preferences": [],
                 "avoidances": [],
                 "director_affinities": [],
@@ -4957,12 +5550,31 @@ class Curator:
                 "exploration_directions",
             )
         }
+        recent_shows = []
+        for item in sorted(
+            [row for row in profile.get("shows_watched", []) if isinstance(row, dict)],
+            key=lambda row: str(row.get("last_watched_at") or ""), reverse=True,
+        ):
+            title = str(item.get("title") or "").strip()
+            if title:
+                recent_shows.append({"title": title, "year": Curator._safe_int(item.get("year"), 0), "media_type": "show"})
+            if len(recent_shows) >= 35:
+                break
+        show_ratings = [
+            {"title": row.get("title"), "year": Curator._safe_int(row.get("year"), 0), "rating": Curator._safe_int(row.get("rating"), 0), "media_type": "show"}
+            for row in profile.get("show_ratings", [])[:40]
+            if isinstance(row, dict) and row.get("title") and row.get("rating") is not None
+        ]
         return {
             "taste_fingerprint": compact_fingerprint,
             "recently_watched_examples_to_avoid": recent,
+            "recently_watched_shows_to_avoid": recent_shows,
+            "tv_show_rating_examples": show_ratings,
             "local_exclusion_counts": {
                 "rated": len(profile.get("ratings", [])),
                 "watched": len(profile.get("watched", [])),
+                "shows_rated": len(profile.get("show_ratings", [])),
+                "shows_watched": len(profile.get("shows_watched", [])),
             },
         }
 
@@ -4991,7 +5603,7 @@ class Curator:
         source_text = " + ".join(source_names) or "prompt-only mode"
         conflict_count = self._safe_int(profile.get("conflicting_ratings"), 0)
         data_note = (
-            "Built using %d personal ratings, %d watched films and %d Kodi Library titles from %s. "
+            "Built using %d personal ratings, %d watched items and %d Kodi Library titles from %s. "
             "%d conflicting rating%s %s ignored. "
             "Complete watched/rated exclusion data stays local to Kodi and is not sent with every recommendation request."
             % (
@@ -5246,7 +5858,7 @@ class Curator:
     def _require_keyword_catalogue(self):
         if self.tmdb is None or not getattr(self.tmdb, "api_key", ""):
             raise RuntimeError(
-                "Keyword Matching needs TMDB for its movie catalogue. Enable TMDB and add a TMDB API key "
+                "Keyword Matching needs TMDB for its catalogue. Enable TMDB and add a TMDB API key "
                 "under Metadata in Settings; no AI key or linked account is required."
             )
 
@@ -5306,7 +5918,7 @@ class Curator:
                 sub = xbmcgui.Dialog().select(self._loc(32411, "Explore"), [
                     self._loc(32430, "Quick Pick"),
                     self._loc(32431, "Saved Prompts"),
-                    self._loc(32432, "Hidden Movies"),
+                    self._loc(32432, "Hidden"),
                 ])
                 if sub == 0: self.quick_pick_interactive()
                 elif sub == 1: self.prompt_templates_interactive()
@@ -5317,14 +5929,10 @@ class Curator:
                     self._loc(32441, "View My Preferences"),
                     self._loc(32442, "AI Usage"),
                     self._loc(32443, "Recent Activity"),
-                    self._loc(32444, "Check Trakt Connection"),
-                    self._loc(32445, "Connect / Reconnect Trakt"),
                 ])
                 if sub == 0: self.sync_profile()
                 elif sub == 1: self.view_taste_fingerprint()
                 elif sub == 2: self.show_ai_usage()
                 elif sub == 3: self.show_activity()
-                elif sub == 4: self.refresh_trakt_status(silent=False)
-                elif sub == 5: self.authenticate_trakt()
             elif choice == 3:
                 self.open_settings()

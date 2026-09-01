@@ -2,16 +2,21 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: curatr\n"
+"PO-Revision-Date: 2026-09-01 00:00+0000\n"
+"Last-Translator: crabbymondays\n"
+"Language-Team: English (United Kingdom)\n"
 "Language: en_GB\n"
+"MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgctxt "#32010"
 msgid "Connected Accounts"
 msgstr ""
 
 msgctxt "#32011"
-msgid "Connect the accounts curatr can use for preferences, lists and optional movie sources."
+msgid "Connect the accounts curatr can use for preferences, lists and optional services."
 msgstr ""
 
 msgctxt "#32012"
@@ -19,7 +24,7 @@ msgid "Trakt"
 msgstr ""
 
 msgctxt "#32013"
-msgid "Client ID from the Trakt application used by curatr. It is required for Trakt movie lookups."
+msgid "Client ID from the Trakt application used by curatr. It is needed when curatr looks up movies and shows through Trakt."
 msgstr ""
 
 msgctxt "#32014"
@@ -107,7 +112,7 @@ msgid "Auto Refresh for new lists"
 msgstr ""
 
 msgctxt "#32043"
-msgid "When enabled, a new list periodically re-runs its saved prompt to get fresh movie picks. This works even for Kodi-only lists."
+msgid "When enabled, a new list periodically re-runs its saved request to get fresh items. This works even for Kodi-only lists."
 msgstr ""
 
 msgctxt "#32044"
@@ -271,11 +276,11 @@ msgid "Choose where curatr reads your preferences and how often the reusable sum
 msgstr ""
 
 msgctxt "#32310"
-msgid "Quick Pick film count"
+msgid "Quick Pick item count"
 msgstr ""
 
 msgctxt "#32311"
-msgid "How many films a Quick Pick mood should generate."
+msgid "How many items a Quick Pick mood should generate."
 msgstr ""
 
 msgctxt "#32320"
@@ -359,7 +364,7 @@ msgid "Metadata"
 msgstr ""
 
 msgctxt "#32521"
-msgid "Optional movie information services that help curatr identify real films and improve matching."
+msgid "Optional information services that help curatr identify movies and shows and improve matching."
 msgstr ""
 
 msgctxt "#32522"
@@ -371,7 +376,7 @@ msgid "Improve matching with TMDB"
 msgstr ""
 
 msgctxt "#32524"
-msgid "Lets curatr verify and enrich films related to your preferences. If TMDB is unavailable, curatr continues normally."
+msgid "Lets curatr verify and add information to movies and shows. If TMDB is unavailable, curatr continues normally."
 msgstr ""
 
 msgctxt "#32525"
@@ -485,7 +490,7 @@ msgid "Settings"
 msgstr ""
 
 msgctxt "#32414"
-msgid "Create, browse and manage your personalised movie lists."
+msgid "Create, browse and manage your personalised movie and TV lists."
 msgstr ""
 
 msgctxt "#32415"
@@ -537,7 +542,7 @@ msgid "Find fresh recommendations for all your saved lists."
 msgstr ""
 
 msgctxt "#32427"
-msgid "Save or restore a backup of your lists, prompts, hidden movies and folders."
+msgid "Save or restore a backup of your lists, prompts, hidden items and folders."
 msgstr ""
 
 msgctxt "#32430"
@@ -549,7 +554,7 @@ msgid "Saved Prompts"
 msgstr ""
 
 msgctxt "#32432"
-msgid "Hidden Movies"
+msgid "Hidden"
 msgstr ""
 
 msgctxt "#32433"
@@ -561,7 +566,7 @@ msgid "Reuse and manage prompts you have saved for later."
 msgstr ""
 
 msgctxt "#32435"
-msgid "Review movies you have asked curatr not to recommend."
+msgid "Review movies and TV shows you have asked curatr not to recommend."
 msgstr ""
 
 msgctxt "#32440"
@@ -632,6 +637,94 @@ msgctxt "#32451"
 msgid "Opens an activation window to link your Trakt account."
 msgstr ""
 
+msgctxt "#32800"
+msgid "Context Menu"
+msgstr ""
+
+msgctxt "#32801"
+msgid "Choose which curatr actions appear when you open Kodi's context menu on a movie, TV show or folder."
+msgstr ""
+
+msgctxt "#32802"
+msgid "Show curatr in Kodi's context menu"
+msgstr ""
+
+msgctxt "#32803"
+msgid "Adds a curatr submenu to supported movie, TV show and folder items outside the add-on."
+msgstr ""
+
+msgctxt "#32804"
+msgid "Actions"
+msgstr ""
+
+msgctxt "#32805"
+msgid "Show Add to curatr List"
+msgstr ""
+
+msgctxt "#32806"
+msgid "Add the selected movie or TV show to one of your existing curatr lists."
+msgstr ""
+
+msgctxt "#32807"
+msgid "Show Add to curatr Folder"
+msgstr ""
+
+msgctxt "#32808"
+msgid "Save the selected add-on folder as a shortcut in one of your curatr folders."
+msgstr ""
+
+msgctxt "#32809"
+msgid "Show Find Similar"
+msgstr ""
+
+msgctxt "#32810"
+msgid "Open a temporary poster preview of recommendations based on the selected movie or TV show."
+msgstr ""
+
+msgctxt "#32811"
+msgid "Find Similar"
+msgstr ""
+
+msgctxt "#32812"
+msgid "Matching method"
+msgstr ""
+
+msgctxt "#32813"
+msgid "Keyword Matching uses catalogue data without AI. AI can interpret tone, themes and style more deeply."
+msgstr ""
+
+msgctxt "#32814"
+msgid "Keyword Matching"
+msgstr ""
+
+msgctxt "#32815"
+msgid "AI"
+msgstr ""
+
+msgctxt "#32816"
+msgid "Preview size"
+msgstr ""
+
+msgctxt "#32817"
+msgid "Choose how many posters Find Similar displays, from 5 to 50."
+msgstr ""
+
+msgctxt "#32820"
+msgid "curatr"
+msgstr ""
+
+msgctxt "#32821"
+msgid "Add to curatr List"
+msgstr ""
+
+msgctxt "#32822"
+msgid "Add to curatr Folder"
+msgstr ""
+
+msgctxt "#32823"
+msgid "Find Similar"
+msgstr ""
+
 msgctxt "#32490"
 msgid "Error"
 msgstr ""
@@ -698,4 +791,72 @@ msgstr ""
 
 msgctxt "#32641"
 msgid "See what curatr stores locally and what optional services receive."
+msgstr ""
+
+msgctxt "#32700"
+msgid "Playback"
+msgstr ""
+
+msgctxt "#32701"
+msgid "Choose what happens when you open a movie or TV show. Automatic checks your Kodi library first, then an available video add-on."
+msgstr ""
+
+msgctxt "#32702"
+msgid "Movies"
+msgstr ""
+
+msgctxt "#32703"
+msgid "Current Movie Playback"
+msgstr ""
+
+msgctxt "#32704"
+msgid "Shows what curatr will use when you open a movie."
+msgstr ""
+
+msgctxt "#32705"
+msgid "Choose Movie Playback"
+msgstr ""
+
+msgctxt "#32706"
+msgid "Automatic checks your Kodi library first. You can instead choose an available video add-on or only show information."
+msgstr ""
+
+msgctxt "#32707"
+msgid "TV Shows"
+msgstr ""
+
+msgctxt "#32708"
+msgid "Current TV Show Playback"
+msgstr ""
+
+msgctxt "#32709"
+msgid "Shows what curatr will use when you open a TV show."
+msgstr ""
+
+msgctxt "#32710"
+msgid "Choose TV Show Playback"
+msgstr ""
+
+msgctxt "#32711"
+msgid "Automatic checks your Kodi library first. You can instead choose an available video add-on or only show information."
+msgstr ""
+
+msgctxt "#32712"
+msgid "More Video Add-ons"
+msgstr ""
+
+msgctxt "#32713"
+msgid "Player List Address"
+msgstr ""
+
+msgctxt "#32714"
+msgid "Where curatr gets its list of supported video add-ons. Leave this unchanged unless you have been given another address."
+msgstr ""
+
+msgctxt "#32715"
+msgid "Set Up Installed Video Add-ons"
+msgstr ""
+
+msgctxt "#32716"
+msgid "Find compatible video add-ons already installed on this device. This does not install new add-ons."
 msgstr ""

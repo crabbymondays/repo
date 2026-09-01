@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import sys
 import time
@@ -11,8 +12,11 @@ import xbmcplugin
 import xbmcvfs
 
 from lib.art_cache import ArtworkCache
+from lib.catalogue_clients import CatalogueError
 from lib.core import Curator
 from lib.list_art import resolved_sources as resolved_list_art
+from lib.metadata_cache import MetadataCache
+from lib.player_registry import PlayerDefinitionError, PlayerRegistry
 from lib.trakt import TraktError
 from lib.view_refresh import list_signature, refresh_if_changed
 
@@ -24,6 +28,9 @@ HANDLE = int(sys.argv[1])
 ADDON_PATH = xbmcvfs.translatePath(ADDON.getAddonInfo("path"))
 MEDIA_PATH = os.path.join(ADDON_PATH, "resources", "media")
 MENU_BACKGROUND_STYLE = "0"
+PLAYERS = PlayerRegistry(ADDON)
+METADATA = MetadataCache(ADDON)
+_LIBRARY_CACHE = {}
 
 
 def _loc(string_id, fallback):
@@ -93,8 +100,9 @@ def _list_metadata(record):
     movies = [row for row in record.get("movies", []) if isinstance(row, dict)]
     count = len(movies) or _safe_int(record.get("last_result_count"), 0)
     method = "Keyword Matching" if str(record.get("generation_method") or "ai").lower() == "keyword" else "Personalised"
-    summary = "%d film%s • %s • %s" % (
-        count, "" if count == 1 else "s", method,
+    content = {"shows": "TV Shows", "both": "Movies & TV Shows"}.get(str(record.get("content_type") or "movies"), "Movies")
+    summary = "%d item%s • %s • %s • %s" % (
+        count, "" if count == 1 else "s", content, method,
         _relative_time(record.get("updated_at"), "Refreshed"),
     )
     description = str(record.get("description") or "").strip()
@@ -114,7 +122,7 @@ def _existing_art(filename):
         return ""
     # Menu glyphs live in a versioned directory so Kodi/Xbox cannot reuse a
     # stale texture merely because a published filename stayed the same.
-    relative = os.path.join("menu_v4", filename) if str(filename).startswith("menu_") else filename
+    relative = os.path.join("menu_v5", filename) if str(filename).startswith("menu_") else filename
     path = os.path.join(MEDIA_PATH, relative)
     return path if xbmcvfs.exists(path) else ""
 
@@ -194,10 +202,26 @@ def _add_action(label, command, plot="", icon_name="", fanart_name=""):
     except Exception:
         pass
     _apply_menu_art(item, icon_name, fanart_name)
-    # These rows open dialogs or perform commands; they are navigation items,
-    # not playable videos. This prevents Kodi adding Play, Queue and watched
-    # actions to Settings and similar controls.
-    xbmcplugin.addDirectoryItem(HANDLE, _url(action="run", command=command), item, isFolder=True)
+    item.setProperty("IsPlayable", "false")
+    xbmcplugin.addDirectoryItem(
+        HANDLE,
+        _url(action="run", command=command),
+        item,
+        isFolder=False,
+    )
+
+
+def _add_route_action(label, action, plot="", art=None, **params):
+    """Run a dialog-style route without making Kodi enter another folder."""
+    item = xbmcgui.ListItem(label=label, offscreen=True)
+    try:
+        item.setInfo("video", {"title": label, "plot": plot or ""})
+        item.setProperty("IsPlayable", "false")
+        if art:
+            item.setArt(art)
+    except Exception:
+        pass
+    xbmcplugin.addDirectoryItem(HANDLE, _url(action=action, **params), item, isFolder=False)
 
 
 def _managed_records(curator):
@@ -230,7 +254,7 @@ def _root(curator):
     xbmcplugin.setPluginCategory(HANDLE, NAME)
     _add_folder(
         _loc(32410, "My Lists"), "my",
-        _loc(32414, "Create, browse and manage your personalised movie lists."),
+        _loc(32414, "Create, browse and manage your personalised movie and TV lists."),
         icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg",
     )
     _add_folder(
@@ -263,7 +287,7 @@ def _my(curator):
     _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png", fanart_name="fanart_my_lists.jpg")
     _add_folder("Folders", "folders", "Organise lists and shortcuts into custom folders for browsing or widgets.", icon_name="menu_widget_folders.png")
     _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Refresh every saved list using its chosen creation method."), icon_name="menu_refresh.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden movies and folders."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
+    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden items and folders."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -274,7 +298,7 @@ def _explore(curator):
     _add_folder("All Picks", "all", "Browse recommendations from all your current lists.", icon_name="menu_all.png", fanart_name="fanart_explore.jpg")
     _add_folder("Latest Picks", "fresh", "See recommendations from the list refreshed most recently.", icon_name="menu_fresh.png", fanart_name="fanart_explore.jpg")
     _add_folder("Surprise Me", "random", "Browse a random selection from your lists.", icon_name="menu_random.png", fanart_name="fanart_explore.jpg", limit="10")
-    _add_action(_loc(32432, "Hidden Movies"), "hidden", _loc(32435, "Review movies you have asked curatr not to recommend."), icon_name="menu_hidden.png", fanart_name="fanart_explore.jpg")
+    _add_action(_loc(32432, "Hidden"), "hidden", _loc(32435, "Review movies and TV shows you have asked curatr not to recommend."), icon_name="menu_hidden.png", fanart_name="fanart_explore.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -284,8 +308,6 @@ def _taste_activity(curator):
     _add_action(_loc(32441, "View My Preferences"), "taste", _loc(32447, "See the information curatr uses when choosing recommendations."), icon_name="menu_taste_v2.png", fanart_name="fanart_taste.jpg")
     _add_action(_loc(32442, "AI Usage"), "usage", _loc(32448, "See usage statistics reported by your AI provider."), icon_name="menu_usage.png", fanart_name="fanart_info.jpg")
     _add_action(_loc(32443, "Recent Activity"), "activity", _loc(32449, "See recent actions, updates and errors."), icon_name="menu_activity.png", fanart_name="fanart_info.jpg")
-    _add_action(_loc(32444, "Check Trakt Connection"), "status", _loc(32450, "Check the Trakt account or public profile currently in use."), icon_name="menu_trakt.png", fanart_name="fanart_trakt.jpg")
-    _add_action(_loc(32445, "Connect / Reconnect Trakt"), "auth", _loc(32451, "Opens an activation window to link your Trakt account."), icon_name="menu_trakt.png", fanart_name="fanart_trakt.jpg")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -387,7 +409,7 @@ def _add_provider_list_folder(curator, folder, entry):
     cached = (curator.state.get("linked_list_cache") or {}).get(cache_key) or {}
     cached_movies = cached.get("movies") if isinstance(cached, dict) else []
     count = len(cached_movies) if isinstance(cached_movies, list) and cached_movies else _safe_int(entry.get("item_count"), 0)
-    tagline = "%d film%s • %s • %s" % (
+    tagline = "%d item%s • %s • %s" % (
         count, "" if count == 1 else "s", service,
         _relative_time(cached.get("cached_at"), "Refreshed"),
     )
@@ -445,7 +467,7 @@ def _folder(curator, params):
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
-def _fresh_movie(curator, trakt_id):
+def _fresh_movie(curator, trakt_id, media_type="movie"):
     # Prefer the locally saved recommendation metadata so opening a widget or
     # info panel does not create another Trakt request.
     wanted = str(trakt_id)
@@ -453,11 +475,14 @@ def _fresh_movie(curator, trakt_id):
         for movie in record.get("movies") or []:
             if not isinstance(movie, dict):
                 continue
-            if str((movie.get("ids") or {}).get("trakt") or "") == wanted:
+            if str((movie.get("ids") or {}).get("trakt") or "") == wanted and str(movie.get("media_type") or "movie") == media_type:
                 return movie
     try:
         if curator.trakt.client_id:
-            return curator.trakt.movie_summary(trakt_id)
+            item = curator.trakt.show_summary(trakt_id) if media_type == "show" else curator.trakt.movie_summary(trakt_id)
+            if isinstance(item, dict):
+                item["media_type"] = media_type
+            return item
     except Exception:
         pass
     return {}
@@ -471,7 +496,7 @@ def _movie_rows_for_list(curator, list_id):
     if movies:
         return [({}, movie) for movie in movies]
 
-    # Migration fallback for a v0.6 record that has never yet been refreshed
+    # Migration fallback for a record that has never been refreshed
     # under local-first mode. If OAuth still works, import its current contents
     # once; otherwise the user can simply refresh the list to build it locally.
     remote_id = record.get("trakt_id")
@@ -481,7 +506,13 @@ def _movie_rows_for_list(curator, list_id):
             result = []
             local_movies = []
             for row in rows if isinstance(rows, list) else []:
-                movie = row.get("movie", {}) if isinstance(row, dict) else {}
+                if not isinstance(row, dict):
+                    continue
+                media_type = "show" if isinstance(row.get("show"), dict) else "movie"
+                movie = row.get(media_type, {})
+                if isinstance(movie, dict):
+                    movie = dict(movie)
+                    movie["media_type"] = media_type
                 ids = movie.get("ids") or {} if isinstance(movie, dict) else {}
                 if isinstance(movie, dict) and isinstance(ids, dict) and ids.get("trakt"):
                     result.append((row, movie))
@@ -513,7 +544,10 @@ def _movie_rows_all(curator):
             if curator.is_movie_hidden(movie):
                 continue
             trakt_id = _safe_int((movie.get("ids") or {}).get("trakt"), 0)
-            marker = trakt_id or (str(movie.get("title") or "").casefold(), _safe_int(movie.get("year"), 0))
+            marker = (
+                str(movie.get("media_type") or "movie"),
+                trakt_id or (str(movie.get("title") or "").casefold(), _safe_int(movie.get("year"), 0)),
+            )
             if not marker or marker in seen:
                 continue
             seen.add(marker)
@@ -561,7 +595,8 @@ def _set_movie_info(item, movie):
     """
     if not isinstance(movie, dict):
         movie = {}
-    title = str(movie.get("title") or "Unknown movie")
+    media_type = "tvshow" if str(movie.get("media_type") or "movie") == "show" else "movie"
+    title = str(movie.get("title") or ("Unknown show" if media_type == "tvshow" else "Unknown movie"))
     year = _safe_int(movie.get("year"), 0)
     overview = str(movie.get("overview") or movie.get("ai_reason") or "")
     tagline = str(movie.get("tagline") or "")
@@ -571,6 +606,14 @@ def _set_movie_info(item, movie):
     runtime = _safe_int(movie.get("runtime"), 0)
     released = str(movie.get("released") or "")
     certification = str(movie.get("certification") or "")
+    cast = movie.get("cast") or []
+    directors = movie.get("directors") or []
+    writers = movie.get("writers") or []
+    studios = movie.get("studios") or []
+    countries = movie.get("countries") or []
+    trailer = str(movie.get("trailer") or "")
+    status = str(movie.get("status") or "")
+    original_title = str(movie.get("original_title") or "")
     rating = movie.get("rating")
     try:
         rating = float(rating)
@@ -584,7 +627,7 @@ def _set_movie_info(item, movie):
     # Kodi still supports setInfo in 21.x. Use it as a compatibility baseline,
     # then enrich with the modern InfoTagVideo API where available.
     try:
-        legacy = {"title": title, "mediatype": "movie"}
+        legacy = {"title": title, "mediatype": media_type}
         if year:
             legacy["year"] = year
         if overview:
@@ -599,6 +642,26 @@ def _set_movie_info(item, movie):
             legacy["premiered"] = released
         if certification:
             legacy["mpaa"] = certification
+        if cast:
+            legacy["cast"] = [str(row.get("name") or "") for row in cast if isinstance(row, dict) and row.get("name")]
+            legacy["castandrole"] = [
+                (str(row.get("name") or ""), str(row.get("role") or ""))
+                for row in cast if isinstance(row, dict) and row.get("name")
+            ]
+        if directors:
+            legacy["director"] = directors
+        if writers:
+            legacy["writer"] = writers
+        if studios:
+            legacy["studio"] = studios
+        if countries:
+            legacy["country"] = countries
+        if trailer:
+            legacy["trailer"] = trailer
+        if status:
+            legacy["status"] = status
+        if original_title:
+            legacy["originaltitle"] = original_title
         if rating:
             legacy["rating"] = rating
         if votes:
@@ -628,6 +691,36 @@ def _set_movie_info(item, movie):
         _safe_tag_call(tag, "setPremiered", released)
     if certification:
         _safe_tag_call(tag, "setMpaa", certification)
+    if cast:
+        actor_class = getattr(xbmc, "Actor", None)
+        actors = []
+        if actor_class:
+            for row in cast:
+                if not isinstance(row, dict) or not row.get("name"):
+                    continue
+                try:
+                    actors.append(actor_class(
+                        str(row.get("name") or ""), str(row.get("role") or ""),
+                        _safe_int(row.get("order"), 0), str(row.get("thumbnail") or ""),
+                    ))
+                except Exception:
+                    continue
+        if actors:
+            _safe_tag_call(tag, "setCast", actors)
+    if directors:
+        _safe_tag_call(tag, "setDirectors", [str(value) for value in directors if value])
+    if writers:
+        _safe_tag_call(tag, "setWriters", [str(value) for value in writers if value])
+    if studios:
+        _safe_tag_call(tag, "setStudios", [str(value) for value in studios if value])
+    if countries:
+        _safe_tag_call(tag, "setCountries", [str(value) for value in countries if value])
+    if trailer:
+        _safe_tag_call(tag, "setTrailer", trailer)
+    if status and media_type == "tvshow":
+        _safe_tag_call(tag, "setTvShowStatus", status)
+    if original_title:
+        _safe_tag_call(tag, "setOriginalTitle", original_title)
     if rating:
         _safe_tag_call(tag, "setRating", rating, votes, "trakt", True)
 
@@ -639,31 +732,105 @@ def _set_movie_info(item, movie):
     if unique_ids:
         default_id = "tmdb" if "tmdb" in unique_ids else ("imdb" if "imdb" in unique_ids else "trakt")
         _safe_tag_call(tag, "setUniqueIDs", unique_ids, default_id)
-    _safe_tag_call(tag, "setMediaType", "movie")
+    _safe_tag_call(tag, "setMediaType", media_type)
 
-def _redlight_play_url(movie):
-    ids = movie.get("ids") or {}
-    tmdb_id = ids.get("tmdb")
-    if not tmdb_id:
-        return ""
+def _library_items(media_type):
+    """Load Kodi's library once per directory render and index it by stable IDs."""
+    if media_type in _LIBRARY_CACHE:
+        return _LIBRARY_CACHE[media_type]
+    method = "VideoLibrary.GetTVShows" if media_type == "show" else "VideoLibrary.GetMovies"
+    result_key = "tvshows" if media_type == "show" else "movies"
+    request = {
+        "jsonrpc": "2.0", "id": 1, "method": method,
+        "params": {"properties": ["title", "year", "uniqueid"] + ([] if media_type == "show" else ["file"])},
+    }
+    rows = []
     try:
-        installed = bool(xbmc.getCondVisibility("System.HasAddon(plugin.video.redlight)"))
-    except Exception:
-        installed = False
-    if not installed:
-        return ""
-    return "plugin://plugin.video.redlight/?" + urlencode({
-        "mode": "playback.media",
-        "media_type": "movie",
-        "tmdb_id": str(tmdb_id),
-        "media": "media",
-    })
+        response = json.loads(xbmc.executeJSONRPC(json.dumps(request)))
+        rows = response.get("result", {}).get(result_key, [])
+        if not isinstance(rows, list):
+            rows = []
+    except (TypeError, ValueError, AttributeError):
+        rows = []
+    _LIBRARY_CACHE[media_type] = rows
+    return rows
+
+
+def _library_target(movie, media_type):
+    ids = movie.get("ids") or {}
+    wanted = {key: str(ids.get(key) or "").lower() for key in ("tmdb", "imdb")}
+    title = str(movie.get("title") or "").strip().casefold()
+    year = _safe_int(movie.get("year"), 0)
+    for row in _library_items(media_type):
+        unique = row.get("uniqueid") or {}
+        id_match = any(wanted[key] and wanted[key] == str(unique.get(key) or "").lower() for key in wanted)
+        title_match = title and title == str(row.get("title") or "").strip().casefold()
+        year_match = not year or not _safe_int(row.get("year"), 0) or year == _safe_int(row.get("year"), 0)
+        if not id_match and not (title_match and year_match):
+            continue
+        if media_type == "show":
+            tvshow_id = _safe_int(row.get("tvshowid"), -1)
+            if tvshow_id >= 0:
+                return "videodb://tvshows/titles/%d/" % tvshow_id
+        else:
+            path = str(row.get("file") or "")
+            if path:
+                return path
+    return ""
+
+
+def _player_target(movie):
+    media_type = "show" if str(movie.get("media_type") or "movie") == "show" else "movie"
+    if PLAYERS.preference(media_type) == "information":
+        return "", False, None
+    library_url = _library_target(movie, media_type)
+    if library_url:
+        return library_url, media_type == "show", {"id": "kodi_library", "name": "Kodi Library"}
+    url, player = PLAYERS.target(movie, media_type)
+    if not player:
+        return "", False, None
+    return url, media_type == "show", player
+
+
+def _play_using(params):
+    media_type = "show" if params.get("media_type") == "show" else "movie"
+    movie = {
+        "title": params.get("title") or "",
+        "year": _safe_int(params.get("year"), 0),
+        "media_type": media_type,
+        "overview": params.get("overview") or "",
+        "ids": {
+            "tmdb": params.get("tmdb_id") or "",
+            "imdb": params.get("imdb_id") or "",
+            "trakt": params.get("trakt_id") or "",
+        },
+    }
+    choices = []
+    library_url = _library_target(movie, media_type)
+    if library_url:
+        choices.append(("Kodi Library", library_url))
+    for player in PLAYERS.available(media_type):
+        url = PLAYERS.build_url(player, movie, media_type)
+        if url:
+            choices.append((player["name"], url))
+    if not choices:
+        xbmcgui.Dialog().ok(NAME, "No compatible installed player is available for this item.")
+        return
+    choice = xbmcgui.Dialog().select("Play using", [row[0] for row in choices])
+    if choice < 0:
+        return
+    url = choices[choice][1]
+    if media_type == "show":
+        xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % url)
+    else:
+        xbmc.executebuiltin("PlayMedia(%s)" % url)
 
 
 def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=True):
     if not isinstance(movie, dict):
         return False
-    title = str(movie.get("title") or "Unknown movie")
+    media_type = str(movie.get("media_type") or "movie")
+    title = str(movie.get("title") or ("Unknown show" if media_type == "show" else "Unknown movie"))
     year = _safe_int(movie.get("year"), 0)
     label = "%s (%d)" % (title, year) if year else title
     item = xbmcgui.ListItem(label=label, offscreen=True)
@@ -677,22 +844,28 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
     if not isinstance(ids, dict):
         ids = {}
     trakt_id = ids.get("trakt") or ""
-    info_url = _url(action="info", trakt_id=str(trakt_id))
-    why_url = _url(action="why", trakt_id=str(trakt_id), list_id=str(list_id), title=title, year=str(year or ""))
-    hide_url = _url(action="hide", trakt_id=str(trakt_id), title=title, year=str(year or ""))
+    kodi_info_url = _url(action="kodi_info")
+    why_url = _url(action="why", trakt_id=str(trakt_id), list_id=str(list_id), title=title, year=str(year or ""), media_type=media_type)
+    hide_url = _url(action="hide", trakt_id=str(trakt_id), title=title, year=str(year or ""), media_type=media_type)
     if list_name:
         try:
             item.setProperty("CuratrList", list_name)
         except Exception:
             pass
 
-    play_url = _redlight_play_url(movie)
+    play_url, player_is_folder, _selected_player = _player_target(movie)
     try:
         context = []
+        if PLAYERS.available(media_type):
+            context.append(("Play Using…", "RunPlugin(%s)" % _url(
+                action="play_using", media_type=media_type, title=title, year=str(year or ""),
+                tmdb_id=str(ids.get("tmdb") or ""), imdb_id=str(ids.get("imdb") or ""),
+                trakt_id=str(trakt_id), overview=str(movie.get("overview") or ""),
+            )))
         if recommendation_actions:
             context.extend([
                 ("Why this pick?", "RunPlugin(%s)" % why_url),
-                ("Hide Movie", "RunPlugin(%s)" % hide_url),
+                ("Hide %s" % ("TV Show" if media_type == "show" else "Movie"), "RunPlugin(%s)" % hide_url),
             ])
         if list_id:
             refresh_url = _url(action="refresh_list", list_id=str(list_id))
@@ -703,18 +876,18 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
 
     if play_url:
         try:
-            item.setProperty("IsPlayable", "true")
+            item.setProperty("IsPlayable", "false" if player_is_folder else "true")
         except Exception:
             pass
         target_url = play_url
-        is_folder = False
-    elif trakt_id:
+        is_folder = player_is_folder
+    elif trakt_id or ids.get("tmdb") or title:
         try:
             item.setProperty("IsPlayable", "false")
         except Exception:
             pass
-        target_url = info_url
-        is_folder = True
+        target_url = kodi_info_url
+        is_folder = False
     else:
         try:
             item.setProperty("IsPlayable", "false")
@@ -728,8 +901,22 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
 
 def _render_movies(curator, rows, category):
     xbmcplugin.setPluginCategory(HANDLE, category)
-    xbmcplugin.setContent(HANDLE, "movies")
     rows = list(rows or [])
+    enriched_rows = []
+    for entry in rows:
+        if len(entry) > 1 and isinstance(entry[1], dict):
+            copied = list(entry)
+            copied[1] = dict(entry[1])
+            enriched_rows.append(tuple(copied))
+        else:
+            enriched_rows.append(entry)
+    rows = enriched_rows
+    try:
+        METADATA.enrich([entry[1] for entry in rows if len(entry) > 1 and isinstance(entry[1], dict)], curator.tmdb)
+    except Exception as exc:
+        xbmc.log("curatr metadata enrichment skipped: %s" % exc, xbmc.LOGWARNING)
+    media_types = {str(entry[1].get("media_type") or "movie") for entry in rows if len(entry) > 1 and isinstance(entry[1], dict)}
+    xbmcplugin.setContent(HANDLE, "tvshows" if media_types == {"show"} else ("movies" if media_types <= {"movie"} else "videos"))
     art_cache = ArtworkCache(ADDON)
 
     # Artwork or one malformed movie must never make the entire skin widget fail.
@@ -829,6 +1016,98 @@ def _random_picks(curator, params):
     _render_movies(curator, _movie_rows_random(curator, params.get("limit") or 10), "Surprise Me")
 
 
+def _similar_preview_file(token):
+    safe = "".join(ch for ch in str(token or "") if ch.isalnum() or ch in ("-", "_"))[:64]
+    if not safe:
+        raise RuntimeError("That Find Similar preview is no longer available.")
+    profile = xbmcvfs.translatePath(ADDON.getAddonInfo("profile"))
+    if not xbmcvfs.exists(profile):
+        xbmcvfs.mkdirs(profile)
+    return os.path.join(profile, "similar-preview-%s.json" % safe)
+
+
+def _write_similar_preview(preview):
+    token = "%d-%d" % (int(time.time()), random.randint(100000, 999999))
+    path = _similar_preview_file(token)
+    profile = os.path.dirname(path)
+    try:
+        _folders, files = xbmcvfs.listdir(profile)
+        for filename in files:
+            text = str(filename)
+            if not text.startswith("similar-preview-") or not text.endswith(".json"):
+                continue
+            stamp = _safe_int(text[len("similar-preview-"):].split("-", 1)[0], 0)
+            if not stamp or int(time.time()) - stamp > 6 * 3600:
+                xbmcvfs.delete(os.path.join(profile, filename))
+    except Exception:
+        pass
+    handle = xbmcvfs.File(path, "w")
+    try:
+        handle.write(json.dumps(preview, ensure_ascii=False, separators=(",", ":")))
+    finally:
+        handle.close()
+    return token
+
+
+def _read_similar_preview(token):
+    path = _similar_preview_file(token)
+    if not xbmcvfs.exists(path):
+        raise RuntimeError("That Find Similar preview has expired. Run it again first.")
+    handle = xbmcvfs.File(path)
+    try:
+        value = json.loads(handle.read() or "{}")
+    finally:
+        handle.close()
+    if not isinstance(value, dict) or int(time.time()) - _safe_int(value.get("created_at"), 0) > 6 * 3600:
+        try:
+            xbmcvfs.delete(path)
+        except Exception:
+            pass
+        raise RuntimeError("That Find Similar preview has expired. Run it again first.")
+    return value
+
+
+def _similar_preview(curator, params):
+    token = str(params.get("token") or "")
+    previous = _read_similar_preview(token) if token else None
+    reference = dict((previous or {}).get("reference") or {})
+    if not reference:
+        ids = {
+            key: params.get(param) for key, param in (("tmdb", "tmdb_id"), ("imdb", "imdb_id"), ("tvdb", "tvdb_id"))
+            if params.get(param)
+        }
+        reference = {
+            "title": params.get("title") or "", "year": _safe_int(params.get("year"), 0),
+            "media_type": "show" if params.get("media_type") == "show" else "movie", "ids": ids,
+        }
+    method = str(params.get("method") or "").lower()
+    if method not in ("keyword", "ai"):
+        method = str(ADDON.getSetting("context_similar_method") or "keyword").lower()
+    count = max(5, min(50, _safe_int(ADDON.getSetting("context_similar_count"), 20)))
+    preview = curator.build_similar_preview(reference, method=method, count=count)
+    token = _write_similar_preview(preview)
+    source = str(preview.get("title") or "Selected title")
+    method_label = "AI" if method == "ai" else "Keyword Matching"
+    xbmcplugin.setPluginCategory(HANDLE, "Similar to %s" % source)
+    _add_route_action(
+        "Create List from These Results", "similar_save",
+        "Save this temporary preview as a normal curatr list.", token=token,
+    )
+    other = "keyword" if method == "ai" else "ai"
+    _add_folder(
+        "Use %s Instead" % ("Keyword Matching" if other == "keyword" else "AI"),
+        "similar_preview", "Generate a new temporary preview using the other matching method.",
+        token=token, method=other,
+    )
+    _add_folder(
+        "Refresh Results", "similar_preview",
+        "Generate another temporary preview using %s." % method_label,
+        token=token, method=method,
+    )
+    rows = [({}, movie, "Similar to %s" % source, "", False) for movie in preview.get("movies", [])]
+    _render_movies(curator, rows, "Similar to %s • %s" % (source, method_label))
+
+
 def _run_command(curator, command):
     actions = {
         "auth": curator.authenticate_trakt,
@@ -845,7 +1124,7 @@ def _run_command(curator, command):
         "taste": curator.view_taste_fingerprint,
         "usage": curator.show_ai_usage,
         "activity": curator.show_activity,
-        "settings": curator.open_settings,
+        "settings": lambda: (PLAYERS.update_status(), curator.open_settings())[-1],
         "status": lambda: curator.refresh_trakt_status(silent=False),
         "import_ai_key": lambda: curator.import_api_key_interactive("ai"),
         "import_tmdb_key": lambda: curator.import_api_key_interactive("tmdb"),
@@ -855,39 +1134,20 @@ def _run_command(curator, command):
         "choose_mdblist_lists": curator.choose_mdblist_lists_interactive,
         "privacy": curator.show_privacy_and_data,
         "choose_menu_background": curator.choose_menu_background_interactive,
+        "choose_movie_player": lambda: PLAYERS.choose("movie"),
+        "choose_show_player": lambda: PLAYERS.choose("show"),
+        "install_community_players": PLAYERS.install_interactive,
     }
     function = actions.get(command)
     if not function:
         raise RuntimeError("Unknown addon action: %s" % command)
     before = list_signature(curator.state)
     function()
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
     refresh_if_changed(before, curator.state)
 
 
-def _info(curator, params):
-    trakt_id = params.get("trakt_id")
-    if not trakt_id:
-        return
-    movie = _fresh_movie(curator, trakt_id)
-    if not movie:
-        raise RuntimeError("Could not load movie details from Trakt.")
-    title = str(movie.get("title") or "Movie")
-    year = movie.get("year")
-    heading = "%s (%s)" % (title, year) if year else title
-    pieces = []
-    tagline = str(movie.get("tagline") or "").strip()
-    overview = str(movie.get("overview") or movie.get("ai_reason") or "").strip()
-    if tagline:
-        pieces.append(tagline)
-    if overview:
-        pieces.append(overview)
-    ids = movie.get("ids") or {}
-    pieces.append(
-        "Trakt: %s\nTMDb: %s\nIMDb: %s"
-        % (ids.get("trakt") or "Not available", ids.get("tmdb") or "Not available", ids.get("imdb") or "Not available")
-    )
-    xbmcgui.Dialog().textviewer(heading, "\n\n".join(pieces))
+def _kodi_info():
+    xbmc.executebuiltin("Action(Info)")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -987,7 +1247,7 @@ def main():
             _linked_list(curator, params)
         elif action == "linked_movie":
             title = params.get("title") or "This movie"
-            xbmcgui.Dialog().ok(NAME, "%s is listed here without a playable TMDB or Trakt ID. Open it through your preferred movie add-on." % title)
+            xbmcgui.Dialog().ok(NAME, "%s is listed here without a playable TMDB or Trakt ID. Open it through your preferred video add-on." % title)
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "external_missing":
             xbmcgui.Dialog().ok(NAME, "The add-on used by '%s' is not currently installed or enabled.\n\n%s" % (
@@ -1002,8 +1262,16 @@ def main():
             _fresh(curator)
         elif action == "random":
             _random_picks(curator, params)
+        elif action == "similar_preview":
+            _similar_preview(curator, params)
+        elif action == "similar_save":
+            curator.save_similar_preview_interactive(_read_similar_preview(params.get("token") or ""))
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "run":
             _run_command(curator, params.get("command") or "")
+        elif action == "play_using":
+            _play_using(params)
         elif action == "refresh_list":
             list_id = params.get("list_id") or params.get("trakt_id") or ""
             curator.refresh_list(list_id, silent=False)
@@ -1030,17 +1298,25 @@ def main():
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
             refresh_if_changed(before, curator.state)
         elif action == "why":
-            curator.why_recommended(params.get("list_id") or "", params.get("trakt_id") or "", params.get("title") or "", _safe_int(params.get("year"), 0))
+            curator.why_recommended(
+                params.get("list_id") or "", params.get("trakt_id") or "",
+                params.get("title") or "", _safe_int(params.get("year"), 0),
+                media_type="show" if params.get("media_type") == "show" else "movie",
+            )
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "hide":
-            curator.hide_movie(params.get("trakt_id") or "", params.get("title") or "", _safe_int(params.get("year"), 0), confirm=True)
+            curator.hide_movie(
+                params.get("trakt_id") or "", params.get("title") or "",
+                _safe_int(params.get("year"), 0), confirm=True,
+                media_type="show" if params.get("media_type") == "show" else "movie",
+            )
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
             refresh_if_changed(before, curator.state)
-        elif action == "info":
-            _info(curator, params)
+        elif action == "kodi_info":
+            _kodi_info()
         else:
             raise RuntimeError("Unknown plugin route: %s" % action)
-    except (TraktError, RuntimeError) as exc:
+    except (CatalogueError, TraktError, RuntimeError) as exc:
         xbmc.log("curatr plugin error: %s" % exc, xbmc.LOGERROR)
         if curator is not None:
             try:

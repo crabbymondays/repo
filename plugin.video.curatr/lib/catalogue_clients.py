@@ -70,6 +70,17 @@ class TMDBClient:
             rows = (self._get("/search/movie", params).get("results") or [])
         return rows[0] if rows and isinstance(rows[0], dict) else None
 
+    def search_show(self, title, year=0):
+        params = {"query": str(title or ""), "include_adult": "false"}
+        if year:
+            params["first_air_date_year"] = int(year)
+        data = self._get("/search/tv", params)
+        rows = data.get("results") or [] if isinstance(data, dict) else []
+        if not rows and year:
+            params.pop("first_air_date_year", None)
+            rows = (self._get("/search/tv", params).get("results") or [])
+        return rows[0] if rows and isinstance(rows[0], dict) else None
+
     def search_collections(self, query, limit=10):
         data = self._get("/search/collection", {
             "query": str(query or "").strip(), "include_adult": "false",
@@ -136,6 +147,15 @@ class TMDBClient:
     def movie_details(self, movie_id):
         return self._get("/movie/%s" % int(movie_id), {
             "append_to_response": "keywords,credits", "language": "en-GB",
+        })
+
+    def list_item_details(self, tmdb_id, media_type="movie"):
+        """Fetch only metadata Kodi can display directly on a title list item."""
+        media = "tv" if str(media_type) == "show" else "movie"
+        extras = ["credits", "videos", "content_ratings" if media == "tv" else "release_dates"]
+        return self._get("/%s/%s" % (media, int(tmdb_id)), {
+            "append_to_response": ",".join(extras), "language": "en-GB",
+            "include_video_language": "en-GB,en,null",
         })
 
     def analyse_people(self, references, film_limit=15, detail_limit=4):
@@ -226,6 +246,38 @@ class TMDBClient:
                 if len(collected) >= limit:
                     return collected
         return collected
+
+    def similar_titles(self, reference, limit=60):
+        """Return TMDB recommendations for one movie or whole TV show."""
+        reference = reference if isinstance(reference, dict) else {}
+        media_type = "show" if str(reference.get("media_type") or "movie") == "show" else "movie"
+        tmdb_id = (reference.get("ids") or {}).get("tmdb") or reference.get("tmdb_id")
+        if not tmdb_id:
+            match = (
+                self.search_show(reference.get("title"), reference.get("year"))
+                if media_type == "show" else self.search_movie(reference.get("title"), reference.get("year"))
+            )
+            tmdb_id = (match or {}).get("id")
+        if not tmdb_id:
+            return []
+        endpoint = "tv" if media_type == "show" else "movie"
+        wanted = max(5, min(100, int(limit or 20)))
+        output, seen = [], set()
+        for page in range(1, min(5, (wanted + 19) // 20) + 1):
+            data = self._get("/%s/%s/recommendations" % (endpoint, int(tmdb_id)), {
+                "region": self.region, "page": page,
+            })
+            for row in data.get("results") or [] if isinstance(data, dict) else []:
+                compact = self._compact_show(row) if media_type == "show" else self._compact(row)
+                marker = (str(compact.get("title") or "").casefold(), compact.get("year"))
+                if not compact.get("title") or marker in seen:
+                    continue
+                seen.add(marker)
+                compact["media_type"] = media_type
+                output.append(compact)
+                if len(output) >= wanted:
+                    return output
+        return output
 
     def person_credits(self, query, role="", limit=80):
         people = self.search_people(query, limit=5)
@@ -330,6 +382,54 @@ class TMDBClient:
                     return output
         return output
 
+    def discover_shows(self, rules, limit=100):
+        """Return whole-show candidates from TMDB; seasons and episodes are never queried."""
+        rules = rules if isinstance(rules, dict) else {}
+        movie_to_tv_genres = {
+            28: 10759, 12: 10759, 16: 16, 35: 35, 80: 80, 99: 99,
+            18: 18, 10751: 10751, 14: 10765, 36: 36, 27: 9648,
+            10402: 10764, 9648: 9648, 10749: 18, 878: 10765,
+            53: 9648, 10752: 10768, 37: 37,
+        }
+        sort_map = {
+            "recent": "first_air_date.desc", "popular": "popularity.desc",
+            "rated": "vote_average.desc", "less_mainstream": "vote_average.desc",
+            "balanced": "popularity.desc",
+        }
+        params = {
+            "include_adult": "false",
+            "sort_by": sort_map.get(str(rules.get("sort") or "balanced"), "popularity.desc"),
+        }
+        genres = [movie_to_tv_genres.get(int(value), int(value)) for value in rules.get("genres") or []]
+        if genres:
+            params["with_genres"] = ",".join(str(value) for value in genres)
+        if rules.get("year_min"):
+            params["first_air_date.gte"] = "%d-01-01" % int(rules["year_min"])
+        if rules.get("year_max"):
+            params["first_air_date.lte"] = "%d-12-31" % int(rules["year_max"])
+        if rules.get("rating_min"):
+            params["vote_average.gte"] = float(rules["rating_min"])
+            params["vote_count.gte"] = 20
+        if rules.get("language"):
+            params["with_original_language"] = str(rules["language"])
+        if rules.get("country"):
+            params["with_origin_country"] = str(rules["country"])
+
+        wanted = max(20, min(100, int(limit)))
+        output, seen = [], set()
+        for page in range(1, min(5, (wanted + 19) // 20) + 1):
+            params["page"] = page
+            data = self._get("/discover/tv", params)
+            for row in data.get("results") or [] if isinstance(data, dict) else []:
+                compact = self._compact_show(row)
+                marker = compact.get("tmdb_id")
+                if marker and marker not in seen and compact.get("title"):
+                    seen.add(marker)
+                    output.append(compact)
+                if len(output) >= wanted:
+                    return output
+        return output
+
     def enriched_discovery_pool(self, rules, analysis, limit=100):
         """Discover across several loose metadata signals, then deduplicate."""
         rules = dict(rules or {})
@@ -390,6 +490,27 @@ class TMDBClient:
             "backdrop_path": str((row or {}).get("backdrop_path") or ""),
             "original_language": str((row or {}).get("original_language") or ""),
             "origin_country": list((row or {}).get("origin_country") or []),
+        }
+
+    @staticmethod
+    def _compact_show(row):
+        date = str((row or {}).get("first_air_date") or "")
+        try:
+            year = int(date[:4])
+        except (TypeError, ValueError):
+            year = 0
+        return {
+            "title": str((row or {}).get("name") or (row or {}).get("original_name") or ""),
+            "year": year, "tmdb_id": (row or {}).get("id"),
+            "rating": (row or {}).get("vote_average"), "votes": (row or {}).get("vote_count"),
+            "overview": str((row or {}).get("overview") or "")[:160],
+            "popularity": (row or {}).get("popularity"),
+            "genre_ids": list((row or {}).get("genre_ids") or []),
+            "poster_path": str((row or {}).get("poster_path") or ""),
+            "backdrop_path": str((row or {}).get("backdrop_path") or ""),
+            "original_language": str((row or {}).get("original_language") or ""),
+            "origin_country": list((row or {}).get("origin_country") or []),
+            "media_type": "show",
         }
 
 

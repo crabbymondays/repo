@@ -47,7 +47,7 @@
         <control type="label" id="13">
             <left>360</left><top>660</top><width>1200</width><height>38</height>
             <font>font13</font><textcolor>FFA7A1AF</textcolor><align>center</align>
-            <label>Watched, rated and hidden films will be excluded  •  No AI will be used</label>
+            <label>Watched, rated and hidden items will be excluded  •  No AI will be used</label>
         </control>
         <control type="button" id="100">
             <left>545</left><top>780</top><width>390</width><height>82</height>

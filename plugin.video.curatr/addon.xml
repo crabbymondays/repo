@@ -1,20 +1,39 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.curatr" name="curatr" version="0.25.6~beta39" provider-name="crabbymondays">
+<addon id="plugin.video.curatr" name="curatr" version="1.0.0" provider-name="crabbymondays">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="script.module.requests"/>
     </requires>
     <extension point="xbmc.python.pluginsource" library="plugin.py"><provides>video</provides></extension>
     <extension point="xbmc.service" library="service.py"/>
+    <extension point="kodi.context.item">
+        <menu id="kodi.core.main">
+            <menu>
+                <label>32820</label>
+                <item library="context.py" args="add_to_list">
+                    <label>32821</label>
+                    <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_add_to_list) + [String.IsEqual(ListItem.DBType,movie) | String.IsEqual(ListItem.DBType,tvshow)]</visible>
+                </item>
+                <item library="context.py" args="add_to_folder">
+                    <label>32822</label>
+                    <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_add_to_folder) + ListItem.IsFolder</visible>
+                </item>
+                <item library="context.py" args="find_similar">
+                    <label>32823</label>
+                    <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_find_similar) + [String.IsEqual(ListItem.DBType,movie) | String.IsEqual(ListItem.DBType,tvshow)]</visible>
+                </item>
+            </menu>
+        </menu>
+    </extension>
     <extension point="xbmc.addon.metadata">
-        <summary lang="en_GB">Personalised movie lists for Kodi.</summary>
-        <description lang="en_GB">curatr is currently being prepared for its full release.</description>
+        <summary lang="en_GB">Personalised movie and TV show lists for Kodi.</summary>
+        <description lang="en_GB">Create and maintain personalised movie and TV show lists from natural-language requests. Use Keyword Matching without AI, connect an optional AI service for nuanced recommendations, browse locally in Kodi, and optionally sync lists to Trakt.</description>
         <platform>all</platform>
         <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
         <license>MIT</license>
         <assets><icon>icon_addon_v2.png</icon><fanart>fanart_addon_v2.jpg</fanart></assets>
         <source>https://github.com/crabbymondays/repo</source>
         <website>https://crabbymondays.github.io/repo/</website>
-        <news></news>
+        <news>curatr 1.0.0 adds movie and TV show lists, Keyword Matching, optional AI recommendations, Kodi context-menu actions, temporary Find Similar previews, Kodi Library integration, Trakt syncing, custom folders and artwork, native Kodi metadata, and automatic playback through the Kodi Library or compatible video add-ons.</news>
     </extension>
 </addon>
