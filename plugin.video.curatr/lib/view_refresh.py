@@ -7,10 +7,20 @@ import xbmc
 
 
 def list_signature(state):
+    linked_cache = state.get("linked_list_cache", {}) if isinstance(state, dict) else {}
+    linked_summary = {
+        str(key): {
+            "cached_at": (value or {}).get("cached_at", 0),
+            "count": len((value or {}).get("movies", [])) if isinstance((value or {}).get("movies"), list) else 0,
+        }
+        for key, value in linked_cache.items()
+        if isinstance(value, dict)
+    } if isinstance(linked_cache, dict) else {}
     records = {
         "ai_lists": state.get("ai_lists", []),
         "hidden_movies": state.get("hidden_movies", []),
         "widget_folders": state.get("widget_folders", []),
+        "linked_list_cache": linked_summary,
     } if isinstance(state, dict) else {}
     try:
         payload = json.dumps(records, sort_keys=True, ensure_ascii=False, separators=(",", ":"))

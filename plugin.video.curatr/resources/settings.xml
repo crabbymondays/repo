@@ -399,14 +399,12 @@
                     <control type="button" format="action"><close>true</close></control>
                 </setting>
             </group>
-        </category>
-        <category id="context_menu" label="32800" help="32801">
-            <group id="1">
+            <group id="2" label="32800">
                 <setting id="context_menu_enabled" type="boolean" label="32802" help="32803">
                     <level>0</level><default>true</default><control type="toggle" />
                 </setting>
             </group>
-            <group id="2" label="32804">
+            <group id="3" label="32804">
                 <setting id="context_add_to_list" type="boolean" label="32805" help="32806">
                     <level>0</level><default>true</default>
                     <dependencies><dependency type="enable" setting="context_menu_enabled">true</dependency></dependencies>
@@ -423,7 +421,7 @@
                     <control type="toggle" />
                 </setting>
             </group>
-            <group id="3" label="32811">
+            <group id="4" label="32811">
                 <setting id="context_similar_method" type="string" label="32812" help="32813">
                     <level>0</level><default>keyword</default>
                     <constraints><options><option label="32814">keyword</option><option label="32815">ai</option></options></constraints>

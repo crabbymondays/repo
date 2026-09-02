@@ -14,4 +14,7 @@
 - Added automatic community player-list fallback and clearer playback setup.
 - Added configurable Kodi context-menu actions for movies, TV shows and add-on folders.
 - Added temporary Find Similar poster previews with explicit list creation.
+- Polished Find Similar actions with clearer labels, consistent PNG artwork and a more useful action order.
+- Moved context-menu controls into Appearance settings.
+- Added item counts, providers and refresh status to linked Trakt and MDBList folder entries.
 - Completed the public-release wording and code-quality pass.

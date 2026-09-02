@@ -177,6 +177,7 @@ def _add_folder(label, action, plot="", context_items=None, icon_name="", fanart
             tag.setPlot(plot)
         if tagline:
             tag.setTagLine(tagline)
+            item.setProperty("tagline", tagline)
     except Exception:
         pass
     _apply_menu_art(item, icon_name, fanart_name, custom_art=art)
@@ -211,16 +212,15 @@ def _add_action(label, command, plot="", icon_name="", fanart_name=""):
     )
 
 
-def _add_route_action(label, action, plot="", art=None, **params):
+def _add_route_action(label, action, plot="", art=None, icon_name="", fanart_name="", **params):
     """Run a dialog-style route without making Kodi enter another folder."""
     item = xbmcgui.ListItem(label=label, offscreen=True)
     try:
         item.setInfo("video", {"title": label, "plot": plot or ""})
         item.setProperty("IsPlayable", "false")
-        if art:
-            item.setArt(art)
     except Exception:
         pass
+    _apply_menu_art(item, icon_name, fanart_name, custom_art=art)
     xbmcplugin.addDirectoryItem(HANDLE, _url(action=action, **params), item, isFolder=False)
 
 
@@ -407,12 +407,17 @@ def _add_provider_list_folder(curator, folder, entry):
     service = "Trakt" if provider == "trakt" else "MDBList"
     cache_key = curator._provider_cache_key(provider, entry.get("provider_list_id"))
     cached = (curator.state.get("linked_list_cache") or {}).get(cache_key) or {}
-    cached_movies = cached.get("movies") if isinstance(cached, dict) else []
-    count = len(cached_movies) if isinstance(cached_movies, list) and cached_movies else _safe_int(entry.get("item_count"), 0)
-    tagline = "%d item%s • %s • %s" % (
-        count, "" if count == 1 else "s", service,
-        _relative_time(cached.get("cached_at"), "Refreshed"),
-    )
+    cached_movies = cached.get("movies") if isinstance(cached, dict) else None
+    if isinstance(cached_movies, list) and _safe_int(cached.get("cached_at"), 0):
+        count = len(cached_movies)
+        tagline = "%d item%s • %s • %s" % (
+            count, "" if count == 1 else "s", service,
+            _relative_time(cached.get("cached_at"), "Refreshed"),
+        )
+    else:
+        count = _safe_int(entry.get("item_count"), 0)
+        count_text = "%d item%s • " % (count, "" if count == 1 else "s") if count else ""
+        tagline = "%s%s • Not loaded yet" % (count_text, service)
     description = str(entry.get("description") or "").strip() or "Linked directly to your %s account." % service
     plot = _summary_plot(tagline, description)
     folder_id = str(folder.get("id") or "")
@@ -1090,19 +1095,20 @@ def _similar_preview(curator, params):
     method_label = "AI" if method == "ai" else "Keyword Matching"
     xbmcplugin.setPluginCategory(HANDLE, "Similar to %s" % source)
     _add_route_action(
-        "Create List from These Results", "similar_save",
-        "Save this temporary preview as a normal curatr list.", token=token,
+        "Add To New List", "similar_save",
+        "Save these results to a new curatr list.", token=token,
+        icon_name="menu_create.png",
+    )
+    _add_folder(
+        "Generate a new set of results", "similar_preview",
+        "Generate another temporary preview using %s." % method_label,
+        icon_name="menu_refresh.png", token=token, method=method,
     )
     other = "keyword" if method == "ai" else "ai"
     _add_folder(
-        "Use %s Instead" % ("Keyword Matching" if other == "keyword" else "AI"),
+        "Generate new results using %s" % ("keyword matching" if other == "keyword" else "AI"),
         "similar_preview", "Generate a new temporary preview using the other matching method.",
-        token=token, method=other,
-    )
-    _add_folder(
-        "Refresh Results", "similar_preview",
-        "Generate another temporary preview using %s." % method_label,
-        token=token, method=method,
+        icon_name="menu_branching.png", token=token, method=other,
     )
     rows = [({}, movie, "Similar to %s" % source, "", False) for movie in preview.get("movies", [])]
     _render_movies(curator, rows, "Similar to %s • %s" % (source, method_label))
@@ -1245,6 +1251,7 @@ def main():
             refresh_if_changed(before, curator.state)
         elif action == "linked_list":
             _linked_list(curator, params)
+            refresh_if_changed(before, curator.state, reload_skin=False)
         elif action == "linked_movie":
             title = params.get("title") or "This movie"
             xbmcgui.Dialog().ok(NAME, "%s is listed here without a playable TMDB or Trakt ID. Open it through your preferred video add-on." % title)

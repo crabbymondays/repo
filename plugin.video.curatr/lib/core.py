@@ -311,6 +311,7 @@ class Curator:
                         "provider": provider, "provider_list_id": provider_list_id,
                         "name": str(item.get("name") or ("Trakt list" if provider == "trakt" else "MDBList list")).strip(),
                         "description": str(item.get("description") or "").strip(),
+                        "item_count": max(0, self._safe_int(item.get("item_count"), 0)),
                         "artwork": normalise_list_art(item.get("artwork")),
                     }
                 else:
@@ -3299,6 +3300,8 @@ class Curator:
                 )
                 cache = dict(ordered[:15])
             self.state["linked_list_cache"] = cache
+            entry["item_count"] = len(movies)
+            folder["updated_at"] = int(time.time())
             self._save_state()
             return entry, movies
         except Exception as exc:
