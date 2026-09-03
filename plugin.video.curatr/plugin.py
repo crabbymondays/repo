@@ -439,9 +439,13 @@ def _add_provider_list_folder(curator, folder, entry):
 
 
 def _folder(curator, params):
-    folder = curator.widget_folder_by_id(params.get("folder_id"))
+    folder_id = params.get("folder_id")
+    folder = curator.widget_folder_by_id(folder_id) or curator.recover_widget_folder(folder_id)
     if not folder:
-        raise RuntimeError("That folder no longer exists.")
+        xbmc.log("curatr widget requested a folder that is no longer available", xbmc.LOGWARNING)
+        xbmcplugin.setPluginCategory(HANDLE, "curatr Folder")
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=True, cacheToDisc=False)
+        return
     xbmcplugin.setPluginCategory(HANDLE, str(folder.get("name") or "Folder"))
     added = 0
     for entry in folder.get("entries", []):

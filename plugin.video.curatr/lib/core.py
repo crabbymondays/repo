@@ -44,6 +44,8 @@ class Curator:
         if not xbmcvfs.exists(self.profile_dir):
             xbmcvfs.mkdirs(self.profile_dir)
         self.state_path = os.path.join(self.profile_dir, "state.json")
+        self._dirty_widget_folder_ids = set()
+        self._deleted_widget_folder_ids = set()
         self._had_state_file = xbmcvfs.exists(self.state_path)
         self.state = self._load_state()
         if not self.state.get("install_origin"):
@@ -210,7 +212,51 @@ class Curator:
             xbmc.log("curatr could not read state: %s" % "; ".join(errors), xbmc.LOGWARNING)
         return {}
 
-    def _save_state(self):
+    def _merge_concurrent_widget_folders(self):
+        """Preserve folder changes made by another curatr process since this instance loaded."""
+        if not xbmcvfs.exists(self.state_path):
+            return
+        try:
+            current = json.loads(self._read_text(self.state_path) or "{}")
+        except Exception:
+            return
+        disk_folders = current.get("widget_folders") if isinstance(current, dict) else None
+        if not isinstance(disk_folders, list):
+            return
+        memory_folders = self.state.get("widget_folders")
+        if not isinstance(memory_folders, list):
+            memory_folders = []
+
+        memory_by_id = {
+            str(row.get("id") or ""): row for row in memory_folders
+            if isinstance(row, dict) and str(row.get("id") or "")
+        }
+        merged = []
+        seen = set()
+        for disk_row in disk_folders:
+            if not isinstance(disk_row, dict):
+                continue
+            folder_id = str(disk_row.get("id") or "")
+            if folder_id in self._deleted_widget_folder_ids:
+                seen.add(folder_id)
+                continue
+            memory_row = memory_by_id.get(folder_id)
+            if memory_row is not None and folder_id in self._dirty_widget_folder_ids:
+                merged.append(memory_row)
+            else:
+                merged.append(disk_row)
+            seen.add(folder_id)
+        for memory_row in memory_folders:
+            if not isinstance(memory_row, dict):
+                continue
+            folder_id = str(memory_row.get("id") or "")
+            if folder_id and folder_id not in seen and folder_id not in self._deleted_widget_folder_ids:
+                merged.append(memory_row)
+        self.state["widget_folders"] = merged
+
+    def _save_state(self, merge_disk_folders=True):
+        if merge_disk_folders:
+            self._merge_concurrent_widget_folders()
         payload = json.dumps(self.state, ensure_ascii=False, separators=(",", ":"))
         temp_path = self.state_path + ".tmp"
         backup_path = self.state_path + ".bak"
@@ -229,13 +275,15 @@ class Curator:
                     # direct-write fallback rather than deleting it first.
                     self._write_text(self.state_path, payload)
                     xbmcvfs.delete(temp_path)
+                    self._dirty_widget_folder_ids.clear()
+                    self._deleted_widget_folder_ids.clear()
                     return
             if not xbmcvfs.rename(temp_path, self.state_path):
                 self._write_text(self.state_path, payload)
                 if xbmcvfs.exists(temp_path):
                     xbmcvfs.delete(temp_path)
-            if xbmcvfs.exists(backup_path):
-                xbmcvfs.delete(backup_path)
+            self._dirty_widget_folder_ids.clear()
+            self._deleted_widget_folder_ids.clear()
         except Exception:
             if xbmcvfs.exists(temp_path):
                 xbmcvfs.delete(temp_path)
@@ -406,7 +454,7 @@ class Curator:
 
         if changed:
             try:
-                self._save_state()
+                self._save_state(merge_disk_folders=False)
             except Exception:
                 pass
 
@@ -2926,6 +2974,30 @@ class Curator:
         wanted = str(folder_id or "")
         return next((row for row in self.widget_folders() if str(row.get("id") or "") == wanted), None)
 
+    def recover_widget_folder(self, folder_id):
+        """Restore a missing widget folder from the last valid state snapshot when possible."""
+        wanted = str(folder_id or "")
+        if not wanted or self.widget_folder_by_id(wanted):
+            return self.widget_folder_by_id(wanted)
+        backup_path = self.state_path + ".bak"
+        if not xbmcvfs.exists(backup_path):
+            return None
+        try:
+            backup = json.loads(self._read_text(backup_path) or "{}")
+        except Exception:
+            return None
+        recovered = next((
+            dict(row) for row in (backup.get("widget_folders") or [])
+            if isinstance(row, dict) and str(row.get("id") or "") == wanted
+        ), None) if isinstance(backup, dict) else None
+        if not recovered:
+            return None
+        self.state["widget_folders"] = self.widget_folders() + [recovered]
+        self._dirty_widget_folder_ids.add(wanted)
+        self._save_state()
+        xbmc.log("curatr restored a missing widget folder from its safety backup", xbmc.LOGWARNING)
+        return recovered
+
     def _store_widget_folder(self, updated, previous=None):
         folders = self.widget_folders()
         wanted = str((previous or updated).get("id") or "")
@@ -2946,6 +3018,9 @@ class Curator:
                 stored.append(updated)
             folders = stored
         self.state["widget_folders"] = folders
+        folder_id = str(updated.get("id") or "")
+        if folder_id:
+            self._dirty_widget_folder_ids.add(folder_id)
         self._save_state()
         return updated
 
@@ -3064,6 +3139,7 @@ class Curator:
             "updated_at": now,
         }
         self.state["widget_folders"] = self.widget_folders() + [folder]
+        self._dirty_widget_folder_ids.add(folder["id"])
         self._save_state()
         if xbmcgui.Dialog().yesno(self.name, "Folder created. Customise its artwork now?"):
             folder["artwork"] = self._edit_compact_artwork("Folder artwork", folder.get("artwork"))
@@ -3302,6 +3378,7 @@ class Curator:
             self.state["linked_list_cache"] = cache
             entry["item_count"] = len(movies)
             folder["updated_at"] = int(time.time())
+            self._dirty_widget_folder_ids.add(str(folder.get("id") or ""))
             self._save_state()
             return entry, movies
         except Exception as exc:
@@ -3610,6 +3687,7 @@ class Curator:
         self.state["widget_folders"] = [
             row for row in self.widget_folders() if str(row.get("id")) != str(folder_id)
         ]
+        self._deleted_widget_folder_ids.add(str(folder_id))
         self._save_state()
         self.record_activity("Deleted widget folder: %s" % name, notify=True)
         return True
@@ -3972,6 +4050,9 @@ class Curator:
             by_id[str(current[idx].get("id"))] = idx
             by_name[self._normalised_restore_name(current[idx].get("name"))] = idx
         self.state["widget_folders"] = current
+        self._dirty_widget_folder_ids.update(
+            str(row.get("id") or "") for row in current if isinstance(row, dict) and row.get("id")
+        )
         return added, updated
 
     def import_backup(self):
