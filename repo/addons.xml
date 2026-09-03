@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="1.0.0" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="1.0.1" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -61,7 +61,7 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>curatr 1.0.0 adds movie and TV show lists, Keyword Matching, optional AI recommendations, Kodi context-menu actions, temporary Find Similar previews, Kodi Library integration, Trakt syncing, custom folders and artwork, native Kodi metadata, and automatic playback through the Kodi Library or compatible video add-ons.</news>
+            <news>curatr 1.0.1 protects folders from stale background updates, restores missing widget folders from the last valid state snapshot when possible, prevents repeated missing-widget messages, and polishes Find Similar actions and linked-list widget metadata.</news>
         </extension>
     </addon>
 </addons>
