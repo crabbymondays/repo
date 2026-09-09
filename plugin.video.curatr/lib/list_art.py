@@ -72,7 +72,7 @@ def normalise_state(value):
         for key in result:
             if value.get(key) not in (None,):
                 result[key] = str(value.get(key) or "")
-    if result["icon_mode"] not in ("auto", "bundled", "custom", "default"):
+    if result["icon_mode"] not in ("auto", "bundled", "person", "custom", "default"):
         result["icon_mode"] = "auto"
     if result["icon_style"] not in ("white", "genre_colours"):
         result["icon_style"] = "white"
@@ -88,6 +88,17 @@ def _media(addon, *parts):
     return os.path.join(root, "resources", "media", *parts)
 
 
+def bundled_source(addon, key, kind, style):
+    """Resolve one bundled artwork choice from its stable key and style."""
+    if kind == "icon":
+        folder = "icons_colour_v4" if style == "genre_colours" else "icons_v3"
+        extension = ".png"
+    else:
+        folder = "fanart_mono_v2" if style == "monochrome" else "fanart_v2"
+        extension = ".jpg"
+    return _media(addon, "list_art", folder, str(key or "") + extension)
+
+
 def resolved_sources(addon, record):
     record = record if isinstance(record, dict) else {}
     state = normalise_state(record.get("artwork"))
@@ -96,7 +107,7 @@ def resolved_sources(addon, record):
     icon = ""
     if state["icon_mode"] == "default":
         icon = os.path.join(xbmcvfs.translatePath(addon.getAddonInfo("path")), "icon.png")
-    elif state["icon_mode"] == "custom":
+    elif state["icon_mode"] in ("person", "custom"):
         icon = state["icon_source"]
     else:
         key = automatic if state["icon_mode"] == "auto" else state["icon_key"]
@@ -104,8 +115,10 @@ def resolved_sources(addon, record):
             key = automatic
         # List artwork is independent from the global menu theme. Versioned
         # folders also prevent Kodi retaining an older texture-cache result.
-        folder = "icons_colour_v3" if state["icon_style"] == "genre_colours" else "icons_v2"
-        icon = _media(addon, "list_art", folder, key + ".png")
+        icon_style = state["icon_style"]
+        if state["icon_mode"] == "auto":
+            icon_style = "genre_colours" if state["fanart_style"] == "colour" else "white"
+        icon = bundled_source(addon, key, "icon", icon_style)
 
     fanart = ""
     if state["fanart_mode"] == "default":
@@ -116,8 +129,7 @@ def resolved_sources(addon, record):
         key = automatic if state["fanart_mode"] == "auto" else state["fanart_key"]
         if key not in LABELS:
             key = automatic
-        folder = "fanart_mono_v2" if state["fanart_style"] == "monochrome" else "fanart_v2"
-        fanart = _media(addon, "list_art", folder, key + ".jpg")
+        fanart = bundled_source(addon, key, "fanart", state["fanart_style"])
     return {"icon": icon, "thumb": icon, "fanart": fanart, "landscape": fanart}
 
 
@@ -126,11 +138,12 @@ def summary(record):
     state = normalise_state(record.get("artwork"))
     automatic = suggest_key(record.get("name"), record.get("prompt"))
     if state["icon_mode"] == "auto":
-        icon = "Automatic (%s: White)" % label(automatic)
+        style = "Colours" if state["fanart_style"] == "colour" else "White"
+        icon = "Automatic (%s: %s)" % (label(automatic), style)
     elif state["icon_mode"] == "bundled":
-        style = "Genre Colours" if state["icon_style"] == "genre_colours" else "White"
+        style = "Colours" if state["icon_style"] == "genre_colours" else "White"
         icon = "%s: %s" % (label(state["icon_key"]), style)
-    elif state["icon_mode"] == "custom" and state["icon_label"]:
+    elif state["icon_mode"] in ("person", "custom") and state["icon_label"]:
         icon = state["icon_label"]
     else:
         icon = state["icon_mode"].title()
@@ -141,17 +154,17 @@ def summary(record):
     elif state["fanart_mode"] in ("item", "person", "custom") and state["fanart_label"]:
         fanart = state["fanart_label"]
     elif state["fanart_mode"] == "item":
-        # Older saved lists predate fanart_label. Recover the film name by
+        # Older saved lists predate fanart_label. Recover the item name by
         # matching the stored source against artwork already in the record.
-        fanart = "Film artwork"
-        for movie in record.get("movies", []) if isinstance(record.get("movies"), list) else []:
-            if not isinstance(movie, dict):
+        fanart = "Item artwork"
+        for item in record.get("movies", []) if isinstance(record.get("movies"), list) else []:
+            if not isinstance(item, dict):
                 continue
-            if ArtworkCache._first_image(movie, "fanart") != state["fanart_source"]:
+            if ArtworkCache._first_image(item, "fanart") != state["fanart_source"]:
                 continue
             fanart = "%s%s" % (
-                movie.get("title") or "Film artwork",
-                " (%s)" % movie.get("year") if movie.get("year") else "",
+                item.get("title") or "Item artwork",
+                " (%s)" % item.get("year") if item.get("year") else "",
             )
             break
     elif state["fanart_mode"] == "person":

@@ -11,11 +11,16 @@ curatr is a Kodi 21 add-on for creating and maintaining personalised movie and T
 - Kodi Library and optional Trakt preference history
 - Optional Trakt list syncing
 - Custom list artwork and widget folders
-- Native Kodi cast, crew and title metadata from TMDB
+- Unified controller-friendly list and folder management
+- A single live-preview artwork editor for list and folder icons and fanart
+- Folder contents that can be arranged before a new folder is saved
+- Four coordinated window themes with optional custom colours and light mode
+- Native Kodi cast, crew, title and rating metadata from TMDB
+- Optional cached IMDb, Rotten Tomatoes and Metacritic ratings through MDBList
 - Kodi Library-first playback with optional compatible video add-ons
 - Configurable Kodi context-menu actions for titles and add-on folders
 - Temporary Find Similar poster previews using Keyword Matching or AI
-- Local backup and restore
+- Local backup, restore and recovery snapshots
 
 ## Installation
 

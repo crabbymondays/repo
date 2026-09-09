@@ -101,6 +101,23 @@ class MetadataCache:
         runtime = details.get("episode_run_time") if media_type == "show" else [details.get("runtime")]
         runtime = next((int(value) for value in runtime or [] if value), 0)
         date = details.get("first_air_date") if media_type == "show" else details.get("release_date")
+        external = details.get("external_ids") or {}
+        ids = {}
+        for source, field in (("imdb", "imdb_id"), ("tvdb", "tvdb_id")):
+            value = external.get(field)
+            if value not in (None, ""):
+                ids[source] = value
+        ratings = {}
+        try:
+            tmdb_rating = float(details.get("vote_average") or 0)
+            tmdb_votes = int(details.get("vote_count") or 0)
+        except (TypeError, ValueError):
+            tmdb_rating, tmdb_votes = 0.0, 0
+        if tmdb_rating > 0:
+            ratings["tmdb"] = {
+                "rating": round(tmdb_rating, 2), "votes": max(0, tmdb_votes),
+                "percent": max(0, min(100, int(round(tmdb_rating * 10)))),
+            }
         return {
             "cast": cast, "directors": directors, "writers": writers, "studios": studios,
             "countries": countries, "trailer": trailer, "runtime": runtime,
@@ -108,11 +125,63 @@ class MetadataCache:
             "tagline": str(details.get("tagline") or ""), "released": str(date or ""),
             "status": str(details.get("status") or ""),
             "original_title": str(details.get("original_name") or details.get("original_title") or ""),
+            "ids": ids, "ratings": ratings,
         }
 
-    def enrich(self, movies, tmdb, workers=4):
-        if not tmdb or not getattr(tmdb, "api_key", ""):
-            return movies
+    @staticmethod
+    def _apply(movie, metadata):
+        for key, value in metadata.items():
+            if key in ("ids", "ratings") and isinstance(value, dict):
+                merged = dict(movie.get(key) or {})
+                merged.update(value)
+                movie[key] = merged
+            elif key != "mdblist_ratings_checked":
+                movie[key] = value
+
+    def _enrich_external_ratings(self, movies, mdblist):
+        if not mdblist or not getattr(mdblist, "api_key", ""):
+            return False
+        pending = {"movie": {}, "show": {}}
+        for movie in movies or []:
+            if not isinstance(movie, dict):
+                continue
+            media_type = "show" if movie.get("media_type") == "show" else "movie"
+            tmdb_id = (movie.get("ids") or {}).get("tmdb")
+            try:
+                key = self._key(media_type, tmdb_id)
+            except (TypeError, ValueError):
+                continue
+            cached = self.get(media_type, tmdb_id) or {}
+            if not cached.get("mdblist_ratings_checked"):
+                pending[media_type][int(tmdb_id)] = key
+        changed = False
+        for media_type, items in pending.items():
+            if not items:
+                continue
+            fetched = mdblist.ratings_for_ids(media_type, items)
+            now = int(time.time())
+            for tmdb_id, key in items.items():
+                metadata = self.get(media_type, tmdb_id) or {}
+                ratings = dict(metadata.get("ratings") or {})
+                ratings.update(fetched.get(tmdb_id) or {})
+                metadata["ratings"] = ratings
+                metadata["mdblist_ratings_checked"] = True
+                self._load()["items"][key] = {"cached_at": now, "metadata": metadata}
+                changed = True
+        if changed:
+            self._save()
+            for movie in movies or []:
+                if not isinstance(movie, dict):
+                    continue
+                media_type = "show" if movie.get("media_type") == "show" else "movie"
+                tmdb_id = (movie.get("ids") or {}).get("tmdb")
+                cached = self.get(media_type, tmdb_id) if tmdb_id not in (None, "") else None
+                if cached:
+                    self._apply(movie, cached)
+        return changed
+
+    def enrich(self, movies, tmdb, mdblist=None, workers=4):
+        tmdb_available = bool(tmdb and getattr(tmdb, "api_key", ""))
         wanted = {}
         for movie in movies or []:
             if not isinstance(movie, dict):
@@ -125,24 +194,23 @@ class MetadataCache:
                 continue
             cached = self.get(media_type, tmdb_id)
             if cached:
-                movie.update(cached)
-            else:
+                self._apply(movie, cached)
+            elif tmdb_available:
                 wanted[key] = (media_type, int(tmdb_id))
-        if not wanted:
-            return movies
 
         fetched = {}
-        with ThreadPoolExecutor(max_workers=max(1, min(4, int(workers)))) as executor:
-            futures = {
-                executor.submit(tmdb.list_item_details, tmdb_id, media_type): (key, media_type)
-                for key, (media_type, tmdb_id) in wanted.items()
-            }
-            for future in as_completed(futures):
-                key, media_type = futures[future]
-                try:
-                    fetched[key] = self._compact(tmdb, future.result(), media_type)
-                except Exception:
-                    continue
+        if wanted:
+            with ThreadPoolExecutor(max_workers=max(1, min(4, int(workers)))) as executor:
+                futures = {
+                    executor.submit(tmdb.list_item_details, tmdb_id, media_type): (key, media_type)
+                    for key, (media_type, tmdb_id) in wanted.items()
+                }
+                for future in as_completed(futures):
+                    key, media_type = futures[future]
+                    try:
+                        fetched[key] = self._compact(tmdb, future.result(), media_type)
+                    except Exception:
+                        continue
         if fetched:
             now = int(time.time())
             for key, metadata in fetched.items():
@@ -158,5 +226,9 @@ class MetadataCache:
                 except (TypeError, ValueError):
                     metadata = None
                 if metadata:
-                    movie.update(metadata)
+                    self._apply(movie, metadata)
+        try:
+            self._enrich_external_ratings(movies, mdblist)
+        except Exception:
+            pass
         return movies

@@ -5,6 +5,7 @@ import os
 import xbmcgui
 
 from .keyword_matcher import confirmation_parts, format_rules, parse_prompt
+from .ui_theme import is_light_mode, skin_name
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -17,6 +18,15 @@ _PALETTE = {
     "year": ("0x705C392E", "0xFFFFDAC9", "0xA85C392E"),
     "runtime": ("0x70383F66", "0xFFDDE2FF", "0xA8383F66"),
     "place": ("0x702A554B", "0xFFD2F4EA", "0xA82A554B"),
+}
+_LIGHT_FOREGROUND = {
+    "genre": "0xFF5A2935",
+    "person": "0xFF263F55",
+    "film": "0xFF493064",
+    "number": "0xFF55451E",
+    "year": "0xFF5A3328",
+    "runtime": "0xFF30385C",
+    "place": "0xFF234D43",
 }
 
 
@@ -35,7 +45,7 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
     PLUS_ID = 1900
 
     def __new__(cls, addon_path, prompt, rules, footer, edit_existing=False):
-        return super().__new__(cls, "curatr-keyword-confirm.xml", addon_path, "Default", "1080i")
+        return super().__new__(cls, "curatr-keyword-confirm.xml", addon_path, skin_name(), "1080i")
 
     def __init__(self, addon_path, prompt, rules, footer, edit_existing=False):
         self.addon_path = addon_path
@@ -49,6 +59,7 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         self.filter_groups = []
         self.control_actions = {}
         self.action_controls = {}
+        self.light_mode = is_light_mode()
 
     @staticmethod
     def _text_width(text, chip=False):
@@ -68,7 +79,8 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         self.control_actions = {}
         self.action_controls = {}
 
-    def _add_label(self, x, y, width, text, colour="0xFFD7D3DF"):
+    def _add_label(self, x, y, width, text, colour=""):
+        colour = colour or ("0xFF444751" if self.light_mode else "0xFFD7D3DF")
         control = xbmcgui.ControlLabel(x, y, width, 50, str(text or ""), font="font13", textColor=colour, alignment=4)
         self.addControl(control); self.dynamic_controls.append(control)
 
@@ -88,6 +100,8 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
     def _add_chip(self, x, y, width, part, index):
         kind = str(part.get("kind") or "genre")
         background, foreground, focused = _PALETTE.get(kind, _PALETTE["genre"])
+        if self.light_mode:
+            foreground = _LIGHT_FOREGROUND.get(kind, _LIGHT_FOREGROUND["genre"])
         images = self._chip_images(x, y, width, background)
         if not self.edit_mode:
             label = xbmcgui.ControlLabel(x + 18, y + 10, width - 36, 40, "[B]%s[/B]" % part.get("text", ""), font="font13", textColor=foreground, alignment=6)
@@ -137,7 +151,8 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
                 x, y = left, y + 72
             plus = xbmcgui.ControlButton(
                 x, y, 60, 60, "[B]+[/B]", font="font35",
-                textColor="0xFFDAD6E0", focusedColor="0xFFFFFFFF", alignment=6,
+                textColor="0xFF444751" if self.light_mode else "0xFFDAD6E0",
+                focusedColor="0xFFFFFFFF", alignment=6,
                 focusTexture=os.path.join(self.addon_path, "resources", "media", "keyword_controls_v5", "plus_focus.png"),
                 noFocusTexture=os.path.join(self.addon_path, "resources", "media", "keyword_controls_v5", "plus_normal.png"),
             )

@@ -709,20 +709,132 @@ msgctxt "#32817"
 msgid "Choose how many posters Find Similar displays, from 5 to 50."
 msgstr ""
 
+msgctxt "#32818"
+msgid "Advanced List Creation"
+msgstr ""
+
+msgctxt "#32819"
+msgid "Use the tabbed List Settings window. Turn this off to use the simpler step-by-step list creator."
+msgstr ""
+
 msgctxt "#32820"
 msgid "curatr"
 msgstr ""
 
 msgctxt "#32821"
-msgid "Add to curatr List"
+msgid "Add to curatr list"
 msgstr ""
 
 msgctxt "#32822"
-msgid "Add to curatr Folder"
+msgid "Add to curatr folder"
 msgstr ""
 
 msgctxt "#32823"
 msgid "Find Similar"
+msgstr ""
+
+msgctxt "#32830"
+msgid "Theme"
+msgstr ""
+
+msgctxt "#32831"
+msgid "Choose a coordinated colour theme for curatr's custom windows."
+msgstr ""
+
+msgctxt "#32832"
+msgid "Violet"
+msgstr ""
+
+msgctxt "#32833"
+msgid "Ocean"
+msgstr ""
+
+msgctxt "#32834"
+msgid "Emerald"
+msgstr ""
+
+msgctxt "#32835"
+msgid "Amber"
+msgstr ""
+
+msgctxt "#32836"
+msgid "Light mode"
+msgstr ""
+
+msgctxt "#32837"
+msgid "Use pale surfaces and dark text in curatr's custom windows."
+msgstr ""
+
+msgctxt "#32838"
+msgid "Custom colours"
+msgstr ""
+
+msgctxt "#32839"
+msgid "Override individual colours from the selected theme."
+msgstr ""
+
+msgctxt "#32840"
+msgid "Highlight colour"
+msgstr ""
+
+msgctxt "#32841"
+msgid "Choose the main focus and selection colour."
+msgstr ""
+
+msgctxt "#32842"
+msgid "Secondary highlight colour"
+msgstr ""
+
+msgctxt "#32843"
+msgid "Choose the supporting focus and selection colour."
+msgstr ""
+
+msgctxt "#32844"
+msgid "Background tint"
+msgstr ""
+
+msgctxt "#32845"
+msgid "Choose the subtle colour used to tint window surfaces."
+msgstr ""
+
+msgctxt "#32846"
+msgid "Theme default"
+msgstr ""
+
+msgctxt "#32847"
+msgid "Lilac"
+msgstr ""
+
+msgctxt "#32848"
+msgid "Blue"
+msgstr ""
+
+msgctxt "#32849"
+msgid "Cyan"
+msgstr ""
+
+msgctxt "#32850"
+msgid "Teal"
+msgstr ""
+
+msgctxt "#32851"
+msgid "Green"
+msgstr ""
+
+msgctxt "#32852"
+msgid "Gold"
+msgstr ""
+
+msgctxt "#32853"
+msgid "Red"
+msgstr ""
+
+msgctxt "#32854"
+msgid "Pink"
+msgstr ""
+
+msgctxt "#32855"
+msgid "Neutral"
 msgstr ""
 
 msgctxt "#32490"

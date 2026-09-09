@@ -1,5 +1,7 @@
 import xbmcgui
 
+from .ui_theme import skin_name
+
 
 _ACTION_PARENT_DIR = 9
 _ACTION_PREVIOUS_MENU = 10
@@ -15,7 +17,7 @@ class ArtworkGridWindow(xbmcgui.WindowXMLDialog):
 
     def __new__(cls, addon_path, heading, entries, layout="icon"):
         return super().__new__(
-            cls, "curatr-artwork-grid.xml", addon_path, "Default", "1080i"
+            cls, "curatr-artwork-grid.xml", addon_path, skin_name(), "1080i"
         )
 
     def __init__(self, addon_path, heading, entries, layout="icon"):
@@ -39,9 +41,6 @@ class ArtworkGridWindow(xbmcgui.WindowXMLDialog):
                 source = str(entry.get("preview_source") or entry.get("source") or "")
                 if source:
                     item.setArt({"icon": source, "thumb": source})
-                subtitle = str(entry.get("subtitle") or "").strip()
-                if subtitle:
-                    item.setProperty("CuratrSubtitle", subtitle)
                 items.append(item)
             panel.reset()
             panel.addItems(items)

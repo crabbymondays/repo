@@ -12,12 +12,12 @@
         </control>
         <control type="label" id="10">
             <left>100</left><top>42</top><width>1720</width><height>58</height>
-            <font>font30</font><textcolor>FFFFFFFF</textcolor><align>center</align>
+            <font>font30</font><textcolor>FF20222B</textcolor><align>center</align>
             <label>Choose artwork</label>
         </control>
         <control type="label">
             <left>100</left><top>102</top><width>1720</width><height>38</height>
-            <font>font13</font><textcolor>FFBBBBBB</textcolor><align>center</align>
+            <font>font13</font><textcolor>FF555963</textcolor><align>center</align>
             <label>Select an image to use it  •  Press Back to cancel</label>
         </control>
 
@@ -43,7 +43,7 @@
                 </control>
                 <control type="label">
                     <left>40</left><top>334</top><width>340</width><height>54</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align><aligny>center</aligny>
+                    <font>font13</font><textcolor>FF20222B</textcolor><align>center</align><aligny>center</aligny>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </itemlayout>
@@ -71,7 +71,7 @@
                 </control>
                 <control type="label">
                     <left>40</left><top>334</top><width>340</width><height>54</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align><aligny>center</aligny>
+                    <font>font13</font><textcolor>FF20222B</textcolor><align>center</align><aligny>center</aligny>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </focusedlayout>
@@ -99,7 +99,7 @@
                 </control>
                 <control type="label">
                     <left>24</left><top>318</top><width>512</width><height>36</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
+                    <font>font13</font><textcolor>FF20222B</textcolor><align>center</align>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </itemlayout>
@@ -127,7 +127,7 @@
                 </control>
                 <control type="label">
                     <left>24</left><top>318</top><width>512</width><height>36</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
+                    <font>font13</font><textcolor>FF20222B</textcolor><align>center</align>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </focusedlayout>

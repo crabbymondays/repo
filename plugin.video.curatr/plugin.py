@@ -16,7 +16,7 @@ from lib.catalogue_clients import CatalogueError
 from lib.core import Curator
 from lib.list_art import resolved_sources as resolved_list_art
 from lib.metadata_cache import MetadataCache
-from lib.player_registry import PlayerDefinitionError, PlayerRegistry
+from lib.player_registry import PlayerRegistry
 from lib.trakt import TraktError
 from lib.view_refresh import list_signature, refresh_if_changed
 
@@ -63,6 +63,36 @@ def _safe_int(value, default=0):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _setting_enabled(setting_id, default=True):
+    try:
+        value = str(ADDON.getSetting(setting_id) or "").strip().lower()
+    except Exception:
+        value = ""
+    if not value:
+        return bool(default)
+    return value in ("true", "1", "yes", "on")
+
+
+def _mark_curatr_item(item):
+    try:
+        item.setProperty("CuratrItem", "true")
+    except Exception:
+        pass
+
+
+def _in_video_navigation():
+    """Dialog shortcuts in home widgets must not execute during widget probing."""
+    try:
+        if xbmcgui.getCurrentWindowId() == 10025:
+            return True
+    except Exception:
+        pass
+    try:
+        return bool(xbmc.getCondVisibility("Window.IsActive(videos)"))
+    except Exception:
+        return False
 
 
 def _relative_time(timestamp, verb="Refreshed"):
@@ -127,7 +157,7 @@ def _existing_art(filename):
     return path if xbmcvfs.exists(path) else ""
 
 
-def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
+def _apply_menu_art(item, icon_name="", custom_art=None):
     # Keep navigation glyphs as item icons while every menu entry uses the
     # same restrained global background. Never promote an icon or per-menu
     # image to fanart: many TV skins display that artwork full-screen.
@@ -141,6 +171,12 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
         "3": "background_3_v4.jpg",
     }
     fanart = _existing_art(background_names.get(background_style, background_names["0"]))
+    landscape = ""
+    if icon_name:
+        landscape_name = os.path.splitext(os.path.basename(str(icon_name)))[0] + ".png"
+        landscape_path = os.path.join(MEDIA_PATH, "menu_landscape_v1", landscape_name)
+        if xbmcvfs.exists(landscape_path):
+            landscape = landscape_path
 
     if not icon:
         root_icon = os.path.join(ADDON_PATH, "icon.png")
@@ -153,7 +189,7 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
         art.setdefault("thumb", icon)
     if fanart:
         art.setdefault("fanart", fanart)
-        art.setdefault("landscape", fanart)
+        art.setdefault("landscape", landscape or fanart)
     if art:
         try:
             item.setArt(art)
@@ -161,8 +197,9 @@ def _apply_menu_art(item, icon_name="", fanart_name="", custom_art=None):
             pass
 
 
-def _add_folder(label, action, plot="", context_items=None, icon_name="", fanart_name="", art=None, tagline="", **params):
+def _add_folder(label, action, plot="", context_items=None, icon_name="", art=None, tagline="", **params):
     item = xbmcgui.ListItem(label=label, offscreen=True)
+    _mark_curatr_item(item)
     try:
         info = {"title": label, "plot": plot or ""}
         if tagline:
@@ -180,7 +217,7 @@ def _add_folder(label, action, plot="", context_items=None, icon_name="", fanart
             item.setProperty("tagline", tagline)
     except Exception:
         pass
-    _apply_menu_art(item, icon_name, fanart_name, custom_art=art)
+    _apply_menu_art(item, icon_name, custom_art=art)
     if context_items:
         try:
             item.addContextMenuItems(context_items)
@@ -189,8 +226,9 @@ def _add_folder(label, action, plot="", context_items=None, icon_name="", fanart
     xbmcplugin.addDirectoryItem(HANDLE, _url(action=action, **params), item, isFolder=True)
 
 
-def _add_action(label, command, plot="", icon_name="", fanart_name=""):
+def _add_action(label, command, plot="", icon_name="", widget_fallback=""):
     item = xbmcgui.ListItem(label=label, offscreen=True)
+    _mark_curatr_item(item)
     try:
         item.setInfo("video", {"title": label, "plot": plot or ""})
     except Exception:
@@ -202,25 +240,23 @@ def _add_action(label, command, plot="", icon_name="", fanart_name=""):
             tag.setPlot(plot)
     except Exception:
         pass
-    _apply_menu_art(item, icon_name, fanart_name)
+    _apply_menu_art(item, icon_name)
     item.setProperty("IsPlayable", "false")
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        _url(action="run", command=command),
-        item,
-        isFolder=False,
-    )
+    widget_safe = bool(widget_fallback and not _in_video_navigation())
+    target = _url(action=widget_fallback) if widget_safe else _url(action="run", command=command)
+    xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=widget_safe)
 
 
-def _add_route_action(label, action, plot="", art=None, icon_name="", fanart_name="", **params):
+def _add_route_action(label, action, plot="", art=None, icon_name="", **params):
     """Run a dialog-style route without making Kodi enter another folder."""
     item = xbmcgui.ListItem(label=label, offscreen=True)
+    _mark_curatr_item(item)
     try:
         item.setInfo("video", {"title": label, "plot": plot or ""})
         item.setProperty("IsPlayable", "false")
     except Exception:
         pass
-    _apply_menu_art(item, icon_name, fanart_name, custom_art=art)
+    _apply_menu_art(item, icon_name, custom_art=art)
     xbmcplugin.addDirectoryItem(HANDLE, _url(action=action, **params), item, isFolder=False)
 
 
@@ -255,59 +291,63 @@ def _root(curator):
     _add_folder(
         _loc(32410, "My Lists"), "my",
         _loc(32414, "Create, browse and manage your personalised movie and TV lists."),
-        icon_name="menu_my_lists.png", fanart_name="fanart_my_lists.jpg",
+        icon_name="menu_my_lists.png",
     )
     _add_folder(
         _loc(32411, "Explore"), "explore",
         _loc(32415, "Quick picks, saved prompts and more ways to browse recommendations."),
-        icon_name="menu_explore.png", fanart_name="fanart_explore.jpg",
+        icon_name="menu_explore.png",
     )
     _add_folder(
         _loc(32412, "Preferences & Activity"), "taste_activity",
         _loc(32416, "View your preferences, connections, usage and recent activity."),
-        icon_name="menu_taste_v2.png", fanart_name="fanart_taste.jpg",
+        icon_name="menu_taste_v3.png",
     )
     _add_action(
         _loc(32413, "Settings"), "settings",
         _loc(32417, "Set up services, defaults, appearance and notifications."),
-        icon_name="menu_settings.png", fanart_name="fanart_settings.jpg",
+        icon_name="menu_settings.png",
     )
     _add_action(
         _loc(32640, "Privacy & Data"), "privacy",
         _loc(32641, "See what curatr stores locally and what optional services receive."),
-        icon_name="menu_privacy.png", fanart_name="fanart_settings.jpg",
+        icon_name="menu_privacy.png",
     )
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
 def _my(curator):
     xbmcplugin.setPluginCategory(HANDLE, _loc(32410, "My Lists"))
-    _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_list.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create.png", fanart_name="fanart_create.jpg")
-    _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png", fanart_name="fanart_my_lists.jpg")
+    _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_list.png")
+    _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create_v2.png")
+    _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png")
     _add_folder("Folders", "folders", "Organise lists and shortcuts into custom folders for browsing or widgets.", icon_name="menu_widget_folders.png")
-    _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Refresh every saved list using its chosen creation method."), icon_name="menu_refresh.png", fanart_name="fanart_my_lists.jpg")
-    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden items and folders."), icon_name="menu_backup.png", fanart_name="fanart_settings.jpg")
+    _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Refresh every saved list using its chosen creation method."), icon_name="menu_refresh.png")
+    _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden items and folders."), icon_name="menu_backup.png")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
 def _explore(curator):
     xbmcplugin.setPluginCategory(HANDLE, _loc(32411, "Explore"))
-    _add_action(_loc(32430, "Quick Pick"), "quick", _loc(32433, "Choose a mood and quickly create a personalised list with AI."), icon_name="menu_quick.png", fanart_name="fanart_explore.jpg")
-    _add_action(_loc(32431, "Saved Prompts"), "templates", _loc(32434, "Reuse and manage prompts you have saved for later."), icon_name="menu_templates.png", fanart_name="fanart_explore.jpg")
-    _add_folder("All Picks", "all", "Browse recommendations from all your current lists.", icon_name="menu_all.png", fanart_name="fanart_explore.jpg")
-    _add_folder("Latest Picks", "fresh", "See recommendations from the list refreshed most recently.", icon_name="menu_fresh.png", fanart_name="fanart_explore.jpg")
-    _add_folder("Surprise Me", "random", "Browse a random selection from your lists.", icon_name="menu_random.png", fanart_name="fanart_explore.jpg", limit="10")
-    _add_action(_loc(32432, "Hidden"), "hidden", _loc(32435, "Review movies and TV shows you have asked curatr not to recommend."), icon_name="menu_hidden.png", fanart_name="fanart_explore.jpg")
+    _add_action(
+        _loc(32430, "Quick Pick"), "quick",
+        _loc(32433, "Choose a mood and quickly create a personalised list with AI."),
+        icon_name="menu_quick.png", widget_fallback="explore",
+    )
+    _add_action(_loc(32431, "Saved Prompts"), "templates", _loc(32434, "Reuse and manage prompts you have saved for later."), icon_name="menu_templates.png")
+    _add_folder("All Picks", "all", "Browse recommendations from all your current lists.", icon_name="menu_all.png")
+    _add_folder("Latest Picks", "fresh", "See recommendations from the list refreshed most recently.", icon_name="menu_fresh.png")
+    _add_folder("Surprise Me", "random", "Browse a random selection from your lists.", icon_name="menu_random.png", limit="10")
+    _add_action(_loc(32432, "Hidden"), "hidden", _loc(32435, "Review movies and TV shows you have asked curatr not to recommend."), icon_name="menu_hidden.png")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
 def _taste_activity(curator):
     xbmcplugin.setPluginCategory(HANDLE, _loc(32412, "Preferences & Activity"))
-    _add_action(_loc(32440, "Refresh Preferences"), "sync", _loc(32446, "Update the ratings and watch history curatr uses."), icon_name="menu_refresh.png", fanart_name="fanart_taste.jpg")
-    _add_action(_loc(32441, "View My Preferences"), "taste", _loc(32447, "See the information curatr uses when choosing recommendations."), icon_name="menu_taste_v2.png", fanart_name="fanart_taste.jpg")
-    _add_action(_loc(32442, "AI Usage"), "usage", _loc(32448, "See usage statistics reported by your AI provider."), icon_name="menu_usage.png", fanart_name="fanart_info.jpg")
-    _add_action(_loc(32443, "Recent Activity"), "activity", _loc(32449, "See recent actions, updates and errors."), icon_name="menu_activity.png", fanart_name="fanart_info.jpg")
+    _add_action(_loc(32440, "Refresh Preferences"), "sync", _loc(32446, "Update the ratings and watch history curatr uses."), icon_name="menu_refresh.png")
+    _add_action(_loc(32441, "View My Preferences"), "taste", _loc(32447, "See the information curatr uses when choosing recommendations."), icon_name="menu_taste_v3.png")
+    _add_action(_loc(32442, "AI Usage"), "usage", _loc(32448, "See usage statistics reported by your AI provider."), icon_name="menu_usage.png")
+    _add_action(_loc(32443, "Recent Activity"), "activity", _loc(32449, "See recent actions, updates and errors."), icon_name="menu_activity.png")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -326,7 +366,7 @@ def _lists(curator):
             context = [
                 ("Refresh this list", _plugin_command("refresh_list", list_id=local_id)),
                 ("Sync to Trakt", _plugin_command("sync_list", list_id=local_id)),
-                ("Use contents as AI reference", _plugin_command("create_related_local", list_id=local_id)),
+                ("Create Similar List", _plugin_command("create_related_local", list_id=local_id)),
                 ("Add to Folder", _plugin_command("folder_add_list", list_id=local_id)),
                 ("Artwork", _plugin_command("artwork_list", list_id=local_id)),
                 ("List settings", _plugin_command("edit_list", list_id=local_id)),
@@ -334,7 +374,7 @@ def _lists(curator):
             ]
             _add_folder(
                 name, "list", plot=plot, context_items=context,
-                icon_name="menu_list.png", fanart_name="fanart_my_lists.jpg",
+                icon_name="menu_list.png",
                 art=_record_art(curator, record), tagline=tagline,
                 list_id=local_id, name=name
             )
@@ -426,7 +466,7 @@ def _add_provider_list_folder(curator, folder, entry):
         ("Refresh linked list", "RunPlugin(%s)" % _url(
             action="linked_list", folder_id=folder_id, entry_id=entry_id, force="1",
         )),
-        ("Use contents as AI reference", _plugin_command("create_related_provider", folder_id=folder_id, entry_id=entry_id)),
+        ("Create Similar List", _plugin_command("create_related_provider", folder_id=folder_id, entry_id=entry_id)),
         ("Artwork", _plugin_command("folder_entry_artwork", folder_id=folder_id, entry_id=entry_id)),
         ("Item settings", _plugin_command("folder_edit_entry", folder_id=folder_id, entry_id=entry_id)),
         ("Remove from folder", _plugin_command("folder_remove_entry", folder_id=folder_id, entry_id=entry_id)),
@@ -461,7 +501,7 @@ def _folder(curator, params):
             context = [
                 ("Refresh this list", _plugin_command("refresh_list", list_id=local_id)),
                 ("List settings", _plugin_command("edit_list", list_id=local_id)),
-                ("Use contents as AI reference", _plugin_command("create_related_local", list_id=local_id)),
+                ("Create Similar List", _plugin_command("create_related_local", list_id=local_id)),
                 ("Artwork", _plugin_command("artwork_list", list_id=local_id)),
                 ("Remove from folder", _plugin_command("folder_remove_entry", folder_id=str(folder.get("id") or ""), entry_id=str(entry.get("id") or ""))),
             ]
@@ -474,27 +514,6 @@ def _folder(curator, params):
     if not added:
         _add_folder("Manage this folder", "folder_manage", "Add items to this folder.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
-
-
-def _fresh_movie(curator, trakt_id, media_type="movie"):
-    # Prefer the locally saved recommendation metadata so opening a widget or
-    # info panel does not create another Trakt request.
-    wanted = str(trakt_id)
-    for record in _managed_records(curator):
-        for movie in record.get("movies") or []:
-            if not isinstance(movie, dict):
-                continue
-            if str((movie.get("ids") or {}).get("trakt") or "") == wanted and str(movie.get("media_type") or "movie") == media_type:
-                return movie
-    try:
-        if curator.trakt.client_id:
-            item = curator.trakt.show_summary(trakt_id) if media_type == "show" else curator.trakt.movie_summary(trakt_id)
-            if isinstance(item, dict):
-                item["media_type"] = media_type
-            return item
-    except Exception:
-        pass
-    return {}
 
 
 def _movie_rows_for_list(curator, list_id):
@@ -632,6 +651,78 @@ def _set_movie_info(item, movie):
     ids = movie.get("ids") or {}
     if not isinstance(ids, dict):
         ids = {}
+    source_ratings = {}
+    movie_ratings = movie.get("ratings")
+    if not isinstance(movie_ratings, dict):
+        movie_ratings = {}
+    aliases = {
+        "themoviedb": "tmdb",
+        "tomatoes": "tomatometerallcritics",
+        "audience": "tomatometerallaudience",
+    }
+    for source, data in movie_ratings.items():
+        source = aliases.get(str(source).lower(), str(source).lower())
+        if isinstance(data, dict):
+            value = data.get("rating")
+            source_votes = _safe_int(data.get("votes"), 0)
+            percentage = _safe_int(data.get("percent"), 0)
+        else:
+            value, source_votes, percentage = data, 0, 0
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0:
+            continue
+        if value > 10:
+            percentage = percentage or int(round(value))
+            value /= 10.0
+        percentage = percentage or int(round(value * 10))
+        source_ratings[source] = {
+            "rating": round(value, 2), "votes": max(0, source_votes),
+            "percent": max(0, min(100, percentage)),
+        }
+
+    if rating:
+        if rating > 10:
+            rating /= 10.0
+        source = "trakt" if ids.get("trakt") else "tmdb"
+        source_ratings.setdefault(source, {
+            "rating": round(rating, 2), "votes": max(0, votes),
+            "percent": max(0, min(100, int(round(rating * 10)))),
+        })
+    default_rating = next(
+        (source for source in ("trakt", "tmdb", "imdb") if source in source_ratings),
+        next(iter(source_ratings), ""),
+    )
+    if default_rating:
+        rating = source_ratings[default_rating]["rating"]
+        votes = source_ratings[default_rating]["votes"]
+
+    for source in ("trakt", "tmdb", "imdb", "metacritic"):
+        data = source_ratings.get(source)
+        if not data:
+            continue
+        try:
+            item.setProperty("Rating.%s" % source, str(data["rating"]))
+            item.setProperty("Rating.%s.Votes" % source, str(data["votes"]))
+            item.setProperty("Rating.%s.Percent" % source, str(data["percent"]))
+        except Exception:
+            pass
+    tomatoes = source_ratings.get("tomatometerallcritics")
+    if tomatoes:
+        try:
+            item.setProperty("Rating.Tomatoes.Percent", str(tomatoes["percent"]))
+            item.setProperty("Tomatometer", "Fresh" if tomatoes["percent"] >= 60 else "Rotten")
+        except Exception:
+            pass
+    audience = source_ratings.get("tomatometerallaudience")
+    if audience:
+        try:
+            item.setProperty("Rating.Popcorn.Percent", str(audience["percent"]))
+            item.setProperty("Popcornmeter", "Fresh" if audience["percent"] >= 60 else "Spilled")
+        except Exception:
+            pass
 
     # Kodi still supports setInfo in 21.x. Use it as a compatibility baseline,
     # then enrich with the modern InfoTagVideo API where available.
@@ -730,8 +821,13 @@ def _set_movie_info(item, movie):
         _safe_tag_call(tag, "setTvShowStatus", status)
     if original_title:
         _safe_tag_call(tag, "setOriginalTitle", original_title)
-    if rating:
-        _safe_tag_call(tag, "setRating", rating, votes, "trakt", True)
+    for source, data in source_ratings.items():
+        _safe_tag_call(
+            tag, "setRating", data["rating"], data["votes"], source,
+            source == default_rating,
+        )
+        if source == "tmdb":
+            _safe_tag_call(tag, "setRating", data["rating"], data["votes"], "themoviedb", False)
 
     unique_ids = {}
     for key in ("trakt", "tmdb", "imdb"):
@@ -843,6 +939,7 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
     year = _safe_int(movie.get("year"), 0)
     label = "%s (%d)" % (title, year) if year else title
     item = xbmcgui.ListItem(label=label, offscreen=True)
+    _mark_curatr_item(item)
     _set_movie_info(item, movie)
     if artwork:
         try:
@@ -876,6 +973,25 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
                 ("Why this pick?", "RunPlugin(%s)" % why_url),
                 ("Hide %s" % ("TV Show" if media_type == "show" else "Movie"), "RunPlugin(%s)" % hide_url),
             ])
+        if _setting_enabled("context_menu_enabled"):
+            media_params = {
+                "media_type": media_type, "title": title, "year": str(year or ""),
+                "tmdb_id": str(ids.get("tmdb") or ""), "imdb_id": str(ids.get("imdb") or ""),
+                "tvdb_id": str(ids.get("tvdb") or ""), "trakt_id": str(trakt_id),
+                "overview": str(movie.get("overview") or ""),
+                "rating": str(movie.get("rating") or ""), "votes": str(movie.get("votes") or ""),
+            }
+            if _setting_enabled("context_add_to_list"):
+                context.append((
+                    _loc(32821, "Add to curatr list"),
+                    _plugin_command("add_media_to_list", **media_params),
+                ))
+            if _setting_enabled("context_find_similar"):
+                preview_url = _url(action="similar_preview", **media_params)
+                context.append((
+                    _loc(32823, "Find Similar"),
+                    'ActivateWindow(Videos,"%s",return)' % preview_url.replace('"', "%22"),
+                ))
         if list_id:
             refresh_url = _url(action="refresh_list", list_id=str(list_id))
             context.append(("Refresh this list", "RunPlugin(%s)" % refresh_url))
@@ -921,7 +1037,10 @@ def _render_movies(curator, rows, category):
             enriched_rows.append(entry)
     rows = enriched_rows
     try:
-        METADATA.enrich([entry[1] for entry in rows if len(entry) > 1 and isinstance(entry[1], dict)], curator.tmdb)
+        METADATA.enrich(
+            [entry[1] for entry in rows if len(entry) > 1 and isinstance(entry[1], dict)],
+            curator.tmdb, curator.mdblist,
+        )
     except Exception as exc:
         xbmc.log("curatr metadata enrichment skipped: %s" % exc, xbmc.LOGWARNING)
     media_types = {str(entry[1].get("media_type") or "movie") for entry in rows if len(entry) > 1 and isinstance(entry[1], dict)}
@@ -998,6 +1117,11 @@ def _single_list(curator, params):
     list_id = params.get("list_id") or params.get("trakt_id")
     if not list_id:
         raise RuntimeError("No curatr list ID was supplied.")
+    if not curator._managed_record_by_id(list_id):
+        xbmc.log("curatr widget requested a list that is no longer available", xbmc.LOGWARNING)
+        xbmcplugin.setPluginCategory(HANDLE, "curatr List")
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=True, cacheToDisc=False)
+        return
     name = params.get("name") or "curatr Recommendations"
     rows = [(row, movie, name, list_id) for row, movie in _movie_rows_for_list(curator, list_id) if not curator.is_movie_hidden(movie)]
     _render_movies(curator, rows, name)
@@ -1076,6 +1200,59 @@ def _read_similar_preview(token):
     return value
 
 
+def _list_preview_file(token):
+    safe = "".join(ch for ch in str(token or "") if ch.isalnum() or ch in ("-", "_"))[:64]
+    if not safe:
+        raise RuntimeError("That list preview is no longer available.")
+    profile = xbmcvfs.translatePath(ADDON.getAddonInfo("profile"))
+    if not xbmcvfs.exists(profile):
+        xbmcvfs.mkdirs(profile)
+    return os.path.join(profile, "list-preview-%s.json" % safe)
+
+
+def _write_list_preview(preview):
+    token = "%d-%d" % (int(time.time()), random.randint(100000, 999999))
+    handle = xbmcvfs.File(_list_preview_file(token), "w")
+    try:
+        handle.write(json.dumps(preview, ensure_ascii=False, separators=(",", ":")))
+    finally:
+        handle.close()
+    return token
+
+
+def _read_list_preview(token):
+    path = _list_preview_file(token)
+    if not xbmcvfs.exists(path):
+        raise RuntimeError("That list preview has expired. Generate it again first.")
+    handle = xbmcvfs.File(path)
+    try:
+        preview = json.loads(handle.read() or "{}")
+    finally:
+        handle.close()
+    if not isinstance(preview, dict) or int(time.time()) - _safe_int(preview.get("created_at"), 0) > 6 * 3600:
+        xbmcvfs.delete(path)
+        raise RuntimeError("That list preview has expired. Generate it again first.")
+    return preview
+
+
+def _open_list_preview(preview):
+    token = _write_list_preview(preview)
+    xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % _url(action="list_preview", token=token))
+
+
+def _list_preview(curator, params):
+    token = params.get("token") or ""
+    preview = _read_list_preview(token)
+    record = dict(preview.get("record") or {})
+    name = str(record.get("name") or "List Preview")
+    xbmcplugin.setPluginCategory(HANDLE, "%s • Preview" % name)
+    _add_route_action("Create list", "list_preview_save", "Save these exact previewed items to a new curatr list.", token=token, icon_name="menu_create_v2.png")
+    _add_route_action("Edit list settings", "list_preview_edit", "Return to List Settings and change this list.", token=token, icon_name="menu_settings.png")
+    _add_route_action("Close preview", "list_preview_close", "Discard this temporary preview.", token=token, icon_name="control_clear.png")
+    rows = [({}, movie, name, "", False) for movie in record.get("movies", []) if isinstance(movie, dict)]
+    _render_movies(curator, rows, "%s • Preview" % name)
+
+
 def _similar_preview(curator, params):
     token = str(params.get("token") or "")
     previous = _read_similar_preview(token) if token else None
@@ -1101,7 +1278,7 @@ def _similar_preview(curator, params):
     _add_route_action(
         "Add To New List", "similar_save",
         "Save these results to a new curatr list.", token=token,
-        icon_name="menu_create.png",
+        icon_name="menu_create_v2.png",
     )
     _add_folder(
         "Generate a new set of results", "similar_preview",
@@ -1112,7 +1289,7 @@ def _similar_preview(curator, params):
     _add_folder(
         "Generate new results using %s" % ("keyword matching" if other == "keyword" else "AI"),
         "similar_preview", "Generate a new temporary preview using the other matching method.",
-        icon_name="menu_branching.png", token=token, method=other,
+        icon_name="menu_branching_v2.png", token=token, method=other,
     )
     rows = [({}, movie, "Similar to %s" % source, "", False) for movie in preview.get("movies", [])]
     _render_movies(curator, rows, "Similar to %s • %s" % (source, method_label))
@@ -1152,7 +1329,9 @@ def _run_command(curator, command):
     if not function:
         raise RuntimeError("Unknown addon action: %s" % command)
     before = list_signature(curator.state)
-    function()
+    result = function()
+    if isinstance(result, dict) and result.get("kind") == "list_preview":
+        _open_list_preview(result)
     refresh_if_changed(before, curator.state)
 
 
@@ -1255,7 +1434,7 @@ def main():
             refresh_if_changed(before, curator.state)
         elif action == "linked_list":
             _linked_list(curator, params)
-            refresh_if_changed(before, curator.state, reload_skin=False)
+            refresh_if_changed(before, curator.state)
         elif action == "linked_movie":
             title = params.get("title") or "This movie"
             xbmcgui.Dialog().ok(NAME, "%s is listed here without a playable TMDB or Trakt ID. Open it through your preferred video add-on." % title)
@@ -1275,10 +1454,52 @@ def main():
             _random_picks(curator, params)
         elif action == "similar_preview":
             _similar_preview(curator, params)
+        elif action == "add_media_to_list":
+            curator.add_media_to_list_interactive({
+                "title": params.get("title") or "",
+                "year": _safe_int(params.get("year"), 0),
+                "media_type": "show" if params.get("media_type") == "show" else "movie",
+                "overview": params.get("overview") or "",
+                "rating": params.get("rating") or None,
+                "votes": _safe_int(params.get("votes"), 0),
+                "ids": {
+                    key: params.get(param) for key, param in (
+                        ("tmdb", "tmdb_id"), ("imdb", "imdb_id"),
+                        ("tvdb", "tvdb_id"), ("trakt", "trakt_id"),
+                    ) if params.get(param)
+                },
+            })
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
         elif action == "similar_save":
             curator.save_similar_preview_interactive(_read_similar_preview(params.get("token") or ""))
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
             refresh_if_changed(before, curator.state)
+        elif action == "list_preview":
+            _list_preview(curator, params)
+        elif action == "list_preview_save":
+            token = params.get("token") or ""
+            saved = curator.save_list_preview(_read_list_preview(token))
+            if saved:
+                xbmcvfs.delete(_list_preview_file(token))
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
+        elif action == "list_preview_edit":
+            token = params.get("token") or ""
+            preview = _read_list_preview(token)
+            result = curator.create_list_interactive(initial=preview.get("draft") or {})
+            if isinstance(result, dict) and result.get("kind") == "list_preview":
+                xbmcvfs.delete(_list_preview_file(token))
+                _open_list_preview(result)
+            elif result:
+                xbmcvfs.delete(_list_preview_file(token))
+                xbmc.executebuiltin("Action(Back)")
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+            refresh_if_changed(before, curator.state)
+        elif action == "list_preview_close":
+            xbmcvfs.delete(_list_preview_file(params.get("token") or ""))
+            xbmc.executebuiltin("Action(Back)")
+            xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "run":
             _run_command(curator, params.get("command") or "")
         elif action == "play_using":

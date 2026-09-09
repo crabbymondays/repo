@@ -37,7 +37,7 @@ while not monitor.abortRequested():
             # Never reload a user's skin from the background service. Kodi and
             # the skin can update widgets on their normal cycle; interactive
             # list changes still request an immediate guarded reload.
-            refresh_if_changed(before, worker.state, reload_skin=False)
+            refresh_if_changed(before, worker.state)
     except Exception as exc:
         xbmc.log("curatr service error: %s" % exc, xbmc.LOGERROR)
         try:

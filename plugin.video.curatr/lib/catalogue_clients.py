@@ -152,7 +152,10 @@ class TMDBClient:
     def list_item_details(self, tmdb_id, media_type="movie"):
         """Fetch only metadata Kodi can display directly on a title list item."""
         media = "tv" if str(media_type) == "show" else "movie"
-        extras = ["credits", "videos", "content_ratings" if media == "tv" else "release_dates"]
+        extras = [
+            "credits", "videos", "external_ids",
+            "content_ratings" if media == "tv" else "release_dates",
+        ]
         return self._get("/%s/%s" % (media, int(tmdb_id)), {
             "append_to_response": ",".join(extras), "language": "en-GB",
             "include_video_language": "en-GB,en,null",
@@ -610,6 +613,90 @@ class MDBListClient:
             return response.json()
         except ValueError:
             raise CatalogueError("MDBList returned an unreadable response.")
+
+    def _api_post(self, path, payload):
+        if not self.api_key:
+            raise CatalogueError("Enter your MDBList API key to use ratings.")
+        try:
+            response = self.session.post(
+                self.API_URL + path,
+                params={"apikey": self.api_key}, json=dict(payload or {}),
+                headers={"Accept": "application/json"}, timeout=30,
+            )
+        except requests.RequestException as exc:
+            raise CatalogueError("Could not contact MDBList: %s" % exc)
+        if response.status_code >= 400:
+            if response.status_code in (401, 403):
+                raise CatalogueError("MDBList rejected the API key.")
+            if response.status_code == 429:
+                raise CatalogueError("MDBList request limit reached. Try again later.")
+            raise CatalogueError("MDBList request failed (HTTP %s)." % response.status_code)
+        try:
+            return response.json()
+        except ValueError:
+            raise CatalogueError("MDBList returned an unreadable response.")
+
+    def ratings_for_ids(self, media_type, tmdb_ids):
+        """Return cached-display rating sources with four bounded bulk requests."""
+        ids = []
+        seen = set()
+        for value in tmdb_ids or []:
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                continue
+            if value > 0 and value not in seen:
+                seen.add(value)
+                ids.append(value)
+        if not ids:
+            return {}
+        kind = "show" if str(media_type) == "show" else "movie"
+        source_names = {
+            "imdb": "imdb",
+            "tomatoes": "tomatometerallcritics",
+            "audience": "tomatometerallaudience",
+            "metacritic": "metacritic",
+        }
+        output = {value: {} for value in ids}
+        completed = 0
+        for source, kodi_name in source_names.items():
+            try:
+                data = self._api_post(
+                    "/rating/%s/%s" % (kind, source),
+                    {"ids": ids, "provider": "tmdb"},
+                )
+            except CatalogueError:
+                if completed:
+                    break
+                raise
+            completed += 1
+            if isinstance(data, list):
+                rows = data
+            elif isinstance(data, dict):
+                rows = data.get("ratings") or data.get("items") or []
+            else:
+                rows = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    item_id = int(row.get("id"))
+                    value = float(row.get("rating"))
+                except (TypeError, ValueError):
+                    continue
+                if item_id not in output or value <= 0:
+                    continue
+                percentage_source = source in ("tomatoes", "audience", "metacritic")
+                percentage = value if percentage_source else value * 10
+                rating = value / 10.0 if percentage_source else value
+                output[item_id][kodi_name] = {
+                    "rating": round(rating, 2),
+                    "votes": 0,
+                    "percent": max(0, min(100, int(round(percentage)))),
+                }
+        if not completed:
+            raise CatalogueError("MDBList ratings are temporarily unavailable.")
+        return output
 
     def user_lists(self):
         data = self._api_get("/lists/user")

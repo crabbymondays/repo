@@ -29,8 +29,8 @@ def list_signature(state):
     return hashlib.sha256(payload.encode("utf-8", "replace")).hexdigest()
 
 
-def refresh_if_changed(before, state, reload_skin=True):
-    """Refresh changed views once without racing a container against the skin."""
+def refresh_if_changed(before, state):
+    """Refresh an open curatr view without moving users away from their screen."""
     if before == list_signature(state):
         return False
     in_curatr = False
@@ -40,21 +40,10 @@ def refresh_if_changed(before, state, reload_skin=True):
         in_curatr = plugin_name == "plugin.video.curatr" or folder_path.startswith("plugin://plugin.video.curatr")
     except Exception:
         pass
-    if in_curatr or not reload_skin:
+    if in_curatr:
         try:
             xbmc.executebuiltin("Container.Refresh")
         except Exception:
             pass
         return True
-    try:
-        if xbmc.getCondVisibility("System.HasModalDialog"):
-            return True
-    except Exception:
-        # Older/unusual bindings may not expose the condition helper. The
-        # builtin itself remains protected below.
-        pass
-    try:
-        xbmc.executebuiltin("ReloadSkin()")
-    except Exception:
-        pass
     return True
