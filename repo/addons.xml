@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="1.0.1" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="1.0.17" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -36,15 +36,15 @@
                     <label>32820</label>
                     <item library="context.py" args="add_to_list">
                         <label>32821</label>
-                        <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_add_to_list) + [String.IsEqual(ListItem.DBType,movie) | String.IsEqual(ListItem.DBType,tvshow)]</visible>
+                        <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_add_to_list) + !String.IsEqual(ListItem.Property(CuratrItem),true) + [String.IsEqual(ListItem.DBType,movie) | String.IsEqual(ListItem.DBType,tvshow)]</visible>
                     </item>
                     <item library="context.py" args="add_to_folder">
                         <label>32822</label>
-                        <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_add_to_folder) + ListItem.IsFolder</visible>
+                        <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_add_to_folder) + !String.IsEqual(ListItem.Property(CuratrItem),true) + ListItem.IsFolder</visible>
                     </item>
                     <item library="context.py" args="find_similar">
                         <label>32823</label>
-                        <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_find_similar) + [String.IsEqual(ListItem.DBType,movie) | String.IsEqual(ListItem.DBType,tvshow)]</visible>
+                        <visible>Addon.SettingBool(plugin.video.curatr,context_menu_enabled) + Addon.SettingBool(plugin.video.curatr,context_find_similar) + !String.IsEqual(ListItem.Property(CuratrItem),true) + [String.IsEqual(ListItem.DBType,movie) | String.IsEqual(ListItem.DBType,tvshow)]</visible>
                     </item>
                 </menu>
             </menu>
@@ -61,7 +61,7 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>curatr 1.0.1 protects folders from stale background updates, restores missing widget folders from the last valid state snapshot when possible, prevents repeated missing-widget messages, and polishes Find Similar actions and linked-list widget metadata.</news>
+            <news>curatr 1.0.17 restores the full Folder Settings window on Android, keeps management actions visible while browsing lists and folders, and refines artwork corners and labels.</news>
         </extension>
     </addon>
 </addons>
