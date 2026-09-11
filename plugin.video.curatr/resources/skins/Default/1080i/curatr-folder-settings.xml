@@ -15,19 +15,19 @@
             <left>220</left><top>150</top><width>1480</width><height>770</height>
             <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanel)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
         </control>
-        <control type="button" id="100">
+<control type="button" id="100">
             <left>260</left><top>210</top><width>330</width><height>82</height><label>Appearance</label>
             <font>font13</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>left</align><aligny>center</aligny><textoffsetx>34</textoffsetx><onright>200</onright><onup>101</onup><ondown>101</ondown>
             <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButtonFaint)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window.Property(CuratrTab100)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
-        <control type="button" id="101">
+<control type="button" id="101">
             <left>260</left><top>302</top><width>330</width><height>82</height><label>Contents</label>
             <font>font13</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>left</align><aligny>center</aligny><textoffsetx>34</textoffsetx><onright>200</onright><onup>100</onup><ondown>100</ondown>
             <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButtonFaint)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window.Property(CuratrTab101)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
         <control type="button" id="200">
             <left>640</left><top>210</top><width>1000</width><height>82</height><label></label><font>font13</font>

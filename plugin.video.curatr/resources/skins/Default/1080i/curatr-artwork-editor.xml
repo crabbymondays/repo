@@ -72,75 +72,75 @@
             <left>680</left><top>155</top><width>1135</width><height>735</height>
             <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelSoft)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
         </control>
-        <control type="button" id="100">
+<control type="button" id="100">
             <left>710</left><top>178</top><width>250</width><height>58</height><label>Icon</label>
             <font>font13</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window.Property(CuratrTab100)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
-        <control type="button" id="101">
+<control type="button" id="101">
             <left>980</left><top>178</top><width>250</width><height>58</height><label>Fanart</label>
             <font>font13</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window.Property(CuratrTab101)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
 
-        <control type="button" id="200">
+<control type="button" id="200">
             <left>710</left><top>258</top><width>180</width><height>54</height><label>Curatr</label>
             <font>font12</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="16" colordiffuse="$INFO[Window.Property(CuratrTab200)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
-        <control type="button" id="201">
+<control type="button" id="201">
             <left>900</left><top>258</top><width>270</width><height>54</height><label>Match Fanart</label>
             <font>font12</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="16" colordiffuse="$INFO[Window.Property(CuratrTab201)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
-        <control type="button" id="202">
+<control type="button" id="202">
             <left>1180</left><top>258</top><width>190</width><height>54</height><label>Contents</label>
             <font>font12</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="16" colordiffuse="$INFO[Window.Property(CuratrTab202)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
-        <control type="button" id="203">
+<control type="button" id="203">
             <left>1380</left><top>258</top><width>180</width><height>54</height><label>Person</label>
             <font>font12</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="16" colordiffuse="$INFO[Window.Property(CuratrTab203)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
-        <control type="button" id="204">
+<control type="button" id="204">
             <left>1570</left><top>258</top><width>210</width><height>54</height><label>Custom</label>
             <font>font12</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="16" colordiffuse="$INFO[Window.Property(CuratrTab204)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
 
-        <control type="button" id="300">
+<control type="button" id="300">
             <left>710</left><top>326</top><width>200</width><height>50</height><label>White</label>
             <font>font12</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="16" colordiffuse="$INFO[Window.Property(CuratrTab300)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
-        <control type="button" id="301">
+<control type="button" id="301">
             <left>925</left><top>326</top><width>280</width><height>50</height><label>Colours</label>
             <font>font12</font>
             <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny>
             <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturenofocus border="16" colordiffuse="$INFO[Window.Property(CuratrTab301)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
 
         <control type="panel" id="400">
             <left>700</left><top>388</top><width>1100</width><height>470</height>
-            <onleft>400</onleft><onright>400</onright><onup>300</onup><ondown>500</ondown>
+            <onleft>500</onleft><onright>500</onright><onup>300</onup><ondown>500</ondown>
             <pagecontrol>600</pagecontrol><scrolltime>180</scrolltime>
             <itemlayout width="275" height="235">
                 <control type="image">
@@ -193,7 +193,7 @@
 
         <control type="panel" id="401">
             <left>700</left><top>388</top><width>1100</width><height>470</height>
-            <onleft>401</onleft><onright>401</onright><onup>300</onup><ondown>500</ondown>
+            <onleft>500</onleft><onright>500</onright><onup>300</onup><ondown>500</ondown>
             <pagecontrol>600</pagecontrol><scrolltime>180</scrolltime>
             <itemlayout width="366" height="235">
                 <control type="image">

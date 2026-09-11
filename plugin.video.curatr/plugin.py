@@ -16,6 +16,7 @@ from lib.catalogue_clients import CatalogueError
 from lib.core import Curator
 from lib.list_art import resolved_sources as resolved_list_art
 from lib.metadata_cache import MetadataCache
+from lib.menu_art import menu_source
 from lib.player_registry import PlayerRegistry
 from lib.trakt import TraktError
 from lib.view_refresh import list_signature, refresh_if_changed
@@ -152,8 +153,8 @@ def _existing_art(filename):
         return ""
     # Menu glyphs live in a versioned directory so Kodi/Xbox cannot reuse a
     # stale texture merely because a published filename stayed the same.
-    relative = os.path.join("menu_v5", filename) if str(filename).startswith("menu_") else filename
-    path = os.path.join(MEDIA_PATH, relative)
+    path = (menu_source(ADDON_PATH, filename) if str(filename).startswith("menu_")
+            else os.path.join(MEDIA_PATH, filename))
     return path if xbmcvfs.exists(path) else ""
 
 
@@ -173,8 +174,7 @@ def _apply_menu_art(item, icon_name="", custom_art=None):
     fanart = _existing_art(background_names.get(background_style, background_names["0"]))
     landscape = ""
     if icon_name:
-        landscape_name = os.path.splitext(os.path.basename(str(icon_name)))[0] + ".png"
-        landscape_path = os.path.join(MEDIA_PATH, "menu_landscape_v1", landscape_name)
+        landscape_path = menu_source(ADDON_PATH, icon_name, landscape=True)
         if xbmcvfs.exists(landscape_path):
             landscape = landscape_path
 
@@ -401,7 +401,7 @@ def _folders(curator):
                 name, "folder", plot=plot, context_items=context,
                 art=_record_art(curator, folder), tagline=tagline, folder_id=folder_id,
             )
-        _add_action("Manage Folders", "folders_manage", "Create, edit, reorder or delete folders.", icon_name="menu_manage.png")
+        _add_action("Manage Folders", "folders_manage", "Create, edit, reorder or delete folders.", icon_name="menu_manage_folders.png")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -512,7 +512,7 @@ def _folder(curator, params):
         elif entry.get("type") == "provider_list" and _add_provider_list_folder(curator, folder, entry):
             added += 1
     if not added:
-        _add_folder("Manage this folder", "folder_manage", "Add items to this folder.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
+        _add_folder("Manage this folder", "folder_manage", "Add items to this folder.", icon_name="menu_manage_folders.png", folder_id=str(folder.get("id") or ""))
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 

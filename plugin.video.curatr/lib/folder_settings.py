@@ -1,7 +1,7 @@
 import xbmc
 import xbmcgui
 
-from .ui_theme import skin_name
+from .ui_theme import skin_name, style_tab
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -93,10 +93,7 @@ class FolderSettingsWindow(xbmcgui.WindowXMLDialog):
         self.tab = "appearance"
         self._set_view("appearance")
         for control_id, name in self.TAB_IDS.items():
-            label = name.title()
-            self.getControl(control_id).setLabel(
-                "[B]%s[/B]" % label if name == "appearance" else label
-            )
+            style_tab(self, control_id, name.title(), name == "appearance")
         for index, control_id in enumerate(self.ROW_IDS):
             control = self.getControl(control_id)
             control.setVisible(True)
@@ -151,10 +148,7 @@ class FolderSettingsWindow(xbmcgui.WindowXMLDialog):
             "contents" if tab == "contents" and not self.existing else "appearance"
         )
         for control_id, name in self.TAB_IDS.items():
-            label = name.title()
-            self.getControl(control_id).setLabel(
-                "[B]%s[/B]" % label if name == tab else label
-            )
+            style_tab(self, control_id, name.title(), name == tab)
         if tab == "contents" and not self.existing:
             self._show_draft_contents()
             return

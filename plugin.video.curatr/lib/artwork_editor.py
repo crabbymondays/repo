@@ -1,6 +1,6 @@
 import xbmcgui
 
-from .ui_theme import skin_name
+from .ui_theme import skin_name, style_tab
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -97,8 +97,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         self.tab = "fanart" if tab == "fanart" else "icon"
         self.in_grid = False
         for control_id, name in self.TAB_IDS.items():
-            label = name.title()
-            self.getControl(control_id).setLabel("[B]%s[/B]" % label if name == self.tab else label)
+            style_tab(self, control_id, name.title(), name == self.tab)
         source = self.source_by_tab.get(self.tab) or "curatr"
         self.sources = self._available_sources()
         available_keys = {key for key, _label in self.sources}
@@ -112,7 +111,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             control.setEnabled(visible)
             if visible:
                 key, label = self.sources[index]
-                control.setLabel("[B]%s[/B]" % label if key == source else label)
+                style_tab(self, control_id, label, key == source)
         show_style = source == "curatr"
         style_rows = self._style_rows()
         active_style = self.style_by_tab[self.tab]
@@ -121,7 +120,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             control.setVisible(show_style)
             control.setEnabled(show_style)
             key, label = style_rows[index]
-            control.setLabel("[B]%s[/B]" % label if key == active_style else label)
+            style_tab(self, control_id, label, key == active_style)
         if load_saved and source == "curatr":
             self._load_grid("curatr", focus=False)
         else:
@@ -299,7 +298,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             if index >= len(self.sources):
                 continue
             key, label = self.sources[index]
-            self.getControl(control_id).setLabel("[B]%s[/B]" % label if key == source else label)
+            style_tab(self, control_id, label, key == source)
         show_style = source == "curatr"
         for control_id in self.STYLE_IDS:
             self.getControl(control_id).setVisible(show_style)
@@ -390,7 +389,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             self._active_grid().setNavigation(
                 self.getControl(self.STYLE_IDS[0]) if style_visible else first_source,
                 self.getControl(self.SAVE_ID),
-                self._active_grid(), self._active_grid(),
+                self.getControl(self.SAVE_ID), self.getControl(self.SAVE_ID),
             )
 
         actions = [self.getControl(control_id) for control_id in (self.SAVE_ID, self.RESET_ID, self.CANCEL_ID)]
@@ -428,6 +427,9 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         elif control_id == self.CANCEL_ID:
             self.result = "cancel"
             self.close()
+
+    def onFocus(self, control_id):
+        self.in_grid = control_id in self.GRID_IDS.values()
 
     def onAction(self, action):
         if action.getId() not in _BACK_ACTIONS:

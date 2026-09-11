@@ -4,6 +4,7 @@ import re
 import xbmcvfs
 
 from .art_cache import ArtworkCache
+from .menu_art import current_menu_source
 
 
 CHOICES = (
@@ -17,6 +18,15 @@ CHOICES = (
 )
 
 LABELS = dict(CHOICES)
+ARTWORK_BUNDLE = "v5"
+_LEGACY_FOLDERS = {
+    "icons_v2": ("icon", "white"),
+    "icons_v3": ("icon", "white"),
+    "icons_colour_v3": ("icon", "genre_colours"),
+    "icons_colour_v4": ("icon", "genre_colours"),
+    "fanart_v2": ("fanart", "colour"),
+    "fanart_mono_v2": ("fanart", "monochrome"),
+}
 KEYWORDS = (
     ("director", ("director", "directed by", "filmmaker", "films by")),
     ("actor", ("actor", "actress", "starring", "films with", "performer")),
@@ -91,12 +101,31 @@ def _media(addon, *parts):
 def bundled_source(addon, key, kind, style):
     """Resolve one bundled artwork choice from its stable key and style."""
     if kind == "icon":
-        folder = "icons_colour_v4" if style == "genre_colours" else "icons_v3"
+        folder = "colour" if style == "genre_colours" else "white"
         extension = ".png"
     else:
-        folder = "fanart_mono_v2" if style == "monochrome" else "fanart_v2"
+        folder = "monochrome" if style == "monochrome" else "fanart"
         extension = ".jpg"
-    return _media(addon, "list_art", folder, str(key or "") + extension)
+    return _media(addon, "list_art", ARTWORK_BUNDLE, folder, str(key or "") + extension)
+
+
+def _current_source(addon, source):
+    """Keep local shortcuts to retired bundled files usable after an upgrade."""
+    source = current_menu_source(xbmcvfs.translatePath(addon.getAddonInfo("path")), source)
+    path = str(source or "").replace("\\", "/")
+    if "://" in path and not path.startswith("special://"):
+        return source
+    parts = path.rsplit("/plugin.video.curatr/resources/media/list_art/", 1)
+    if len(parts) != 2:
+        return source
+    relative = parts[1].split("/")
+    if len(relative) != 2 or relative[0] not in _LEGACY_FOLDERS:
+        return source
+    key, extension = os.path.splitext(relative[1])
+    kind, style = _LEGACY_FOLDERS[relative[0]]
+    if key not in LABELS or extension != (".png" if kind == "icon" else ".jpg"):
+        return source
+    return bundled_source(addon, key, kind, style)
 
 
 def resolved_sources(addon, record):
@@ -108,7 +137,7 @@ def resolved_sources(addon, record):
     if state["icon_mode"] == "default":
         icon = os.path.join(xbmcvfs.translatePath(addon.getAddonInfo("path")), "icon.png")
     elif state["icon_mode"] in ("person", "custom"):
-        icon = state["icon_source"]
+        icon = _current_source(addon, state["icon_source"])
     else:
         key = automatic if state["icon_mode"] == "auto" else state["icon_key"]
         if key not in LABELS:
@@ -124,7 +153,7 @@ def resolved_sources(addon, record):
     if state["fanart_mode"] == "default":
         fanart = _media(addon, "fanart_menu_clean_v4.jpg")
     elif state["fanart_mode"] in ("item", "person", "custom"):
-        fanart = state["fanart_source"]
+        fanart = _current_source(addon, state["fanart_source"])
     else:
         key = automatic if state["fanart_mode"] == "auto" else state["fanart_key"]
         if key not in LABELS:

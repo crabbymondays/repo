@@ -108,6 +108,11 @@ class MetadataCache:
             if value not in (None, ""):
                 ids[source] = value
         ratings = {}
+        images = {}
+        for kind, field, size in (("fanart", "backdrop_path", "w1280"), ("poster", "poster_path", "w500")):
+            url = tmdb.image_url(details.get(field), size)
+            if url:
+                images[kind] = {"full": url}
         try:
             tmdb_rating = float(details.get("vote_average") or 0)
             tmdb_votes = int(details.get("vote_count") or 0)
@@ -125,7 +130,7 @@ class MetadataCache:
             "tagline": str(details.get("tagline") or ""), "released": str(date or ""),
             "status": str(details.get("status") or ""),
             "original_title": str(details.get("original_name") or details.get("original_title") or ""),
-            "ids": ids, "ratings": ratings,
+            "ids": ids, "ratings": ratings, "images": images,
         }
 
     @staticmethod
@@ -134,6 +139,12 @@ class MetadataCache:
             if key in ("ids", "ratings") and isinstance(value, dict):
                 merged = dict(movie.get(key) or {})
                 merged.update(value)
+                movie[key] = merged
+            elif key == "images" and isinstance(value, dict):
+                merged = dict(value)
+                existing = movie.get("images")
+                if isinstance(existing, dict):
+                    merged.update({kind: source for kind, source in existing.items() if source})
                 movie[key] = merged
             elif key != "mdblist_ratings_checked":
                 movie[key] = value
@@ -180,7 +191,7 @@ class MetadataCache:
                     self._apply(movie, cached)
         return changed
 
-    def enrich(self, movies, tmdb, mdblist=None, workers=4):
+    def enrich(self, movies, tmdb, mdblist=None, workers=4, include_artwork=False):
         tmdb_available = bool(tmdb and getattr(tmdb, "api_key", ""))
         wanted = {}
         for movie in movies or []:
@@ -195,7 +206,7 @@ class MetadataCache:
             cached = self.get(media_type, tmdb_id)
             if cached:
                 self._apply(movie, cached)
-            elif tmdb_available:
+            if tmdb_available and (not cached or (include_artwork and "images" not in cached)):
                 wanted[key] = (media_type, int(tmdb_id))
 
         fetched = {}

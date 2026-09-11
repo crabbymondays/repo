@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.19
+
+- Restyled menu icons to match the coordinated genre family, retaining the existing concepts and the approved My Lists, Browse My Lists, three-bar Usage/Activity, file-based Backup & Restore and folder-management designs.
+- Versioned square and 16:9 menu artwork together, with consistent transparent padding. Removed superseded menu artwork and resolved local shortcuts to those files through the new bundle.
+- Kept active list, folder and artwork selectors highlighted while focus moves into their contents, with readable labels in light and dark themes.
+- Restored the keyword chip editor when editing a Keyword Matching request in List Settings. Preview and Create share confirmation when filters have not already been reviewed.
+- Preserved manually edited filters through previews, creation and unrelated settings changes. Cancel leaves the draft and saved list untouched; changing filters offers a refresh even when the request text is unchanged.
+- Replaced 31 fixed-colour keyword control images with shared, runtime-tinted shapes and native focus conditions. Kept controller navigation and touch actions on the same editing path.
+- Added focused regression checks and removed the unused legacy prompt-edit handler. No new Kodi runtime dependencies or user-data migrations.
+
+## 1.0.18
+
+- Replaced all 17 genre and people icons with a consistent white silhouette set, including the brain, rocket, open book, handcuffs and comedy mask with one pair of eyes.
+- Added coordinated soft gradient square artwork and flowing-curve 16:9 fanart. Monochrome uses a dedicated dark grey palette instead of near-black.
+- Versioned the complete genre bundle and removed 68 superseded images. Existing genre/style choices and local shortcuts to old bundled images resolve to the replacement artwork without rewriting user data.
+- Restored Contents in artwork settings for Curatr and linked Trakt/MDBList lists, including links being added to a new folder. Missing backdrops load on demand through the metadata cache, with bounded requests and duplicate filtering.
+- Made Left/Right at artwork-grid edges focus Save Changes; Up returns to the grid. Both light and dark layouts use the same navigation.
+- Included editable artwork geometry and a build-only renderer in the source package; no new Kodi dependencies or runtime image generation.
+
 ## 1.0.17
 
 - Restored the full custom Folder Settings window on Android by isolating optional content-control failures instead of dropping into the basic fallback menu.

@@ -1,6 +1,6 @@
 import xbmcgui
 
-from .ui_theme import skin_name
+from .ui_theme import skin_name, style_tab
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -42,8 +42,7 @@ class ListSettingsWindow(xbmcgui.WindowXMLDialog):
     def _show_tab(self, tab):
         self.tab = tab
         for control_id, name in self.TAB_IDS.items():
-            label = name.title()
-            self.getControl(control_id).setLabel("[B]%s[/B]" % label if name == tab else label)
+            style_tab(self, control_id, name.title(), name == tab)
         fields = self.FIELDS[tab]
         visible_rows = []
         for index, control_id in enumerate(self.ROW_IDS):

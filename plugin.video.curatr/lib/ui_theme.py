@@ -192,3 +192,19 @@ def skin_name():
         addon = None
     _publish_palette(theme_palette(addon))
     return "Light" if is_light_mode(addon) else "Default"
+
+
+def style_tab(window, control_id, label, selected):
+    """Keep an active selector coloured independently of keyboard/touch focus."""
+    palette = getattr(window, "_tab_palette", None)
+    if palette is None:
+        palette = window._tab_palette = theme_palette()
+        window._tab_text = "FF444751" if is_light_mode() else "FFE2DEE8"
+    window.setProperty(
+        "CuratrTab%d" % control_id,
+        palette["CuratrPrimary" if selected else "CuratrButtonFaint"],
+    )
+    window.getControl(control_id).setLabel(
+        "[B]%s[/B]" % label if selected else label,
+        textColor="0xFFFFFFFF" if selected else "0x" + window._tab_text,
+    )

@@ -22,6 +22,8 @@ from .kodi_library import KodiLibraryError, KodiLibraryReader
 from .keyword_confirm import confirm_keyword_rules
 from .keyword_matcher import PARSER_VERSION, candidate_matches, format_rules, parse_prompt, preferred_genre_ids, score_candidate
 from .list_settings import edit_list_settings
+from .metadata_cache import MetadataCache
+from .menu_art import menu_source
 from .list_art import CHOICES as LIST_ART_CHOICES
 from .list_art import bundled_source as bundled_list_art_source
 from .list_art import label as list_art_label
@@ -1745,6 +1747,8 @@ class Curator:
                 "List Artwork", draft.get("artwork"), preview_record=draft,
             )
         elif field == "prompt":
+            if draft.get("generation_method") == "keyword":
+                return self._edit_keyword_list_draft(draft) or draft
             value = xbmcgui.Dialog().input("What are you in the mood for?", defaultt=str(draft.get("prompt") or ""))
             if value and value.strip():
                 draft["prompt"] = value.strip()
@@ -1791,6 +1795,59 @@ class Curator:
                 if hours:
                     draft["trakt_refresh_interval_hours"] = hours
         return draft
+
+    @staticmethod
+    def _draft_keyword_rules(draft):
+        prompt = str(draft.get("prompt") or "").strip()
+        rules = draft.get("keyword_rules")
+        if (isinstance(rules, dict)
+                and draft.get("_keyword_prompt", prompt) == prompt
+                and rules.get("version") == PARSER_VERSION):
+            return deepcopy(rules)
+        return parse_prompt(prompt)
+
+    def _edit_keyword_list_draft(self, draft, confirm_label="Use Filters", start_editing=True):
+        """Edit a private copy; Back/Cancel must not change saved or draft rules."""
+        updated = dict(draft)
+        prompt = str(draft.get("prompt") or "").strip()
+        rules = self._draft_keyword_rules(draft)
+        addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
+        while True:
+            decision = confirm_keyword_rules(
+                addon_path, prompt, rules, edit_existing=True,
+                confirm_label=confirm_label, start_editing=start_editing,
+            )
+            if decision == "edit":
+                value = xbmcgui.Dialog().input("Edit Request", defaultt=prompt)
+                if value and value.strip() and value.strip() != prompt:
+                    prompt = value.strip()
+                    rules = parse_prompt(prompt)
+                continue
+            if decision != "create":
+                return None
+            if not rules.get("confidence"):
+                xbmcgui.Dialog().ok(self.name, "Add at least one Keyword Matching filter.")
+                continue
+            if updated.get("content_type") == "shows" and (rules.get("people") or rules.get("reference_movies") or rules.get("collection_query")):
+                xbmcgui.Dialog().ok(self.name, "Keyword Matching cannot use named people, collections or references for TV Shows only. Use TV filters or choose AI.")
+                continue
+            prompt = prompt or format_rules(rules).split("\n", 1)[0]
+            updated.update({"prompt": prompt, "keyword_rules": rules,
+                            "_keyword_prompt": prompt, "_keyword_confirmed": True})
+            return updated
+
+    def _prepare_keyword_list_draft(self, draft, confirm_label):
+        prompt = str(draft.get("prompt") or "").strip()
+        rules = self._draft_keyword_rules(draft)
+        confirmed = (draft.get("_keyword_confirmed")
+                     and draft.get("_keyword_prompt") == prompt
+                     and rules.get("confidence"))
+        unsupported = draft.get("content_type") == "shows" and (
+            rules.get("people") or rules.get("reference_movies") or rules.get("collection_query")
+        )
+        if confirmed and not unsupported:
+            return dict(draft, keyword_rules=rules)
+        return self._edit_keyword_list_draft(draft, confirm_label, start_editing=False)
 
     def _simple_list_draft(self, draft):
         prompt = xbmcgui.Dialog().input("What are you in the mood for?", defaultt=str(draft.get("prompt") or ""))
@@ -1842,6 +1899,7 @@ class Curator:
         draft.setdefault("trakt_refresh_enabled", bool(draft["sync_to_trakt"] and self._default_trakt_refresh_enabled()))
         draft.setdefault("trakt_refresh_interval_hours", self._default_trakt_refresh_interval())
         draft.setdefault("artwork", normalise_list_art({}))
+        draft.setdefault("movies", [])
         draft["generation_method"] = "keyword" if draft.get("generation_method") == "keyword" else "ai"
         if draft.get("content_type") not in ("movies", "shows", "both"):
             draft["content_type"] = "movies"
@@ -1860,7 +1918,7 @@ class Curator:
             if action == "cancel":
                 return None
             if action in ("preview", "create"):
-                if not draft["name"] or not draft["prompt"]:
+                if not draft["name"] or (draft["generation_method"] != "keyword" and not draft["prompt"]):
                     xbmcgui.Dialog().ok(self.name, "Enter a list name and request first.")
                     continue
                 if self._managed_record_by_name(draft["name"]):
@@ -1869,13 +1927,13 @@ class Curator:
                 rules = None
                 if draft["generation_method"] == "keyword":
                     self._require_keyword_catalogue()
-                    rules = parse_prompt(draft["prompt"])
-                    if not rules.get("confidence"):
-                        xbmcgui.Dialog().ok(self.name, "Keyword Matching could not find a clear filter. Add a genre, year, rating, runtime, country, language, actor or director.")
+                    edited = self._prepare_keyword_list_draft(
+                        draft, "Preview List" if action == "preview" else "Create List",
+                    )
+                    if edited is None:
                         continue
-                    if draft["content_type"] == "shows" and (rules.get("people") or rules.get("reference_movies") or rules.get("collection_query")):
-                        xbmcgui.Dialog().ok(self.name, "Keyword Matching cannot reliably use named people, collections or references for TV shows yet. Choose AI or use TV filters such as genre, year, rating, country or language.")
-                        continue
+                    draft = edited
+                    rules = draft["keyword_rules"]
                 else:
                     self._require_ai()
                 preview = action == "preview"
@@ -1901,6 +1959,7 @@ class Curator:
                     self._store_managed_record(record)
                     self._save_state()
                     return record
+                draft["movies"] = deepcopy(record.get("movies") or [])
                 return {"kind": "list_preview", "created_at": int(time.time()), "draft": draft, "record": record}
 
     def create_related_list_interactive(self, list_id="", folder_id="", entry_id=""):
@@ -2122,50 +2181,6 @@ class Curator:
         self.record_activity("Renamed list to %s" % new_name, notify=True)
         return updated
 
-    def _edit_list_prompt(self, list_id):
-        record = self._managed_record_by_id(list_id)
-        if not record:
-            raise RuntimeError("That list has already been removed.")
-        is_keyword = str(record.get("generation_method") or "ai").lower() == "keyword"
-        noun = "request" if is_keyword else "prompt"
-        current_prompt = str(record.get("prompt") or "Recommend something for me.")
-        new_prompt = current_prompt
-        while True:
-            new_prompt = xbmcgui.Dialog().input("Edit %s" % noun.title(), defaultt=new_prompt)
-            if not new_prompt or not new_prompt.strip():
-                return record
-            new_prompt = new_prompt.strip()
-            if not is_keyword:
-                break
-            rules = parse_prompt(new_prompt)
-            if not rules.get("confidence"):
-                xbmcgui.Dialog().ok(
-                    self.name,
-                    "That request does not contain a clear Keyword Matching filter. The existing request was kept.",
-                )
-                return record
-            addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
-            decision = confirm_keyword_rules(
-                addon_path, new_prompt, rules,
-                footer="Save Changes updates this list and refreshes its items.",
-                edit_existing=True,
-            )
-            if decision == "edit":
-                continue
-            if decision != "create":
-                return record
-            break
-        updated = dict(record)
-        updated["prompt"] = new_prompt
-        if is_keyword:
-            updated["keyword_rules"] = rules
-        updated["edited_at"] = int(time.time())
-        self._store_managed_record(updated, record)
-        self._save_state()
-        self.record_activity(
-            "Saved %s for %s" % (noun, updated.get("name") or "curatr list"), notify=not is_keyword,
-        )
-        return self.refresh_list(self._record_key(updated), silent=False) if is_keyword else updated
 
     def _edit_list_description(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -2397,6 +2412,9 @@ class Curator:
     def _edit_artwork_window(self, heading, artwork, preview_record=None, content_entries=None):
         initial = normalise_list_art(artwork)
         record = dict(preview_record or {})
+        if content_entries is None:
+            content_entries = self._artwork_content_provider(record)
+        loaded_contents = []
 
         def preview_provider(draft):
             preview_record_value = dict(record)
@@ -2410,7 +2428,9 @@ class Curator:
             if source == "curatr":
                 return self._bundled_art_entries(kind, style)
             if source == "contents" and content_entries:
-                return content_entries() or []
+                if not loaded_contents:
+                    loaded_contents.extend(content_entries() or [])
+                return loaded_contents
             if source == "person":
                 return self._person_artwork_entries()
             return []
@@ -2510,16 +2530,26 @@ class Curator:
         return self._fanart_from_movies(record.get("movies"), "Choose fanart from this list")
 
     def _fanart_entries_from_movies(self, movies):
-        movies = [row for row in (movies or []) if isinstance(row, dict)]
+        # Contents is loaded on demand. Enrich a bounded preview copy, never the
+        # saved list, and reuse the normal metadata cache for missing backdrops.
+        movies = deepcopy([row for row in (movies or []) if isinstance(row, dict)][:250])
+        available = {ArtworkCache._first_image(row, "fanart") for row in movies}
+        available.discard("")
+        missing = [row for row in movies if not ArtworkCache._first_image(row, "fanart")][:max(0, 24 - len(available))]
+        if missing:
+            MetadataCache(self.addon).enrich(missing, getattr(self, "tmdb", None), include_artwork=True)
         choices = []
+        seen = set()
         for movie in movies:
             url = ArtworkCache._first_image(movie, "fanart")
-            if url:
+            if url and url not in seen:
+                seen.add(url)
                 choices.append((movie, url))
+                if len(choices) >= 24:
+                    break
         if not choices:
             xbmcgui.Dialog().ok(self.name, "No landscape artwork is available from these contents.")
             return []
-        choices = choices[:24]
         preview_paths = ArtworkCache(self.addon, workers=6).cache_urls([source for _movie, source in choices], limit=24)
         entries = []
         for movie, source in choices:
@@ -2935,8 +2965,12 @@ class Curator:
         original = dict(record)
         draft = {
             "name": str(record.get("name") or "curatr list"),
+            "movies": deepcopy(record.get("movies") or []),
             "description": str(record.get("description") or ""),
             "prompt": str(record.get("prompt") or ""),
+            "keyword_rules": deepcopy(record.get("keyword_rules")),
+            "_keyword_prompt": str(record.get("prompt") or ""),
+            "_keyword_confirmed": isinstance(record.get("keyword_rules"), dict),
             "generation_method": "keyword" if str(record.get("generation_method") or "ai") == "keyword" else "ai",
             "content_type": record.get("content_type") if record.get("content_type") in ("movies", "shows", "both") else "movies",
             "count": max(5, min(50, self._safe_int(record.get("count"), 20))),
@@ -2965,13 +2999,12 @@ class Curator:
         method = draft.get("generation_method")
         rules = None
         if method == "keyword":
-            rules = parse_prompt(prompt)
-            if not rules.get("confidence"):
-                xbmcgui.Dialog().ok(self.name, "Keyword Matching could not find a clear filter in that request.")
+            edited = self._prepare_keyword_list_draft(draft, "Save Changes")
+            if edited is None:
                 return record
-            if draft.get("content_type") == "shows" and (rules.get("people") or rules.get("reference_movies") or rules.get("collection_query")):
-                xbmcgui.Dialog().ok(self.name, "Keyword Matching cannot use named people, collections or references for TV Shows only. Choose AI or change the request.")
-                return record
+            draft = edited
+            prompt = draft["prompt"]
+            rules = draft["keyword_rules"]
         updated = dict(record)
         updated.update({
             "name": name,
@@ -2996,7 +3029,7 @@ class Curator:
         self.record_activity("Updated list settings: %s" % name, notify=True)
 
         changed_results = any(original.get(field) != updated.get(field) for field in (
-            "prompt", "generation_method", "content_type", "count",
+            "prompt", "generation_method", "content_type", "count", "keyword_rules",
         ))
         if changed_results:
             message = "List settings saved. Would you like to refresh this list now?"
@@ -3638,8 +3671,18 @@ class Curator:
             return self.remove_widget_folder_entry_interactive(folder_id, entry_id)
         return folder
 
+    def _artwork_content_provider(self, record):
+        record = record if isinstance(record, dict) else {}
+        if isinstance(record.get("movies"), list):
+            return lambda: self._fanart_entries_from_movies(record["movies"])
+        if record.get("type") == "provider_list":
+            return lambda: self._provider_artwork_entries(record)
+        return None
+
     def _edit_compact_artwork(self, heading, value, content_entries=None, preview_record=None):
         original = normalise_list_art(value)
+        if content_entries is None:
+            content_entries = self._artwork_content_provider(preview_record)
         result, artwork = self._edit_artwork_window(
             heading,
             original,
@@ -4009,9 +4052,7 @@ class Curator:
             content_actions=self._draft_folder_content_actions,
             content_handler=self._edit_draft_folder_content,
             content_add_handler=self._add_draft_folder_content,
-            add_art=os.path.join(
-                addon_path, "resources", "media", "menu_v5", "menu_add_folder.png"
-            ),
+            add_art=menu_source(addon_path, "menu_add_folder.png"),
         )
         if action == "failed":
             action, draft = self._fallback_folder_settings(draft)
@@ -4192,7 +4233,11 @@ class Curator:
             artwork = self._edit_compact_artwork(
                 "%s artwork" % name,
                 artwork,
-                preview_record={"name": name, "description": description},
+                preview_record={
+                    "name": name, "description": description,
+                    "type": "provider_list", "provider": provider,
+                    "provider_list_id": str(chosen.get("id")),
+                },
             )
         return {
             "id": uuid.uuid4().hex, "type": "provider_list",
@@ -4231,6 +4276,40 @@ class Curator:
     def _provider_cache_key(provider, provider_list_id):
         return "%s:%s" % (str(provider or "").strip().lower(), str(provider_list_id or "").strip())
 
+    def _fetch_provider_list_movies(self, provider, provider_list_id):
+        if provider == "trakt":
+            if not self._has_oauth():
+                raise RuntimeError("Reconnect Trakt to open this linked list.")
+            response = self.trakt.list_items(provider_list_id, limit=250, extended=True)
+            movies = []
+            for row in response if isinstance(response, list) else []:
+                if not isinstance(row, dict):
+                    continue
+                item = row.get("show") if isinstance(row.get("show"), dict) else row.get("movie")
+                if isinstance(item, dict):
+                    item = dict(item)
+                    item["media_type"] = "show" if isinstance(row.get("show"), dict) else "movie"
+                    movies.append(item)
+        elif provider == "mdblist":
+            if not self.mdblist or not self.mdblist.api_key:
+                raise RuntimeError("Connect MDBList in Settings to perform this action.")
+            movies = self.mdblist.fetch_list_id(provider_list_id, limit=250)
+        else:
+            raise RuntimeError("That linked-list provider is not supported.")
+        return [row for row in movies if isinstance(row, dict) and row.get("title")][:250]
+
+    def _provider_artwork_entries(self, entry):
+        """Preview linked contents, including links in an unsaved folder draft."""
+        provider = str(entry.get("provider") or "").strip().lower()
+        list_id = str(entry.get("provider_list_id") or "").strip()
+        cache = self.state.get("linked_list_cache") or {}
+        cached = cache.get(self._provider_cache_key(provider, list_id)) if isinstance(cache, dict) else None
+        if isinstance(cached, dict) and isinstance(cached.get("movies"), list):
+            movies = cached["movies"]
+        else:
+            movies = self._fetch_provider_list_movies(provider, list_id)
+        return self._fanart_entries_from_movies(movies)
+
     def linked_provider_list_movies(self, folder_id, entry_id, force=False):
         """Load a linked list lazily, with a bounded cache and stale fallback."""
         folder = self.widget_folder_by_id(folder_id)
@@ -4255,26 +4334,7 @@ class Curator:
                 return entry, movies
 
         try:
-            if provider == "trakt":
-                if not self._has_oauth():
-                    raise RuntimeError("Reconnect Trakt to open this linked list.")
-                response = self.trakt.list_items(provider_list_id, limit=250, extended=True)
-                movies = []
-                for row in response if isinstance(response, list) else []:
-                    if not isinstance(row, dict):
-                        continue
-                    item = row.get("show") if isinstance(row.get("show"), dict) else row.get("movie")
-                    if isinstance(item, dict):
-                        item = dict(item)
-                        item["media_type"] = "show" if isinstance(row.get("show"), dict) else "movie"
-                        movies.append(item)
-            elif provider == "mdblist":
-                if not self.mdblist or not self.mdblist.api_key:
-                    raise RuntimeError("Connect MDBList in Settings to perform this action.")
-                movies = self.mdblist.fetch_list_id(provider_list_id, limit=250)
-            else:
-                raise RuntimeError("That linked-list provider is not supported.")
-            movies = [row for row in movies if isinstance(row, dict) and row.get("title")][:250]
+            movies = self._fetch_provider_list_movies(provider, provider_list_id)
             cache = dict(cache) if isinstance(cache, dict) else {}
             cache[cache_key] = {"cached_at": int(time.time()), "movies": movies}
             if len(cache) > 20:
@@ -4739,7 +4799,7 @@ class Curator:
             self._folder_content_actions,
             lambda entry_id, action: self._folder_content_action(folder_id, entry_id, action),
             lambda: self._add_widget_folder_content_interactive(folder_id),
-            os.path.join(addon_path, "resources", "media", "menu_v5", "menu_add_folder.png"),
+            menu_source(addon_path, "menu_add_folder.png"),
         )
         if result == "fallback":
             return self._manage_widget_folder_contents_legacy(folder_id)
