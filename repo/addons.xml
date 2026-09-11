@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="1.0.17" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="1.0.19" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -61,7 +61,7 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>curatr 1.0.17 restores the full Folder Settings window on Android, keeps management actions visible while browsing lists and folders, and refines artwork corners and labels.</news>
+            <news>curatr 1.0.19 unifies menu icons with the genre artwork, keeps active tabs highlighted, and restores the keyword editor in List Settings. Edited filters are retained through preview, creation and later settings changes. Chip controls follow the selected theme without colour-specific images.</news>
         </extension>
     </addon>
 </addons>
