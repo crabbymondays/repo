@@ -1,7 +1,7 @@
-name: Beta bug report
-description: Report a reproducible curatr beta problem
-title: "[Beta] "
-labels: ["bug", "beta"]
+name: Bug report
+description: Report a reproducible curatr problem
+title: "[Bug] "
+labels: ["bug"]
 body:
   - type: markdown
     attributes:

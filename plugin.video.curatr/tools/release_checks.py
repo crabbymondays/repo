@@ -1,5 +1,6 @@
 import ast
 import copy
+import subprocess
 import time
 from unittest.mock import Mock, patch
 from PIL import Image, ImageChops
@@ -15,12 +16,13 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TEST_PROFILE = tempfile.TemporaryDirectory(prefix="curatr-checks-")
 sys.path.insert(0, str(ROOT))
 
 
 class FakeAddon:
     def __init__(self, profile, settings=None):
-        self.profile = profile
+        self.profile = profile or TEST_PROFILE.name
         self.settings = dict(settings or {})
 
     def getAddonInfo(self, key):
@@ -28,7 +30,7 @@ class FakeAddon:
             "name": "curatr",
             "path": str(ROOT),
             "profile": self.profile,
-            "version": "1.0.19",
+            "version": "1.0.24",
             "id": "plugin.video.curatr",
         }.get(key, "")
 
@@ -53,6 +55,9 @@ class FakeControl:
         if self.navigation_error:
             raise RuntimeError("unsupported on this platform")
         self.navigation = _args
+
+    def setColorDiffuse(self, value):
+        self.diffuse = value
 
     def setImage(self, value):
         self.image = value
@@ -221,7 +226,7 @@ def install_kodi_stubs(profile):
 
 
 class ReleaseChecks(unittest.TestCase):
-    def test_themes_keep_distinct_light_tints(self):
+    def test_themes_keep_distinct_background_tints(self):
         from lib.ui_theme import theme_palette
 
         palettes = {}
@@ -316,7 +321,7 @@ class ReleaseChecks(unittest.TestCase):
             content_add_handler=lambda draft: draft,
         )
         controls = {key: FakeControl(navigation_error=True) for key in (
-            20, 29, 30, 100, 101, 200, 201, 202, 300, 301, 400, 410, 420
+            20, 29, 30, 100, 101, 200, 201, 202, 300, 301, 400, 410, 420, 1100, 1101
         )}
         controls[420].visibility_error = True
         window.getControl = controls.__getitem__
@@ -413,7 +418,7 @@ class ReleaseChecks(unittest.TestCase):
             self.assertEqual(item.properties["Rating.Popcorn.Percent"], "82")
 
     def test_xml_navigation_and_artwork_geometry(self):
-        for skin in ("Default", "Light"):
+        for skin in ("Default",):
             base = ROOT / "resources" / "skins" / skin / "1080i"
             collection = ET.parse(base / "curatr-collection-manager.xml").getroot()
             folder = ET.parse(base / "curatr-folder-contents.xml").getroot()
@@ -447,14 +452,14 @@ class ReleaseChecks(unittest.TestCase):
 
     def test_context_scope_and_versioned_create_asset(self):
         addon = ET.parse(ROOT / "addon.xml").getroot()
-        self.assertEqual(addon.attrib["version"], "1.0.19")
+        self.assertEqual(addon.attrib["version"], "1.0.24")
         visibility = [node.text or "" for node in addon.findall(".//item/visible")]
         self.assertEqual(len(visibility), 3)
         self.assertTrue(all("CuratrItem" in value for value in visibility))
         self.assertFalse((ROOT / "resources/media/menu_v5/menu_create.png").exists())
         self.assertFalse((ROOT / "resources/media/menu_landscape_v1/menu_create.png").exists())
-        self.assertTrue((ROOT / "resources/media/menu/v6/square/menu_create_v2.png").exists())
-        self.assertTrue((ROOT / "resources/media/menu/v6/landscape/menu_create_v2.png").exists())
+        self.assertTrue((ROOT / "resources/media/menu/v9/square/menu_create_v2.png").exists())
+        self.assertTrue((ROOT / "resources/media/menu/v9/landscape/menu_create_v2.png").exists())
 
 
 class InterfaceChecks(unittest.TestCase):
@@ -499,6 +504,54 @@ class InterfaceChecks(unittest.TestCase):
             edited = curator._edit_list_draft_field("prompt", edited)
             editor.assert_not_called()
             self.assertEqual(curator._draft_keyword_rules(edited)["genre_labels"], ["Romance"])
+
+    def test_existing_keyword_request_uses_save_without_committing_cancelled_settings(self):
+        from lib import core
+        curator = self.curator()
+        record = {"local_id": "keep", "name": "Test", "prompt": "crime",
+                  "generation_method": "keyword", "content_type": "movies",
+                  "keyword_rules": core.parse_prompt("crime")}
+        curator.state["ai_lists"] = [record]
+        before = copy.deepcopy(record)
+
+        def edit(_path, draft, editor, _formatter, **kwargs):
+            self.assertTrue(kwargs["existing"])
+            updated = editor("prompt", draft)
+            self.assertEqual(updated["keyword_rules"]["year_min"], 2005)
+            return "cancel", updated
+
+        def confirm(_path, _prompt, rules, **kwargs):
+            self.assertEqual(kwargs["confirm_label"], "Save")
+            rules["year_min"] = 2005
+            return "create"
+
+        with patch.object(core, "edit_list_settings", side_effect=edit), patch.object(core, "confirm_keyword_rules", side_effect=confirm):
+            self.assertEqual(curator.list_settings_interactive("keep"), before)
+        self.assertEqual(record, before)
+        curator._store_managed_record.assert_not_called()
+
+    def test_preview_refresh_and_switch_keep_the_correct_method_and_reference(self):
+        with tempfile.TemporaryDirectory() as profile:
+            install_kodi_stubs(profile)
+            sys.argv = ["plugin://plugin.video.curatr/", "1", ""]
+            sys.modules.pop("plugin", None)
+            plugin = importlib.import_module("plugin")
+            reference = {"title": "Arrival", "ids": {"tmdb": 329865}}
+            for method, other, other_label in (("ai", "keyword", "Keyword Matching"), ("keyword", "ai", "AI")):
+                curator = Mock()
+                curator.build_similar_preview.return_value = {"title": "Arrival", "movies": []}
+                with patch.object(plugin, "_read_similar_preview", return_value={"reference": reference}), patch.object(plugin, "_write_similar_preview", return_value="next"), patch.object(plugin, "_add_folder") as add, patch.object(plugin, "_add_route_action") as save, patch.object(plugin, "_render_movies") as render:
+                    plugin._similar_preview(curator, {"token": "previous", "method": method})
+                self.assertTrue(render.call_args.kwargs["update_listing"])
+                curator.build_similar_preview.assert_called_once_with(reference, method=method, count=20)
+                refresh, switch = add.call_args_list
+                self.assertEqual(refresh.args[:2], ("Refresh Results", "similar_preview"))
+                self.assertEqual(refresh.kwargs["method"], method)
+                self.assertEqual(switch.args, ("Switch Method", "similar_preview", "Refresh results using %s." % other_label))
+                self.assertEqual(switch.kwargs["method"], other)
+                self.assertEqual(switch.kwargs["token"], "next")
+                self.assertEqual(save.call_args.kwargs["token"], "next")
+                self.assertEqual(save.call_args.kwargs["icon_name"], "menu_save_results.png")
 
     def test_keyword_cancel_does_not_mutate_nested_rules(self):
         from lib import core
@@ -616,7 +669,7 @@ class InterfaceChecks(unittest.TestCase):
         self.assertEqual(updated["keyword_rules"]["year_min"], 2005)
         self.assertEqual(record["keyword_rules"]["year_min"], 0)
 
-    def test_active_tabs_remain_coloured_in_light_and_dark_modes(self):
+    def test_active_tabs_remain_coloured_with_retired_settings(self):
         from lib import ui_theme
         from lib.list_settings import ListSettingsWindow
         for light in (False, True):
@@ -624,24 +677,25 @@ class InterfaceChecks(unittest.TestCase):
             with patch("xbmcaddon.Addon", return_value=addon):
                 window = object.__new__(ListSettingsWindow)
                 ListSettingsWindow.__init__(window, str(ROOT), {}, lambda _f, d: d, lambda f, _d: f)
-                controls = {key: FakeControl() for key in (100, 101, 102, 200, 201, 202, 203, 300, 301, 302)}
+                controls = {key: FakeControl() for key in (100, 101, 102, 200, 201, 202, 203, 300, 301, 302, 1100, 1101, 1102)}
                 window.getControl = controls.__getitem__
                 window.setFocus = lambda control: setattr(window, "focused", control)
                 window._show_tab("content")
                 self.assertIs(window.focused, controls[200])
-                self.assertEqual(window.properties["CuratrTab101"], ui_theme.theme_palette(addon)["CuratrPrimary"])
+                self.assertEqual(controls[1101].diffuse.removeprefix("0x"), ui_theme.theme_palette(addon)["CuratrPrimary"])
                 self.assertEqual(controls[101].text_attributes["textColor"], "0xFFFFFFFF")
                 window._show_tab("behaviour")
-                self.assertEqual(window.properties["CuratrTab101"], ui_theme.theme_palette(addon)["CuratrButtonFaint"])
-                self.assertEqual(window.properties["CuratrTab102"], ui_theme.theme_palette(addon)["CuratrPrimary"])
-        for skin in ("Default", "Light"):
+                self.assertEqual(controls[1101].diffuse.removeprefix("0x"), ui_theme.theme_palette(addon)["CuratrButtonFaint"])
+                self.assertEqual(controls[1102].diffuse.removeprefix("0x"), ui_theme.theme_palette(addon)["CuratrPrimary"])
+        for skin in ("Default",):
             for filename, ids in (("list-settings", (100, 101, 102)), ("folder-settings", (100, 101)), ("artwork-editor", (100, 101, 200, 201, 202, 203, 204, 300, 301))):
                 root = ET.parse(ROOT / "resources/skins" / skin / "1080i" / ("curatr-" + filename + ".xml"))
                 for control_id in ids:
                     texture = root.find(".//control[@id='%s']/texturenofocus" % control_id)
-                    self.assertEqual(texture.get("colordiffuse"), "$INFO[Window.Property(CuratrTab%d)]" % control_id)
+                    self.assertEqual(texture.get("colordiffuse"), "00FFFFFF")
+                    self.assertIsNotNone(root.find(".//control[@id='%d']" % (1000 + control_id)))
 
-    def test_keyword_chip_focus_and_controller_navigation_use_current_theme(self):
+    def test_keyword_chip_focus_uses_tag_colours_and_preserves_controller_navigation(self):
         from lib.keyword_confirm import KeywordConfirmWindow
         from lib.keyword_matcher import parse_prompt
         for light in (False, True):
@@ -657,7 +711,8 @@ class InterfaceChecks(unittest.TestCase):
                 window.close = lambda: None
                 window.onInit()
                 self.assertNotEqual(window.result, "fallback")
-                self.assertEqual(controls[101].label, "USE FILTERS")
+                self.assertEqual(controls[101].label, "[B]Use Filters[/B]")
+                self.assertEqual(controls[102].label, "Done")
                 self.assertGreaterEqual(len(window.action_controls), 5)
                 buttons = list(window.action_controls.values())
                 for index, button in enumerate(buttons):
@@ -665,9 +720,17 @@ class InterfaceChecks(unittest.TestCase):
                     self.assertIs(button.navigation[3], buttons[(index + 1) % len(buttons)])
                     focus = [image for image in window.dynamic_controls if getattr(image, "condition", "") == "Control.HasFocus(%d)" % button.getId()]
                     self.assertEqual(len(focus), 3)
-                    self.assertTrue(all(image.kwargs["colorDiffuse"] == "0x" + window.palette["CuratrPrimary"] for image in focus))
+                    expected = ("0xFF4B2632", "0xFF4B2632", "0xFF5C392E", "0xFF5C392E", window.neutral_focus)[index]
+                    self.assertTrue(all(image.kwargs["colorDiffuse"] == expected for image in focus))
+                for group in window.filter_groups:
+                    minus, label = group["controls"]
+                    gap = label.args[0] + label.kwargs["textOffsetX"] - (minus.args[0] + minus.args[2])
+                    self.assertGreaterEqual(gap, 2)
+                    self.assertLessEqual(gap, 8)
                 window.onClick(buttons[0].getId())  # Remove a filter by the same click route used by touch/Select.
                 self.assertEqual(len(window.rules["display_parts"]), 1)
+                window.onClick(102)
+                self.assertEqual(controls[102].label, "Edit Filters")
 
     def test_menu_assets_are_complete_padded_and_resolve_legacy_paths(self):
         from lib.menu_art import current_menu_source, menu_source
@@ -694,16 +757,165 @@ class InterfaceChecks(unittest.TestCase):
         files = [path.relative_to(ROOT).as_posix() for path in release_files()]
         for folder in ("menu_v5", "menu_landscape_v1", "keyword_controls_v5"):
             self.assertFalse(any(path.startswith("resources/media/" + folder + "/") for path in files))
-        self.assertIn("resources/media/menu/v6/square/menu_list.png", files)
-        self.assertIn("resources/media/menu/v6/landscape/menu_list.png", files)
+        self.assertIn("resources/media/menu/v9/square/menu_list.png", files)
+        self.assertIn("resources/media/menu/v9/landscape/menu_list.png", files)
 
 
 class ArtworkChecks(unittest.TestCase):
+    def test_composed_colours_match_preview_layers_and_reuse_cache(self):
+        from lib.bundled_art import components, rendered_source
+        with tempfile.TemporaryDirectory() as profile:
+            for kind in ("icon", "fanart"):
+                style = "genre_colours" if kind == "icon" else "colour"
+                symbol, base, _palette = components(str(ROOT), "comedy", kind, style, "blue")
+                with Image.open(base) as background, Image.open(symbol) as overlay:
+                    expected = background.convert("RGB")
+                    expected.paste(overlay, (0, 0), overlay)
+                path = rendered_source(str(ROOT), profile, "comedy", kind, style, "blue")
+                with Image.open(path) as actual:
+                    self.assertIsNone(ImageChops.difference(expected, actual).getbbox())
+                with patch("lib.bundled_art.write_png", side_effect=AssertionError("cache miss")):
+                    self.assertEqual(rendered_source(str(ROOT), profile, "comedy", kind, style, "blue"), path)
+                other = rendered_source(str(ROOT), profile, "comedy", kind, style, "amber")
+                self.assertNotEqual(path, other)
+                self.assertNotEqual(Path(path).read_bytes(), Path(other).read_bytes())
+
+    def test_palette_selection_matching_and_cancel_preserve_original(self):
+        from lib.artwork_editor import ArtworkEditorWindow
+        from lib.core import Curator
+        from lib.list_art import normalise_state, resolved_sources
+        original = normalise_state({"icon_mode": "bundled", "icon_key": "comedy", "icon_style": "genre_colours",
+                                    "fanart_mode": "bundled", "fanart_key": "comedy", "icon_colour": "blue"})
+        before = copy.deepcopy(original)
+        curator = object.__new__(Curator)
+        curator.addon = FakeAddon(TEST_PROFILE.name)
+        window = object.__new__(ArtworkEditorWindow)
+        ArtworkEditorWindow.__init__(window, str(ROOT), "Artwork", original, normalise_state({}),
+            lambda draft: resolved_sources(curator.addon, {"artwork": draft}),
+            lambda kind, source, style, colour: curator._bundled_art_entries(kind, style, colour, layered=True),
+            lambda _kind: None)
+        xml = ET.parse(ROOT / "resources/skins/Default/1080i/curatr-artwork-editor.xml")
+        controls = {int(c.get("id")): FakeControl() for c in xml.iter("control") if c.get("id")}
+        window.getControl = controls.__getitem__
+        window.setFocus = lambda _control: None
+        window.close = lambda: None
+        window.onInit()
+        self.assertFalse(window.failed)
+        self.assertEqual(len(window.grid_entries), 22)
+        self.assertTrue(all(row["layered"] for row in window.grid_entries if row["key"] != "blank"))
+        self.assertEqual(window.grid_entries[-1]["key"], "blank")
+        self.assertFalse(window.grid_entries[-1]["layered"])
+        controls[310].position = window.colour_keys.index("amber")
+        window.onClick(310)
+        self.assertEqual(window.draft["icon_colour"], "amber")
+        controls[400].position = next(i for i, row in enumerate(window.grid_entries) if row["key"] == "folder")
+        window.onClick(400)
+        window.onClick(101)
+        window.onClick(201)  # Match Icon also matches the selected background colour.
+        self.assertEqual(window.draft["fanart_key"], "folder")
+        self.assertEqual(window.draft["fanart_colour"], "amber")
+        self.assertEqual(normalise_state(window.draft)["fanart_colour"], "amber")
+        window.onClick(502)
+        self.assertEqual(window.result, "cancel")
+        self.assertEqual(original, before)
+
+    def test_neutral_keyword_panel_and_transparent_hit_targets(self):
+        from lib.ui_theme import theme_palette
+        for light, expected in ((False, "FF25262B"), (True, "FF25262B")):
+            panels, backdrops = set(), set()
+            for theme in ("violet", "ocean", "emerald", "amber"):
+                palette = theme_palette(FakeAddon("", {"interface_theme": theme, "interface_light_mode": str(light).lower()}))
+                panels.add(palette["CuratrKeywordPanel"])
+                backdrops.add(palette["CuratrBackdrop"])
+            self.assertEqual(panels, {expected})
+            self.assertEqual(len(backdrops), 4)
+        with Image.open(ROOT / "resources/media/control_clear_v2.png") as clear:
+            self.assertEqual(clear.size, (32, 32))
+            self.assertEqual(clear.mode, "RGBA")
+            self.assertEqual(clear.getchannel("A").getextrema(), (0, 0))
+            self.assertEqual(clear.convert("RGB").getextrema(), ((255, 255),) * 3)
+        for skin in ("Default",):
+            xml = ET.parse(ROOT / "resources/skins" / skin / "1080i/curatr-keyword-confirm.xml")
+            button = xml.find(".//control[@id='102']")
+            self.assertGreaterEqual(int(button.findtext("width")), 250)
+            self.assertGreaterEqual(int(button.findtext("height")), 56)
+            self.assertLess(int(button.findtext("left")), 600)
+            self.assertEqual(button.findtext("label"), "Edit Filters")
+            self.assertEqual(button.find("texturenofocus").get("colordiffuse"), "00FFFFFF")
+            self.assertNotIn("Curatr", button.find("texturefocus").get("colordiffuse"))
+
+    def test_folder_contents_start_selected_and_actions_follow_focus(self):
+        from lib.folder_contents import FolderContentsWindow, _ADD_KEY
+        for initial in ([], [{"key": "one", "label": "One"}, {"key": "two", "label": "Two"}]):
+            window = object.__new__(FolderContentsWindow)
+            calls = []
+            FolderContentsWindow.__init__(window, str(ROOT), "Contents", "", lambda: initial,
+                lambda row: [{"key": "settings", "label": row["label"]}],
+                lambda *args: calls.append(args), lambda: calls.append("add"), "")
+            controls = {key: FakeControl() for key in (10, 11, 20, 21, 100, 200, 300)}
+            focus = [100]
+            window.getControl = controls.__getitem__
+            window.setFocus = lambda c: focus.__setitem__(0, next(k for k, v in controls.items() if c is v))
+            window.getFocusId = lambda: focus[0]
+            window.close = lambda: calls.append("close")
+            window.onInit()
+            self.assertFalse(window.failed)
+            self.assertEqual(controls[100].position, 0)
+            self.assertEqual(focus[0], 100)
+            self.assertFalse(calls)
+            if initial:
+                self.assertEqual(window.active_key, "one")
+                self.assertTrue(controls[200].visible)
+                controls[100].position = 1
+                window.onAction(types.SimpleNamespace(getId=lambda: 4))
+                self.assertEqual(window.active_key, "two")
+                self.assertEqual(controls[200].items[0].label, "Two")
+                focus[0] = 200
+                window.onAction(types.SimpleNamespace(getId=lambda: 92))
+                self.assertEqual(focus[0], 100)
+                self.assertTrue(controls[200].visible)
+                self.assertFalse(calls)
+            else:
+                self.assertEqual(window.entries[0]["key"], _ADD_KEY)
+                self.assertFalse(controls[200].visible)
+
+    def test_deleted_links_are_omitted_without_losing_stored_entries(self):
+        from lib.core import Curator
+        curator = object.__new__(Curator)
+        curator.addon = FakeAddon(TEST_PROFILE.name)
+        records = {"a": {"name": "A", "movies": []}, "b": {"name": "B", "movies": []}}
+        curator._managed_record_by_id = records.get
+        folder = {"id": "folder", "name": "Folder", "entries": [
+            {"id": "one", "type": "curatr_list", "list_id": "a"},
+            {"id": "gone", "type": "curatr_list", "list_id": "deleted"},
+            {"id": "two", "type": "curatr_list", "list_id": "b"},
+        ]}
+        original = copy.deepcopy(folder)
+        curator.widget_folder_by_id = lambda _key: folder
+        curator.widget_folders = lambda: [folder]
+        with patch("lib.core.list_art_sources", return_value={}):
+            rows = curator._folder_content_rows("folder")
+            self.assertEqual([row["key"] for row in rows], ["one", "two"])
+            self.assertEqual([(row["index"], row["total"]) for row in rows], [(0, 2), (1, 2)])
+            self.assertEqual(curator._folder_manager_rows()[0]["status"], "2 local")
+        self.assertEqual(folder, original)
+        for operation, item in (("move_up", "two"), ("move_down", "one")):
+            moved = curator._reorder_folder_entries(folder["entries"], item, operation)
+            self.assertEqual([row["id"] for row in moved], ["two", "gone", "one"])
+            self.assertEqual(moved[1], folder["entries"][1])
+
     def test_source_and_xml_parse(self):
         for path in ROOT.rglob("*.py"):
             ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for path in ROOT.rglob("*.xml"):
-            ET.parse(path)
+            tree = ET.parse(path)
+            ids = [node.attrib["id"] for node in tree.iter("control") if "id" in node.attrib]
+            self.assertEqual(len(ids), len(set(ids)), str(path))
+            prefix = "special://home/addons/plugin.video.curatr/"
+            for node in tree.iter():
+                source = node.text or ""
+                if node.tag.startswith("texture") and source.startswith(prefix):
+                    self.assertTrue((ROOT / source[len(prefix):]).is_file(), "%s: %s" % (path, source))
 
     def test_saved_choices_and_legacy_paths(self):
         from lib.list_art import CHOICES, bundled_source, resolved_sources
@@ -712,7 +924,7 @@ class ArtworkChecks(unittest.TestCase):
             for kind, style in (("icon", "white"), ("icon", "genre_colours"), ("fanart", "colour"), ("fanart", "monochrome")):
                 expected = bundled_source(addon, key, kind, style)
                 self.assertTrue(Path(expected).is_file())
-                self.assertIn("/list_art/v5/", expected)
+                self.assertIn("/v7/", expected)
                 record = {"local_id": "keep", "movies": [{"ids": {"tmdb": 12}}], "artwork": {kind + "_mode": "bundled", kind + "_key": key, kind + "_style": style}}
                 before = copy.deepcopy(record)
                 self.assertEqual(resolved_sources(addon, record)[kind], expected)
@@ -729,9 +941,12 @@ class ArtworkChecks(unittest.TestCase):
 
     def test_asset_geometry_transparency_and_grey(self):
         from lib.list_art import CHOICES
-        base = ROOT / "resources/media/list_art/v5"
-        self.assertEqual(len([p for p in base.rglob("*") if p.is_file()]), 68)
+        base = ROOT / "resources/media/list_art/v7"
+        from lib.bundled_art import COLOURS, rendered_source
+        self.assertEqual(len([p for p in base.rglob("*") if p.is_file()]), (len(CHOICES) - 1) * 2 + len(COLOURS) * 2)
         for key, _label in CHOICES:
+            if key == "blank":
+                continue
             with Image.open(base / "white" / (key + ".png")) as icon:
                 self.assertEqual(icon.size, (512, 512))
                 self.assertEqual(icon.mode, "RGBA")
@@ -741,12 +956,12 @@ class ArtworkChecks(unittest.TestCase):
                 self.assertLessEqual(abs(bounds[1] + bounds[3] - 512), 2)
                 self.assertTrue(all(low == high == 255 for low, high in icon.convert("RGB").getextrema()))
                 self.assertEqual(icon.getpixel((0, 0))[3], 0)
-            with Image.open(base / "colour" / (key + ".png")) as colour:
+            with Image.open(rendered_source(str(ROOT), TEST_PROFILE.name, key, "icon", "genre_colours")) as colour:
                 self.assertEqual(colour.size, (512, 512))
                 self.assertEqual(colour.mode, "RGB")
                 self.assertNotEqual(colour.getpixel((0, 0)), colour.getpixel((511, 511)))
             for style in ("fanart", "monochrome"):
-                with Image.open(base / style / (key + ".jpg")) as image:
+                with Image.open(rendered_source(str(ROOT), TEST_PROFILE.name, key, "fanart", "monochrome" if style == "monochrome" else "colour")) as image:
                     image.load()
                     self.assertEqual(image.size, (1920, 1080))
                     if style == "monochrome":
@@ -857,7 +1072,7 @@ class ArtworkChecks(unittest.TestCase):
             window.tab = tab
             window.sources = window._available_sources()
             window.grid_source, window.grid_entries = "curatr", [{"source": "one"}]
-            controls = {key: FakeControl() for key in (100, 101, 200, 201, 202, 203, 204, 300, 301, 400, 401, 500, 501, 502)}
+            controls = {key: FakeControl() for key in (100, 101, 200, 201, 202, 203, 204, 300, 301, 310, 311, 400, 401, 500, 501, 502, 1100, 1101, 1200, 1201, 1202, 1203, 1204, 1300, 1301)}
             window.getControl = controls.__getitem__
             window._wire_navigation()
             grid = controls[window.GRID_IDS[tab]]
@@ -869,7 +1084,7 @@ class ArtworkChecks(unittest.TestCase):
             self.assertTrue(window.in_grid)
             window.onFocus(500)
             self.assertFalse(window.in_grid)
-        for skin in ("Default", "Light"):
+        for skin in ("Default",):
             editor = ET.parse(ROOT / "resources/skins" / skin / "1080i/curatr-artwork-editor.xml").getroot()
             for key in ("400", "401"):
                 grid = editor.find(".//control[@id='%s']" % key)
@@ -883,7 +1098,7 @@ class ArtworkChecks(unittest.TestCase):
             window = object.__new__(ArtworkEditorWindow)
             choices = lambda *_args: [{"key": "crime", "label": "Selected title", "source": "https://art/choice.jpg", "mode": "item"}]
             ArtworkEditorWindow.__init__(window, str(ROOT), "Artwork", original, {}, lambda _draft: {}, choices, lambda _kind: None, has_contents=True)
-            controls = {key: FakeControl() for key in (10, 20, 21, 22, 23, 100, 101, 200, 201, 202, 203, 204, 300, 301, 400, 401, 500, 501, 502)}
+            controls = {key: FakeControl() for key in (10, 20, 21, 22, 23, 100, 101, 200, 201, 202, 203, 204, 300, 301, 310, 311, 400, 401, 500, 501, 502, 1100, 1101, 1200, 1201, 1202, 1203, 1204, 1300, 1301)}
             window.getControl = controls.__getitem__
             window.setFocus = lambda control: window.onFocus(next(key for key, value in controls.items() if value is control))
             closed = []
@@ -924,6 +1139,410 @@ class ArtworkChecks(unittest.TestCase):
             self.assertEqual(curator._fanart_entries_from_movies([]), [])
             dialog.return_value.ok.assert_called_once()
         self.assertEqual(curator.state, before)
+
+
+class MenuBackgroundChecks(unittest.TestCase):
+    class VFSFile:
+        def __init__(self, path, mode):
+            self.reader = open(path, mode)
+
+        def readBytes(self, size):
+            return self.reader.read(size)
+
+        def close(self):
+            self.reader.close()
+
+    def test_theme_gradients_follow_shared_tint_and_ignore_retired_light_setting(self):
+        from lib.menu_background import appearance_signature
+        from lib.ui_theme import background_palette
+
+        palettes = set()
+        for theme in ("violet", "ocean", "emerald", "amber"):
+            addon = FakeAddon("", {"interface_theme": theme})
+            expected = background_palette(addon)
+            addon.settings["interface_light_mode"] = "true"
+            self.assertEqual(background_palette(addon), expected)
+            palettes.add(expected)
+        self.assertEqual(len(palettes), 4)
+
+        addon = FakeAddon("", {"interface_custom_colours": "true",
+                                "interface_background_colour": "teal"})
+        self.assertEqual(background_palette(addon), background_palette(addon, "teal"))
+        signature = appearance_signature(addon)
+        addon.settings["interface_primary_colour"] = "red"
+        self.assertEqual(appearance_signature(addon), signature)
+        fixed = background_palette(addon, "amber")
+        addon.settings.update(interface_theme="ocean", interface_background_colour="pink")
+        self.assertEqual(background_palette(addon, "amber"), fixed)
+        self.assertNotEqual(appearance_signature(addon), signature)
+
+    def test_background_defaults_and_existing_choices_are_preserved(self):
+        from lib.menu_background import current_choice, background_source
+
+        addon = FakeAddon("")
+        self.assertEqual(current_choice(addon), "theme")
+        for key, target in (("0", "theme"), ("1", "deep_blue"), ("2", "deep_violet"), ("3", "slate")):
+            state = {"menu_background_style": key, "ai_lists": [{"local_id": "keep"}]}
+            original = copy.deepcopy(state)
+            self.assertEqual(current_choice(addon, state), target)
+            self.assertEqual(background_source(addon, state), background_source(addon, choice=target))
+            self.assertTrue(Path(background_source(addon, state)).is_file())
+            self.assertEqual(state, original)
+        self.assertEqual(current_choice(addon, {"menu_background_style": 0}), "theme")
+        addon.settings["menu_background_style"] = "2"
+        self.assertEqual(current_choice(addon), "deep_violet")
+        self.assertEqual(current_choice(addon, {"menu_background_style": "theme"}), "theme")
+        self.assertEqual(current_choice(addon, {"menu_background_style": "invalid"}), "theme")
+
+    def test_background_previews_match_full_images_and_reuse_cache(self):
+        from lib import menu_background
+
+        with tempfile.TemporaryDirectory() as profile:
+            addon = FakeAddon(profile)
+            full = menu_background.background_source(addon)
+            preview = menu_background.background_source(addon, preview=True)
+            with Image.open(full) as image, Image.open(preview) as thumb:
+                self.assertEqual(image.size, (1920, 1080))
+                self.assertEqual(thumb.size, (640, 360))
+                self.assertEqual(image.mode, "RGB")
+                for x, y in ((0, 0), (319, 179), (639, 359), (91, 210)):
+                    self.assertEqual(thumb.getpixel((x, y)), image.getpixel((x * 3, y * 3)))
+            with patch.object(menu_background, "write_png", side_effect=AssertionError("cache miss")):
+                self.assertEqual(menu_background.background_source(addon), full)
+                self.assertEqual(menu_background.background_source(addon, preview=True), preview)
+            addon.settings["interface_theme"] = "ocean"
+            self.assertNotEqual(menu_background.background_source(addon), full)
+            self.assertIn("resources/media/list_art/v7/backgrounds/fanart", full)
+            self.assertFalse((ROOT / "resources/media/menu_background").exists())
+
+    def test_picker_order_active_choice_and_bounded_preview_sizes(self):
+        from lib.menu_background import background_entries
+        from lib.ui_theme import BACKGROUND_COLOURS
+
+        with tempfile.TemporaryDirectory() as profile:
+            addon = FakeAddon(profile)
+            entries = background_entries(addon, {"menu_background_style": "blue"})
+            self.assertEqual(entries[0]["key"], "theme")
+            self.assertEqual(entries[-1]["key"], "custom")
+            self.assertEqual([row["key"] for row in entries[1:-1]], [key for key, _ in BACKGROUND_COLOURS])
+            self.assertEqual([row["key"] for row in entries if row["selected"]], ["blue"])
+            for entry in entries[:-1]:
+                with Image.open(entry["source"]) as image:
+                    self.assertEqual(image.size, (640, 360))
+            legacy = background_entries(addon, {"menu_background_style": "3"})
+            self.assertEqual([row["key"] for row in legacy if row["selected"]], ["slate"])
+            self.assertEqual(legacy[-1]["key"], "custom")
+
+    def test_custom_images_are_copied_deduplicated_and_survive_source_removal(self):
+        from lib import menu_background
+
+        with tempfile.TemporaryDirectory() as folder:
+            addon = FakeAddon(str(Path(folder) / "profile"))
+            with patch.object(menu_background.xbmcvfs, "File", self.VFSFile, create=True):
+                for extension in ("png", "jpg", "webp"):
+                    source = Path(folder) / ("download." + extension)
+                    Image.new("RGB", (40, 24), (120, 80, 160)).save(source)
+                    saved = menu_background.import_custom_background(addon, str(source))
+                    self.assertEqual(menu_background.import_custom_background(addon, str(source)), saved)
+                    self.assertEqual(Path(saved).read_bytes(), source.read_bytes())
+                    source.unlink()
+                    state = {"menu_background_style": "custom", "menu_background_source": saved}
+                    self.assertEqual(menu_background.background_source(addon, state), saved)
+                    with Image.open(saved) as image:
+                        self.assertEqual(image.size, (40, 24))
+            self.assertEqual(len(list(Path(addon.profile).rglob("*.*"))), 3)
+
+    def test_invalid_custom_image_does_not_replace_saved_artwork(self):
+        from lib import menu_background
+
+        with tempfile.TemporaryDirectory() as folder:
+            addon = FakeAddon(str(Path(folder) / "profile"))
+            valid = Path(folder) / "original.png"
+            Image.new("RGB", (8, 8), "blue").save(valid)
+            invalid = Path(folder) / "invalid.png"
+            invalid.write_text("not an image")
+            with patch.object(menu_background.xbmcvfs, "File", self.VFSFile, create=True):
+                saved = menu_background.import_custom_background(addon, str(valid))
+                before = Path(saved).read_bytes()
+                with self.assertRaises(ValueError):
+                    menu_background.import_custom_background(addon, str(invalid))
+                with patch.object(menu_background, "MAX_CUSTOM_BYTES", 20), self.assertRaises(ValueError):
+                    menu_background.import_custom_background(addon, str(valid))
+                self.assertEqual(Path(saved).read_bytes(), before)
+                self.assertEqual(list(Path(addon.profile).rglob("*.tmp")), [])
+            state = {"menu_background_style": "custom", "menu_background_source": str(invalid) + ".gone"}
+            original = dict(state)
+            self.assertTrue(Path(menu_background.background_source(addon, state)).is_file())
+            self.assertEqual(state, original)
+
+    def test_picker_preselects_active_background_and_keeps_open_after_browser_cancel(self):
+        from lib.artwork_grid import ArtworkGridWindow
+
+        entries = [{"key": "theme", "label": "Match theme"},
+                   {"key": "custom", "label": "Custom…", "selected": True}]
+        handler = Mock(return_value=None)
+        window = object.__new__(ArtworkGridWindow)
+        ArtworkGridWindow.__init__(window, str(ROOT), "Menu Background", entries, "fanart", handler)
+        controls = {key: FakeControl() for key in (10, 100, 200)}
+        window.getControl = controls.__getitem__
+        window.setFocus = Mock()
+        window.close = Mock()
+        window.onInit()
+        self.assertEqual(controls[200].position, 1)
+        self.assertEqual(controls[200].items[1].properties["CuratrSelected"], "true")
+        window.onClick(200)
+        window.close.assert_not_called()
+        self.assertEqual(window.selected_index, -1)
+        handler.return_value = dict(entries[1], source="/profile/custom.png")
+        window.onClick(200)
+        window.close.assert_called_once()
+        self.assertEqual(window.selected_entry["source"], "/profile/custom.png")
+        for skin in ("Default",):
+            xml = ET.parse(ROOT / "resources/skins" / skin / "1080i/curatr-artwork-grid.xml")
+            selected = xml.find(".//control[@id='200']/itemlayout/control/visible")
+            self.assertIn("CuratrSelected", selected.text)
+
+    def test_background_selection_and_cancel_leave_lists_and_folders_untouched(self):
+        from lib import core
+
+        curator = InterfaceChecks.curator()
+        curator.state = {"ai_lists": [{"local_id": "saved", "movies": [{"title": "Keep"}]}],
+                         "widget_folders": [{"id": "folder", "entries": [{"local_id": "saved"}]}]}
+        original = copy.deepcopy(curator.state)
+        entries = [{"key": "theme"}, {"key": "custom"}]
+        with patch.object(core, "background_entries", return_value=entries), \
+             patch.object(core.xbmcgui, "Dialog") as dialog, \
+             patch.object(core, "choose_artwork") as picker:
+            dialog.return_value.browseSingle.return_value = ""
+            picker.side_effect = lambda *_args, **kwargs: kwargs["selection_handler"](entries[-1])
+            self.assertEqual(curator.choose_menu_background_interactive(), "theme")
+            self.assertEqual(curator.state, original)
+            curator._save_state.assert_not_called()
+            picker.side_effect = None
+            picker.return_value = {"key": "amber", "label": "Amber"}
+            self.assertEqual(curator.choose_menu_background_interactive(), "amber")
+            self.assertEqual(curator.state, dict(original, menu_background_style="amber"))
+            curator._save_state.assert_called_once()
+            curator._save_state.reset_mock()
+            self.assertEqual(curator.choose_menu_background_interactive(), "amber")
+            curator._save_state.assert_not_called()
+
+    def test_background_changes_refresh_only_an_open_curatr_directory(self):
+        from lib import view_refresh
+
+        state = {"menu_background_style": "theme", "ai_lists": []}
+        before = view_refresh.list_signature(state)
+        with patch.object(view_refresh.xbmc, "getInfoLabel", return_value="plugin.video.curatr", create=True), \
+             patch.object(view_refresh.xbmc, "executebuiltin") as execute:
+            self.assertFalse(view_refresh.refresh_if_changed(before, state))
+            state["menu_background_style"] = "amber"
+            self.assertTrue(view_refresh.refresh_if_changed(before, state))
+            execute.assert_called_once_with("Container.Refresh")
+            execute.reset_mock()
+            self.assertTrue(view_refresh.refresh_if_changed(view_refresh.list_signature(state), state, appearance_changed=True))
+            execute.assert_called_once_with("Container.Refresh")
+        with patch.object(view_refresh.xbmc, "getInfoLabel", return_value="", create=True), \
+             patch.object(view_refresh.xbmc, "executebuiltin") as execute:
+            view_refresh.refresh_if_changed(before, state)
+            execute.assert_not_called()
+
+    def test_plugin_theme_refresh_and_menu_art_preserve_item_overrides(self):
+        with tempfile.TemporaryDirectory() as folder:
+            install_kodi_stubs(folder)
+            sys.argv = ["plugin://plugin.video.curatr/", "1", ""]
+            sys.modules.pop("plugin", None)
+            plugin = importlib.import_module("plugin")
+            from lib import view_refresh
+
+            curator = Mock(state={"ai_lists": [], "widget_folders": []})
+            curator.open_settings.side_effect = lambda: plugin.ADDON.settings.update(interface_theme="ocean")
+            with patch.object(plugin.PLAYERS, "update_status"), \
+                 patch.object(view_refresh.xbmc, "getInfoLabel", return_value="plugin.video.curatr", create=True), \
+                 patch.object(view_refresh.xbmc, "executebuiltin") as execute:
+                plugin._run_command(curator, "settings")
+                execute.assert_called_once_with("Container.Refresh")
+                execute.reset_mock()
+                plugin._run_command(curator, "settings")
+                execute.assert_not_called()
+            plugin.MENU_BACKGROUND_SOURCE = plugin.background_source(plugin.ADDON, curator.state)
+            item = FakeListItem()
+            plugin._apply_menu_art(item, "menu_list.png")
+            self.assertEqual(item.art["fanart"], plugin.MENU_BACKGROUND_SOURCE)
+            self.assertNotEqual(item.art["landscape"], item.art["fanart"])
+            with Image.open(item.art["landscape"]) as image:
+                self.assertEqual(image.size, (960, 540))
+            override = FakeListItem()
+            plugin._apply_menu_art(override, "menu_list.png", {"fanart": "saved-fanart", "icon": "saved-icon"})
+            self.assertEqual(override.art["fanart"], "saved-fanart")
+            self.assertEqual(override.art["icon"], "saved-icon")
+
+
+class PaletteAndReleaseChecks(unittest.TestCase):
+    def test_settings_and_artwork_share_the_ordered_palette(self):
+        from lib.colours import COLOURS
+        from lib.ui_theme import background_palette, theme_palette, _relative_luminance, _rgb
+        xml = ET.parse(ROOT / "resources/settings.xml")
+        keys = list(COLOURS)
+        self.assertEqual(keys[-2:], ["slate", "grey"])
+        self.assertTrue({"red", "blue", "deep_blue", "grey"}.issubset(keys))
+        for setting in ("interface_primary_colour", "interface_secondary_colour", "interface_background_colour"):
+            options = xml.findall(".//setting[@id='%s']/constraints/options/option" % setting)
+            self.assertEqual([row.text for row in options], ["theme"] + keys)
+        addon = FakeAddon("", {"interface_custom_colours": "true"})
+        for key in keys:
+            addon.settings.update(interface_background_colour=key, interface_primary_colour=key)
+            self.assertEqual(background_palette(addon), COLOURS[key])
+            palette = theme_palette(addon)
+            self.assertGreaterEqual(1.05 / (_relative_luminance(_rgb(palette["CuratrPrimary"])) + 0.05), 4.5)
+            addon.settings["interface_light_mode"] = "true"
+            self.assertEqual(theme_palette(addon), palette)
+        self.assertIsNone(xml.find(".//setting[@id='interface_light_mode']"))
+        self.assertFalse((ROOT / "resources/skins/Light").exists())
+
+    def test_blank_artwork_uses_each_shared_background_without_composing(self):
+        from lib.bundled_art import COLOURS, components, rendered_source
+        from lib.core import Curator
+        from lib.list_art import normalise_state, resolved_sources
+        curator = object.__new__(Curator)
+        curator.addon = FakeAddon(TEST_PROFILE.name)
+        with patch("lib.bundled_art.write_png", side_effect=AssertionError("Blank artwork must reuse its base")):
+            for colour in COLOURS:
+                for kind, style in (("icon", "genre_colours"), ("fanart", "colour")):
+                    entries = curator._bundled_art_entries(kind, style, colour, layered=True)
+                    blank = entries[-1]
+                    self.assertEqual(blank["key"], "blank")
+                    self.assertFalse(blank["layered"])
+                    symbol, base, _palette = components(str(ROOT), "blank", kind, style, colour)
+                    self.assertEqual(symbol, "")
+                    self.assertEqual(blank["source"], base)
+                    self.assertEqual(rendered_source(str(ROOT), TEST_PROFILE.name, "blank", kind, style, colour), base)
+                    self.assertTrue(Path(base).is_file())
+            art = normalise_state({"icon_mode": "bundled", "icon_key": "blank", "icon_style": "genre_colours",
+                                   "icon_colour": "red", "fanart_mode": "bundled", "fanart_key": "blank",
+                                   "fanart_colour": "deep_blue"})
+            before = copy.deepcopy(art)
+            sources = resolved_sources(curator.addon, {"artwork": art})
+            self.assertTrue(sources["icon"].endswith("/icon/red.png"))
+            self.assertTrue(sources["fanart"].endswith("/fanart/deep_blue.png"))
+            self.assertEqual(art, before)
+        self.assertNotIn("blank", [row["key"] for row in curator._bundled_art_entries("icon", "white", layered=True)])
+
+    def test_saved_monochrome_selects_grey_without_exposing_a_second_style(self):
+        from lib.artwork_editor import ArtworkEditorWindow
+        from lib.core import Curator
+        from lib.list_art import normalise_state, resolved_sources
+        art = normalise_state({"fanart_mode": "bundled", "fanart_key": "comedy", "fanart_style": "monochrome"})
+        original = copy.deepcopy(art)
+        curator = object.__new__(Curator)
+        curator.addon = FakeAddon(TEST_PROFILE.name)
+        window = object.__new__(ArtworkEditorWindow)
+        ArtworkEditorWindow.__init__(window, str(ROOT), "Artwork", art, normalise_state({}),
+            lambda draft: resolved_sources(curator.addon, {"artwork": draft}),
+            lambda kind, source, style, colour: curator._bundled_art_entries(kind, style, colour, layered=True),
+            lambda _kind: None)
+        xml = ET.parse(ROOT / "resources/skins/Default/1080i/curatr-artwork-editor.xml")
+        controls = {int(row.get("id")): FakeControl() for row in xml.iter("control") if row.get("id")}
+        window.getControl = controls.__getitem__
+        window.setFocus = lambda _control: None
+        window.close = lambda: None
+        window.onInit()
+        window.onClick(101)
+        self.assertFalse(window.failed)
+        self.assertEqual(window.colour_by_tab["fanart"], "grey")
+        self.assertFalse(controls[301].visible)
+        self.assertFalse(controls[1301].visible)
+        self.assertFalse(controls[301].enabled)
+        self.assertEqual(controls[300].navigation[1], controls[310])
+        self.assertEqual(controls[310].navigation[1], controls[401])
+        self.assertEqual(controls[401].navigation[2:], (controls[500], controls[500]))
+        self.assertEqual([row.label for row in controls[401].items if row.properties["CuratrSelected"] == "true"], ["Comedy"])
+        window.onClick(502)
+        self.assertEqual(window.result, "cancel")
+        self.assertEqual(window.draft, original)
+        self.assertEqual(art, original)
+
+    def test_focus_frames_use_the_same_highlight_as_active_selectors(self):
+        folder = ROOT / "resources/skins/Default/1080i"
+        frames = 0
+        for path in folder.glob("*.xml"):
+            for control in ET.parse(path).iter("control"):
+                if control.get("type") != "image":
+                    continue
+                for texture in control.findall("texture"):
+                    tint = texture.get("colordiffuse", "")
+                    self.assertNotIn("CuratrSecondary", tint, str(path))
+                    if "CuratrPrimary" in tint:
+                        frames += 1
+                        self.assertEqual(control.findall("animation"), [])
+        self.assertGreater(frames, 0)
+
+    def test_new_branding_has_one_icon_and_no_information_page_fanart(self):
+        from lib.list_art import _current_source
+        from lib.menu_art import ADDON_ICON
+        addon = FakeAddon(TEST_PROFILE.name)
+        assets = ET.parse(ROOT / "addon.xml").find(".//assets")
+        self.assertEqual(assets.findtext("icon"), ADDON_ICON)
+        self.assertIsNone(assets.find("fanart"))
+        with Image.open(ROOT / ADDON_ICON) as icon:
+            self.assertEqual(icon.size, (512, 512))
+        for old in ("icon.png", "icon_addon_v2.png", "fanart.jpg", "fanart_addon_v2.jpg"):
+            self.assertFalse((ROOT / old).exists())
+            self.assertTrue(Path(_current_source(addon, "special://home/addons/plugin.video.curatr/" + old)).is_file())
+
+    def test_first_similar_search_adds_history_but_refreshes_replace_it(self):
+        install_kodi_stubs(TEST_PROFILE.name)
+        with patch.object(sys, "argv", ["plugin://plugin.video.curatr/", "1", ""]):
+            sys.modules.pop("plugin", None)
+            plugin = importlib.import_module("plugin")
+        curator = Mock()
+        reference = {"title": "Arrival", "ids": {"tmdb": 329865}}
+        curator.build_similar_preview.return_value = {"title": "Arrival", "reference": reference, "movies": []}
+        with patch.object(plugin, "_write_similar_preview", return_value="next"), patch.object(plugin, "_read_similar_preview", return_value={"reference": reference}), patch.object(plugin, "_add_folder"), patch.object(plugin, "_add_route_action"), patch.object(plugin, "_add_action"), patch.object(plugin.xbmcplugin, "endOfDirectory") as end:
+            plugin._similar_preview(curator, {"title": "Arrival", "tmdb_id": "329865", "method": "keyword"})
+            end.assert_called_with(1, updateListing=False, cacheToDisc=False)
+            for method in ("keyword", "ai", "keyword"):
+                plugin._similar_preview(curator, {"token": "previous", "method": method})
+                end.assert_called_with(1, updateListing=True, cacheToDisc=False)
+                self.assertEqual(curator.build_similar_preview.call_args.args, (reference,))
+
+    def test_repository_cleanup_is_idempotent_and_keeps_install_links(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            old_paths = ("BETA_TESTING.md", "curatr-0.23.9-beta25-complete-github.zip",
+                         "plugin.video.curatr-0.23.9-beta25-install.zip", "tools/generate_keyword_controls.py")
+            files = {path: "retired\n" for path in old_paths}
+            files.update({
+                "plugin.video.curatr/addon.xml": "current",
+                "tools/build_repo.py": "build script to keep",
+                ".github/workflows/publish-kodi-repo.yml": "workflow to keep",
+                "repository.curatr-1.0.1.zip": "installer to keep",
+                "repo/plugin.video.curatr/current.zip": "published content to keep",
+                "README.md": "# curatr\n\ncuratr is currently being prepared for its full release. Documentation will be added before launch.\n",
+                "index.html": '<a href="repository.curatr-1.0.1.zip">Install</a> to receive beta updates',
+                "repository.curatr/addon.xml": "The official Kodi repository for curatr beta releases.",
+                ".github/ISSUE_TEMPLATE/bug_report.yml": 'name: Beta bug report\ndescription: Report a reproducible curatr beta problem\ntitle: "[Beta] "\nlabels: ["bug", "beta"]\n',
+            })
+            for path, content in files.items():
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
+            def git(*args):
+                return subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True).stdout
+            git("init", "-q")
+            git("add", ".")
+            git("-c", "user.name=Release Check", "-c", "user.email=check@localhost", "commit", "-qm", "fixture")
+            script = str(ROOT / "tools/clean_repository.sh")
+            subprocess.run(["bash", script], cwd=root, check=True, capture_output=True)
+            staged = git("diff", "--cached")
+            for path in old_paths:
+                self.assertFalse((root / path).exists())
+            for path in ("tools/build_repo.py", ".github/workflows/publish-kodi-repo.yml", "repository.curatr-1.0.1.zip", "repo/plugin.video.curatr/current.zip"):
+                self.assertEqual((root / path).read_text(), files[path])
+            self.assertIn('href="repository.curatr-1.0.1.zip"', (root / "index.html").read_text())
+            for path in ("README.md", "index.html", "repository.curatr/addon.xml", ".github/ISSUE_TEMPLATE/bug_report.yml"):
+                self.assertNotIn("beta", (root / path).read_text().lower())
+            subprocess.run(["bash", script], cwd=root, check=True, capture_output=True)
+            self.assertEqual(git("diff", "--cached"), staged)
 
 
 if __name__ == "__main__":

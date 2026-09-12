@@ -1,6 +1,6 @@
 import xbmcgui
 
-from .ui_theme import skin_name
+from .ui_theme import bold, skin_name
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -57,9 +57,9 @@ class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
 
     def onInit(self):
         try:
-            self.getControl(10).setLabel(self.heading)
+            self.getControl(10).setLabel(bold(self.heading))
             self.getControl(11).setLabel(self.description)
-            self.getControl(self.CREATE_ID).setLabel(self.create_label)
+            self.getControl(self.CREATE_ID).setLabel(bold(self.create_label))
             self._refresh_entries()
             if self.entries:
                 self._open_actions(set_focus=False)
@@ -124,7 +124,7 @@ class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
         actions.addItems([self._list_item(row, action=True) for row in self.actions])
         actions.setVisible(True)
         actions.setEnabled(True)
-        self.getControl(self.ACTIVE_LABEL_ID).setLabel("Choose an action")
+        self.getControl(self.ACTIVE_LABEL_ID).setLabel(bold("Choose an action"))
         self.getControl(self.ACTIVE_HELP_ID).setLabel("")
         position = 0
         wanted = str(preferred_action or "")
@@ -149,7 +149,7 @@ class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
         actions.setEnabled(False)
         self.actions = []
         self.active_key = ""
-        self.getControl(self.ACTIVE_LABEL_ID).setLabel("Select an item")
+        self.getControl(self.ACTIVE_LABEL_ID).setLabel(bold("Select an item"))
         self.getControl(self.ACTIVE_HELP_ID).setLabel("")
         if set_focus:
             target = self.ENTRY_LIST_ID if self.entries else self.CREATE_ID

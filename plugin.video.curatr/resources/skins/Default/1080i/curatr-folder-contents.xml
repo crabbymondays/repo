@@ -1,141 +1,274 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <window type="dialog">
     <defaultcontrol always="true">100</defaultcontrol>
-    <coordinates><system>1</system><origin x="0" y="0" /></coordinates>
+    <coordinates>
+        <system>1</system>
+        <origin x="0" y="0" />
+    </coordinates>
     <controls>
         <control type="image">
-            <left>0</left><top>0</top><width>1920</width><height>1080</height>
+            <left>0</left>
+            <top>0</top>
+            <width>1920</width>
+            <height>1080</height>
             <texture colordiffuse="$INFO[Window(Home).Property(CuratrBackdrop)]">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
         </control>
         <control type="label" id="10">
-            <left>100</left><top>42</top><width>1720</width><height>58</height>
-            <font>font30</font><textcolor>FFFFFFFF</textcolor><align>center</align><label>Folder Contents</label>
+            <left>100</left>
+            <top>42</top>
+            <width>1720</width>
+            <height>58</height>
+            <font>font30</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <align>center</align>
+            <label>[B]Folder Contents[/B]</label>
+            <aligny>center</aligny>
         </control>
         <control type="label" id="11">
-            <left>140</left><top>102</top><width>1640</width><height>36</height>
-            <font>font13</font><textcolor>FFAAA6B2</textcolor><align>center</align><label>Choose an item to manage or add something new.</label>
+            <left>140</left>
+            <top>102</top>
+            <width>1640</width>
+            <height>36</height>
+            <font>font13</font>
+            <textcolor>FFAAA6B2</textcolor>
+            <align>center</align>
+            <label>Choose an item to manage or add something new.</label>
         </control>
         <control type="image">
-            <left>70</left><top>158</top><width>1780</width><height>790</height>
+            <left>70</left>
+            <top>158</top>
+            <width>1780</width>
+            <height>790</height>
             <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanel)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
         </control>
-
         <control type="panel" id="100">
-            <left>100</left><top>190</top><width>1245</width><height>700</height>
-            <onleft>100</onleft><onright>200</onright><onup>100</onup><ondown>300</ondown>
-            <pagecontrol>400</pagecontrol><scrolltime>180</scrolltime>
-            <itemlayout width="410" height="330">
+            <left>100</left>
+            <top>190</top>
+            <width>1245</width>
+            <height>700</height>
+            <onleft>100</onleft>
+            <onright>200</onright>
+            <onup>100</onup>
+            <ondown>300</ondown>
+            <pagecontrol>400</pagecontrol>
+            <scrolltime>180</scrolltime>
+            <itemlayout width="410" height="342">
                 <control type="image">
-                    <left>16</left><top>8</top><width>378</width><height>310</height>
+                    <left>16</left>
+                    <top>8</top>
+                    <width>378</width>
+                    <height>322</height>
                     <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
                 </control>
                 <control type="image">
-                    <left>94</left><top>28</top><width>222</width><height>222</height>
+                    <left>94</left>
+                    <top>28</top>
+                    <width>222</width>
+                    <height>222</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
                 </control>
                 <control type="image">
-                    <left>101</left><top>35</top><width>208</width><height>208</height>
+                    <left>101</left>
+                    <top>35</top>
+                    <width>208</width>
+                    <height>208</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="image">
-                    <left>101</left><top>35</top><width>208</width><height>208</height>
+                    <left>101</left>
+                    <top>35</top>
+                    <width>208</width>
+                    <height>208</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_mask_square_v2.png</texture>
                 </control>
                 <control type="label">
-                    <left>36</left><top>258</top><width>338</width><height>32</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align><label>$INFO[ListItem.Label]</label>
+                    <left>36</left>
+                    <top>258</top>
+                    <width>338</width>
+                    <height>32</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>center</align>
+                    <label>[B]$INFO[ListItem.Label][/B]</label>
                 </control>
                 <control type="label">
-                    <left>36</left><top>290</top><width>338</width><height>25</height>
-                    <font>font12</font><textcolor>FF9995A2</textcolor><align>center</align><label>$INFO[ListItem.Property(CuratrDetail)]</label>
+                    <left>36</left>
+                    <top>302</top>
+                    <width>338</width>
+                    <height>25</height>
+                    <font>font12</font>
+                    <textcolor>FF9995A2</textcolor>
+                    <align>center</align>
+                    <label>$INFO[ListItem.Property(CuratrDetail)]</label>
                 </control>
             </itemlayout>
-            <focusedlayout width="410" height="330">
+            <focusedlayout width="410" height="342">
                 <control type="image">
-                    <left>10</left><top>2</top><width>390</width><height>322</height>
-                    <texture border="20" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
+                    <left>10</left>
+                    <top>2</top>
+                    <width>390</width>
+                    <height>334</height>
+                    <texture border="20" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
                 </control>
                 <control type="image">
-                    <left>16</left><top>8</top><width>378</width><height>310</height>
+                    <left>16</left>
+                    <top>8</top>
+                    <width>378</width>
+                    <height>322</height>
                     <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
                 </control>
                 <control type="image">
-                    <left>94</left><top>28</top><width>222</width><height>222</height>
+                    <left>94</left>
+                    <top>28</top>
+                    <width>222</width>
+                    <height>222</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
                 </control>
                 <control type="image">
-                    <left>101</left><top>35</top><width>208</width><height>208</height>
+                    <left>101</left>
+                    <top>35</top>
+                    <width>208</width>
+                    <height>208</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="image">
-                    <left>101</left><top>35</top><width>208</width><height>208</height>
+                    <left>101</left>
+                    <top>35</top>
+                    <width>208</width>
+                    <height>208</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_mask_square_v2.png</texture>
                 </control>
                 <control type="label">
-                    <left>36</left><top>258</top><width>338</width><height>32</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align><label>[B]$INFO[ListItem.Label][/B]</label>
+                    <left>36</left>
+                    <top>258</top>
+                    <width>338</width>
+                    <height>32</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>center</align>
+                    <label>[B]$INFO[ListItem.Label][/B]</label>
                 </control>
                 <control type="label">
-                    <left>36</left><top>290</top><width>338</width><height>25</height>
-                    <font>font12</font><textcolor>FFD0CCD8</textcolor><align>center</align><label>$INFO[ListItem.Property(CuratrDetail)]</label>
+                    <left>36</left>
+                    <top>302</top>
+                    <width>338</width>
+                    <height>25</height>
+                    <font>font12</font>
+                    <textcolor>FFD0CCD8</textcolor>
+                    <align>center</align>
+                    <label>$INFO[ListItem.Property(CuratrDetail)]</label>
                 </control>
             </focusedlayout>
         </control>
-
         <control type="image">
-            <left>1375</left><top>190</top><width>440</width><height>700</height>
+            <left>1375</left>
+            <top>190</top>
+            <width>440</width>
+            <height>700</height>
             <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelMedium)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
         </control>
         <control type="label" id="20">
-            <left>1400</left><top>220</top><width>390</width><height>46</height>
-            <font>font20</font><textcolor>FFFFFFFF</textcolor><align>center</align><label>Folder Contents</label>
+            <left>1400</left>
+            <top>220</top>
+            <width>390</width>
+            <height>46</height>
+            <font>font20</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <align>center</align>
+            <label>Folder Contents</label>
         </control>
         <control type="label" id="21">
-            <left>1400</left><top>268</top><width>390</width><height>52</height>
-            <font>font12</font><textcolor>FFAAA6B2</textcolor><align>center</align><wrapmultiline>true</wrapmultiline>
-            <label></label><visible>false</visible>
+            <left>1400</left>
+            <top>268</top>
+            <width>390</width>
+            <height>52</height>
+            <font>font12</font>
+            <textcolor>FFAAA6B2</textcolor>
+            <align>center</align>
+            <wrapmultiline>true</wrapmultiline>
+            <label />
+            <visible>false</visible>
         </control>
         <control type="list" id="200">
-            <left>1395</left><top>300</top><width>400</width><height>555</height>
-            <onleft>100</onleft><onright>200</onright><onup>200</onup><ondown>200</ondown>
+            <left>1395</left>
+            <top>300</top>
+            <width>400</width>
+            <height>555</height>
+            <onleft>100</onleft>
+            <onright>200</onright>
+            <onup>200</onup>
+            <ondown>200</ondown>
             <scrolltime>150</scrolltime>
             <itemlayout width="400" height="62">
                 <control type="image">
-                    <left>5</left><top>4</top><width>390</width><height>54</height>
+                    <left>5</left>
+                    <top>4</top>
+                    <width>390</width>
+                    <height>54</height>
                     <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
                 </control>
                 <control type="label">
-                    <left>22</left><top>4</top><width>356</width><height>54</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><aligny>center</aligny><label>$INFO[ListItem.Label]</label>
+                    <left>22</left>
+                    <top>4</top>
+                    <width>356</width>
+                    <height>54</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <aligny>center</aligny>
+                    <label>$INFO[ListItem.Label]</label>
                 </control>
             </itemlayout>
             <focusedlayout width="400" height="62">
                 <control type="image">
-                    <left>5</left><top>4</top><width>390</width><height>54</height>
+                    <left>5</left>
+                    <top>4</top>
+                    <width>390</width>
+                    <height>54</height>
                     <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
                 </control>
                 <control type="label">
-                    <left>22</left><top>4</top><width>356</width><height>54</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><aligny>center</aligny><label>[B]$INFO[ListItem.Label][/B]</label>
+                    <left>22</left>
+                    <top>4</top>
+                    <width>356</width>
+                    <height>54</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <aligny>center</aligny>
+                    <label>[B]$INFO[ListItem.Label][/B]</label>
                 </control>
             </focusedlayout>
         </control>
-
         <control type="button" id="300">
-            <left>740</left><top>965</top><width>440</width><height>78</height><label>Close</label>
-            <font>font13</font>
-            <textcolor>FFE2DEE8</textcolor><focusedcolor>FFFFFFFF</focusedcolor><align>center</align><aligny>center</aligny><onleft>300</onleft><onright>300</onright><onup>100</onup><ondown>300</ondown>
+            <left>740</left>
+            <top>965</top>
+            <width>440</width>
+            <height>78</height>
+            <label>[B]Close[/B]</label>
+            <font>font20</font>
+            <textcolor>FFE2DEE8</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <aligny>center</aligny>
+            <onleft>300</onleft>
+            <onright>300</onright>
+            <onup>100</onup>
+            <ondown>300</ondown>
             <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrDanger)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
             <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
         </control>
         <control type="scrollbar" id="400">
-            <left>1340</left><top>205</top><width>12</width><height>670</height><orientation>vertical</orientation><showonepage>false</showonepage>
+            <left>1340</left>
+            <top>205</top>
+            <width>12</width>
+            <height>670</height>
+            <orientation>vertical</orientation>
+            <showonepage>false</showonepage>
         </control>
     </controls>
 </window>

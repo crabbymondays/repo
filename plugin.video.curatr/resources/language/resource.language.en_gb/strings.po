@@ -474,7 +474,7 @@ msgid "Later"
 msgstr ""
 
 msgctxt "#32410"
-msgid "My Lists"
+msgid "Lists"
 msgstr ""
 
 msgctxt "#32411"
@@ -506,7 +506,7 @@ msgid "Set up services, defaults, appearance and notifications."
 msgstr ""
 
 msgctxt "#32418"
-msgid "Browse My Lists"
+msgid "My Lists"
 msgstr ""
 
 msgctxt "#32419"
@@ -757,14 +757,6 @@ msgctxt "#32835"
 msgid "Amber"
 msgstr ""
 
-msgctxt "#32836"
-msgid "Light mode"
-msgstr ""
-
-msgctxt "#32837"
-msgid "Use pale surfaces and dark text in curatr's custom windows."
-msgstr ""
-
 msgctxt "#32838"
 msgid "Custom colours"
 msgstr ""
@@ -786,7 +778,7 @@ msgid "Secondary highlight colour"
 msgstr ""
 
 msgctxt "#32843"
-msgid "Choose the supporting focus and selection colour."
+msgid "Choose the highlight colour for secondary actions."
 msgstr ""
 
 msgctxt "#32844"
@@ -854,7 +846,7 @@ msgid "Choose Menu Background"
 msgstr ""
 
 msgctxt "#32607"
-msgid "Open a visual picker for the background shown while browsing curatr menus."
+msgid "Match your theme, choose a soft gradient colour, or use a custom image while browsing curatr menus."
 msgstr ""
 
 msgctxt "#32608"
@@ -971,4 +963,104 @@ msgstr ""
 
 msgctxt "#32716"
 msgid "Find compatible video add-ons already installed on this device. This does not install new add-ons."
+msgstr ""
+
+msgctxt "#32900"
+msgid "Red"
+msgstr ""
+
+msgctxt "#32901"
+msgid "Peach"
+msgstr ""
+
+msgctxt "#32902"
+msgid "Amber"
+msgstr ""
+
+msgctxt "#32903"
+msgid "Sand"
+msgstr ""
+
+msgctxt "#32904"
+msgid "Gold"
+msgstr ""
+
+msgctxt "#32905"
+msgid "Green"
+msgstr ""
+
+msgctxt "#32906"
+msgid "Sage"
+msgstr ""
+
+msgctxt "#32907"
+msgid "Teal"
+msgstr ""
+
+msgctxt "#32908"
+msgid "Turquoise"
+msgstr ""
+
+msgctxt "#32909"
+msgid "Cyan"
+msgstr ""
+
+msgctxt "#32910"
+msgid "Steel Blue"
+msgstr ""
+
+msgctxt "#32911"
+msgid "Azure"
+msgstr ""
+
+msgctxt "#32912"
+msgid "Deep Blue"
+msgstr ""
+
+msgctxt "#32913"
+msgid "Blue"
+msgstr ""
+
+msgctxt "#32914"
+msgid "Periwinkle"
+msgstr ""
+
+msgctxt "#32915"
+msgid "Lilac"
+msgstr ""
+
+msgctxt "#32916"
+msgid "Deep Violet"
+msgstr ""
+
+msgctxt "#32917"
+msgid "Violet"
+msgstr ""
+
+msgctxt "#32918"
+msgid "Plum"
+msgstr ""
+
+msgctxt "#32919"
+msgid "Mauve"
+msgstr ""
+
+msgctxt "#32920"
+msgid "Pink"
+msgstr ""
+
+msgctxt "#32921"
+msgid "Berry"
+msgstr ""
+
+msgctxt "#32922"
+msgid "Rose"
+msgstr ""
+
+msgctxt "#32923"
+msgid "Slate"
+msgstr ""
+
+msgctxt "#32924"
+msgid "Grey"
 msgstr ""

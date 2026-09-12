@@ -2,6 +2,7 @@
 """Build bundled genre artwork. Requires Pillow and CairoSVG; never runs in Kodi."""
 
 import argparse
+import sys
 from io import BytesIO
 from pathlib import Path
 
@@ -9,10 +10,11 @@ import cairosvg
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-BUNDLE = "v5"
+sys.path.insert(0, str(ROOT))
+from lib.bundled_art import BUNDLE, COLOURS, write_png
 
-# Render white geometry and black cutouts into one alpha mask. All four styles
-# reuse that mask, so cutouts and padding remain identical without runtime SVGs.
+# Render white geometry and black cutouts into one alpha mask, reused by
+# square and landscape artwork without runtime SVG support.
 ICONS = {
     "action": '''<path d="M50 7 61 36 81 23 73 49 93 54 73 68 79 87 59 80 55 65 65 60 57 57 62 46 52 51 49 38 44 52 35 47 38 59 30 62 40 67 44 84 19 88 26 69 7 55 29 51 19 24 39 36Z" stroke="white" stroke-width="2" stroke-linejoin="round"/>''',
     "crime": '''<g fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round">
@@ -39,24 +41,26 @@ ICONS = {
     "animation": '''<g transform="rotate(-43 39 43)">
       <path d="M31 16Q31 11 36 11H42Q47 11 47 16V23H31Z"/>
       <path d="M31 27H47V65H31Z"/><path d="M31 69H47L39 87Z"/></g>
-      <path d="M12 81C12 96 48 90 72 77" fill="none" stroke="white" stroke-width="5" stroke-linecap="round"/>
+      <path d="M12 81C12 96 48 90 72 75" fill="none" stroke="white" stroke-width="5" stroke-linecap="round"/>
       <path d="M85 62 89 71 98 75 89 79 85 88 81 79 72 75 81 71Z"/>''',
-    "sci_fi": '''<path d="M35 57C46 32 61 16 86 12C85 39 69 58 47 71Q41 71 35 64Z"/>
-      <circle cx="65" cy="34" r="7.5" fill="black"/>
-      <path d="M40 39C28 37 17 47 14 63L29 60ZM60 65C61 77 51 88 37 90L41 75Z"/>
-      <path d="M29 69C16 68 11 83 11 92C21 91 35 83 34 75Q33 70 29 69Z"/>''',
+    "sci_fi": '''<g transform="rotate(42 50 50)">
+      <path d="M50 7C64 18 70 37 65 65Q63 70 60 73H40Q37 70 35 65C30 37 36 18 50 7Z"/>
+      <circle cx="50" cy="35" r="7.5" fill="black"/>
+      <path d="M29 42C20 47 17 59 19 72L29 64Z"/>
+      <path d="M29 42C20 47 17 59 19 72L29 64Z" transform="translate(100 0) scale(-1 1)"/>
+      <path d="M43 79H57C61 91 52 96 50 99C48 96 39 91 43 79Z"/></g>''',
     "fantasy": '''<path d="M12 37C26 33 41 38 48 45V84C38 77 25 75 12 77ZM52 45C59 38 74 33 88 37V77C75 75 62 77 52 84Z"/>
       <path d="M6 46V87Q27 83 43 88M94 46V87Q73 83 57 88" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M50 9C60 22 39 21 50 35C30 24 53 20 50 9Z"/>''',
-    "comedy": '''<path d="M22 16Q50 23 78 16Q83 15 83 21C83 62 70 85 50 91C30 85 17 62 17 21Q17 15 22 16Z"/>
+    "comedy": '''<path d="M24 18Q50 25 76 18Q82 16 82 23C82 59 69 81 54 88Q50 90 46 88C31 81 18 59 18 23Q18 16 24 18Z"/>
       <path d="M31 40Q36 47 42 40M58 40Q64 47 69 40" fill="none" stroke="black" stroke-width="7" stroke-linecap="round"/>
       <path d="M36 58Q50 65 64 58Q68 56 67 62C63 82 37 82 33 62Q32 56 36 58Z" fill="black"/>''',
     "drama": '''<g transform="translate(35 25) rotate(11 29 29) scale(.67)">
-      <path d="M22 16Q50 23 78 16Q83 15 83 21C83 62 70 85 50 91C30 85 17 62 17 21Q17 15 22 16Z"/>
+      <path d="M24 18Q50 25 76 18Q82 16 82 23C82 59 69 81 54 88Q50 90 46 88C31 81 18 59 18 23Q18 16 24 18Z"/>
       <path d="M31 40Q36 47 42 40M58 40Q64 47 69 40" fill="none" stroke="black" stroke-width="7" stroke-linecap="round"/>
       <path d="M34 71C35 52 65 52 66 71Q66 75 62 73Q50 66 38 73Q34 75 34 71Z" fill="black"/>
       </g><g transform="translate(-1 -1) rotate(-12 40 42) scale(.74)">
-      <path d="M22 16Q50 23 78 16Q83 15 83 21C83 62 70 85 50 91C30 85 17 62 17 21Q17 15 22 16Z" stroke="black" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M24 18Q50 25 76 18Q82 16 82 23C82 59 69 81 54 88Q50 90 46 88C31 81 18 59 18 23Q18 16 24 18Z" stroke="black" stroke-width="7" stroke-linejoin="round"/>
       <path d="M31 40Q36 47 42 40M58 40Q64 47 69 40" fill="none" stroke="black" stroke-width="7" stroke-linecap="round"/>
       <path d="M36 58Q50 65 64 58Q68 56 67 62C63 82 37 82 33 62Q32 56 36 58Z" fill="black"/></g>''',
     "romance": '''<path d="M50 89C43 84 9 57 9 34C9 11 36 6 50 24C64 6 91 11 91 34C91 57 57 84 50 89Z"/>''',
@@ -77,19 +81,7 @@ ICONS = {
       <path d="M28 62 27 70Q27 74 31 75L42 78Q47 79 48 74L50 69" fill="none" stroke="white" stroke-width="6" stroke-linejoin="round"/>''',
 }
 
-PALETTES = {
-    "action": ("F2B45A", "B95D36", "573C38"), "crime": ("45CBCD", "0E8190", "194D5C"),
-    "horror": ("BA667A", "713B53", "433846"), "thriller": ("79AABC", "3F6C8B", "333F59"),
-    "mystery": ("949ED2", "626691", "414059"), "mind_bending": ("B08DE0", "7359AA", "483D64"),
-    "animation": ("F1B574", "CC7876", "755668"), "sci_fi": ("849FEC", "506DC0", "394D7B"),
-    "fantasy": ("B4A1DE", "8A68B5", "504163"), "comedy": ("E7C66D", "B99943", "666046"),
-    "drama": ("C88CA9", "9A597D", "573F59"), "romance": ("EFA2B5", "C57292", "794B6E"),
-    "western": ("CEA173", "9F774E", "605042"), "documentary": ("8BB8A7", "5C8C7E", "3D5A55"),
-    "superhero": ("7FADD3", "4B7C9F", "37546B"), "actor": ("C5ACC9", "937C9D", "595064"),
-    "director": ("A9BCC8", "788F9C", "4B606B"),
-}
-# Grey uses its own endpoints instead of desaturating a near-black background.
-MONOCHROME = ("797979", "555555", "3C3C3C")
+GENERAL_ICONS = {"list": "list-ul", "folder": "folder-open", "movie": "film", "tv": "tv"}
 
 
 def raster(svg, width, height):
@@ -131,26 +123,31 @@ def background(palette, fanart=False):
 
 
 def build(destination):
-    for name in ("white", "colour", "fanart", "monochrome"):
-        (destination / name).mkdir(parents=True, exist_ok=True)
-    grey = background(MONOCHROME, fanart=True)
-    for key in ICONS:
-        mask = glyph_mask(key)
+    masks = {key: glyph_mask(key) for key in ICONS}
+    for key, name in GENERAL_ICONS.items():
+        svg = (ROOT / "tools/icon_sources/fontawesome-7.0.1" / (name + ".svg")).read_text()
+        image = raster(svg.replace("currentColor", "white"), 1200, 1200)
+        mask = image.getchannel("A")
+        masks[key] = mask.crop(mask.getbbox())
+    for key, mask in masks.items():
         white = Image.new("RGBA", (512, 512), (255, 255, 255, 0))
         alpha = Image.new("L", (512, 512))
         shape = fitted_mask(mask, 340)
         alpha.paste(shape, ((512 - shape.width) // 2, (512 - shape.height) // 2))
         white.putalpha(alpha)
-        white.save(destination / "white" / (key + ".png"), optimize=True)
-        colour = background(PALETTES[key])
-        colour.paste(white, (0, 0), white)
-        colour.save(destination / "colour" / (key + ".png"), optimize=True)
+        write_png(destination / "white" / (key + ".png"), 512, 512, 4, white.tobytes())
         shape = fitted_mask(mask, 370)
-        position = (round(1510 - shape.width / 2), round(540 - shape.height / 2))
-        for style, image in (("fanart", background(PALETTES[key], fanart=True)), ("monochrome", grey.copy())):
-            image.paste((255, 255, 255), position, shape)
-            image.save(destination / style / (key + ".jpg"), quality=90, subsampling=0, optimize=True)
-    print(f"Built {len(ICONS) * 4} images in {destination}")
+        wide = Image.new("RGBA", (1920, 1080), (255, 255, 255, 0))
+        alpha = Image.new("L", wide.size)
+        alpha.paste(shape, (round(1510 - shape.width / 2), round(540 - shape.height / 2)))
+        wide.putalpha(alpha)
+        write_png(destination / "landscape" / (key + ".png"), wide.width, wide.height, 4, wide.tobytes())
+    for name, palette in COLOURS.items():
+        for kind in ("icon", "fanart"):
+            image = background(palette, fanart=kind == "fanart")
+            write_png(destination / "backgrounds" / kind / (name + ".png"),
+                      image.width, image.height, 3, image.tobytes())
+    print(f"Built {len(masks)} symbols and {len(COLOURS)} shared palettes in {destination}")
 
 
 if __name__ == "__main__":

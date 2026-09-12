@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.0.24
+
+- Applied the new add-on icon with a fresh asset filename and removed the old add-on information-page fanart pending a replacement.
+- Unified artwork, menu-background and window colour choices into one 25-colour palette. Colours follow rainbow order, with Slate and Grey at the end; Deep Blue, Deep Violet, Red, Cyan, Teal, Green and Pink are available throughout.
+- Added a final Blank tile to coloured icons and fanart. It reuses the selected background without creating another set of assets.
+- Removed Monochrome from the fanart picker. Grey is available in the colour row; saved monochrome artwork remains readable.
+- Removed light mode, its setting, layouts and rendering branches. Existing light-mode preferences are ignored so custom windows open normally after upgrading.
+- Matched artwork and folder selection borders to the main highlight colour, including the active selectors above them.
+- Changed Find Similar refreshes and method switches to replace the current directory listing. Back returns to the preceding screen rather than stepping through previous result sets.
+- Reused the exact fanart background files for menu backgrounds, removed superseded artwork and the separate menu-gradient builder, and retained compatibility for saved references to older assets.
+- Included a Termux cleanup helper for the hosting repository's old testing guide, release archives and unused control generator. It updates the repository description, download page, issue template and README to remove obsolete pre-release wording.
+
+## 1.0.23
+
+- Added Match theme, eleven soft gradient colours and a final Custom… tile to the menu background picker. Match theme follows the interface background tint; gradient choices retain their hue in light mode.
+- Preserved explicitly saved backgrounds from earlier releases and selected the active background when opening the picker.
+- Reused the flowing fanart geometry in one shared greyscale template. Python applies colours and caches completed images; picker previews use smaller images and require no extra Kodi dependency.
+- Copied custom PNG, JPG and WebP backgrounds into Curatr's data folder, so removing the original download does not break the selection. Cancelling the file browser returns to the picker without saving changes.
+- Refreshed an open Curatr directory after a background or matching theme change, without reloading the skin or moving to the home screen. List and folder storage is unchanged.
+
+## 1.0.22
+
+- Restored tag-coloured focus for keyword remove/edit controls, tightened the gap between minus and label, and kept Plus neutral in light and dark modes.
+- Moved Edit Filters / Done beside Looking for with normal-weight text, a transparent resting background and a neutral focus state.
+- Used Save for keyword edits within an existing list, while retaining Use Filters during new-list configuration. Cancelling the parent settings window still leaves the saved list untouched.
+- Renamed the main My Lists section to Lists and Browse My Lists to My Lists. Centred the browse magnifier inside its badge and retained consistent badge alignment with Create a New List.
+- Renamed preview actions to Refresh Results and Switch Method. Their descriptions identify the method that will be used; switching keeps the same reference item.
+- Added the selected Font Awesome shuffle, heart-pulse, fingerprint and file-lines designs for Switch Method, Preferences & Activity, View My Preferences and Add To New List respectively.
+- Versioned the square and landscape menu bundle together, removed the superseded menu files and retained compatibility with saved links to older bundled artwork.
+
+## 1.0.21
+
+- Applied the selected Font Awesome Classic Solid icons to Privacy, Hidden, AI Usage, Recent Activity, Refresh, Latest Picks, Surprise Me, Saved Prompts, Quick Pick, All Picks, Backup & Restore and folder actions. Browse My Lists and Create a List share a page design, padding and aligned circular badges.
+- Added List, Folder, Movie and TV Show artwork alongside the 17 existing genre and people symbols. Every built-in symbol supports 18 background colours for square artwork and fanart, with a single row of colour swatches in the artwork picker.
+- Reused shared backgrounds and transparent shapes in the picker. Finished images are composed on demand using Python's standard library and cached for Kodi skins and widgets; no new Kodi dependency is required.
+- Softened the Comedy and Drama mask corners, aligned Animation's star and corrected the rocket's wing symmetry. Kept monochrome fanart dark grey.
+- Kept selected tabs coloured behind native Kodi dialogs with control-owned colours. Made the keyword panel charcoal in dark mode and light grey in light mode, retained coloured tags, replaced the old transparent hit texture and widened Edit Filters / Done.
+- Strengthened custom-window headings and bottom action labels, with more space between item titles and details across the list and folder interfaces.
+- Focused the first item in Manage Contents on opening, retained its focus border and kept its action pane in sync while navigating. Omitted deleted local-list references from folder views and counts; Manage Folders now labels those lists as local.
+- Versioned both artwork bundles, removed superseded files and retained compatibility with saved artwork choices and old bundled paths. Stored lists, folders and recovery data are not migrated or reset.
+
+## 1.0.20
+
+- Restored the original menu artwork, including My Lists, Usage, Activity and folder actions. Retained the 1.0.19 Browse My Lists, Hidden and Backup & Restore designs.
+- Matched every menu glyph to the genre icons' 340-pixel visible bounds on a 512-pixel square canvas, preserving proportions and centred padding. Updated landscape widget images from the same shapes.
+- Versioned the menu bundle again and omitted the superseded v6 images and unused redesign geometry from release packages. Local shortcuts to retired menu paths resolve to the current bundle.
+- Preserved the keyword editor, active-tab highlights, themes and other behaviour from 1.0.19.
+
 ## 1.0.19
 
 - Restyled menu icons to match the coordinated genre family, retaining the existing concepts and the approved My Lists, Browse My Lists, three-bar Usage/Activity, file-based Backup & Restore and folder-management designs.

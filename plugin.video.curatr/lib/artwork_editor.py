@@ -1,6 +1,7 @@
 import xbmcgui
 
-from .ui_theme import skin_name, style_tab
+from .ui_theme import bold, skin_name, style_tab, show_tab
+from .bundled_art import COLOURS, colour_label, normalise_colour
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -10,6 +11,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
     TAB_IDS = {100: "icon", 101: "fanart"}
     SOURCE_IDS = (200, 201, 202, 203, 204)
     STYLE_IDS = (300, 301)
+    COLOUR_ID = 310
     GRID_IDS = {"icon": 400, "fanart": 401}
     SAVE_ID = 500
     RESET_ID = 501
@@ -43,8 +45,14 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         self.source_by_tab = {"icon": "curatr", "fanart": "curatr"}
         self.style_by_tab = {
             "icon": str(self.draft.get("icon_style") or "white"),
-            "fanart": str(self.draft.get("fanart_style") or "colour"),
+            "fanart": "colour",
         }
+        self.colour_by_tab = {
+            kind: normalise_colour(self.draft.get(kind + "_colour")) for kind in ("icon", "fanart")
+        }
+        if self.draft.get("fanart_style") == "monochrome":
+            self.colour_by_tab["fanart"] = "grey"
+        self.colour_keys = ["default"] + list(COLOURS)
         self.grid_entries = []
         self.grid_source = ""
         self.in_grid = False
@@ -66,7 +74,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
     def _style_rows(self):
         if self.tab == "icon":
             return (("white", "White"), ("genre_colours", "Colours"))
-        return (("colour", "Colour"), ("monochrome", "Monochrome"))
+        return (("colour", "Colours"),)
 
     @staticmethod
     def _grid_item(row, selected=False):
@@ -75,11 +83,13 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         if source:
             item.setArt({"icon": source, "thumb": source})
         item.setProperty("CuratrSelected", "true" if selected else "false")
+        item.setProperty("CuratrLayered", "true" if row.get("layered") else "false")
+        item.setProperty("CuratrBackground", str(row.get("background") or ""))
         return item
 
     def onInit(self):
         try:
-            self.getControl(10).setLabel(self.heading)
+            self.getControl(10).setLabel(bold(self.heading))
             self._show_tab("icon", load_saved=True)
             self.setFocus(self.getControl(100))
         except Exception:
@@ -107,8 +117,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         for index, control_id in enumerate(self.SOURCE_IDS):
             control = self.getControl(control_id)
             visible = index < len(self.sources)
-            control.setVisible(visible)
-            control.setEnabled(visible)
+            show_tab(self, control_id, visible)
             if visible:
                 key, label = self.sources[index]
                 style_tab(self, control_id, label, key == source)
@@ -117,10 +126,12 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         active_style = self.style_by_tab[self.tab]
         for index, control_id in enumerate(self.STYLE_IDS):
             control = self.getControl(control_id)
-            control.setVisible(show_style)
-            control.setEnabled(show_style)
+            show_tab(self, control_id, show_style and index < len(style_rows))
+            if index >= len(style_rows):
+                continue
             key, label = style_rows[index]
             style_tab(self, control_id, label, key == active_style)
+        self._show_colours()
         if load_saved and source == "curatr":
             self._load_grid("curatr", focus=False)
         else:
@@ -134,6 +145,44 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             index for index, row in enumerate(self.sources) if row[0] == wanted
         ), 0)
         return self.getControl(self.SOURCE_IDS[index])
+
+    def _colours_visible(self):
+        return (self.source_by_tab.get(self.tab) == "curatr"
+                and self.style_by_tab[self.tab] in ("genre_colours", "colour"))
+
+    def _show_colours(self):
+        control = self.getControl(self.COLOUR_ID)
+        visible = self._colours_visible()
+        control.setVisible(visible)
+        control.setEnabled(visible)
+        self.getControl(311).setVisible(visible)
+        if not visible:
+            return
+        control.reset()
+        selected = self.colour_by_tab[self.tab]
+        items = []
+        for key in self.colour_keys:
+            item = xbmcgui.ListItem(label="Original" if key == "default" else colour_label(key), offscreen=True)
+            item.setProperty("CuratrColour", "FF" + COLOURS.get(key, ("888888", "888888", "888888"))[1])
+            item.setProperty("CuratrSelected", "true" if key == selected else "false")
+            item.setProperty("CuratrOriginal", "true" if key == "default" else "false")
+            items.append(item)
+        control.addItems(items)
+        control.selectItem(self.colour_keys.index(selected))
+
+    def _choose_colour(self):
+        position = self.getControl(self.COLOUR_ID).getSelectedPosition()
+        if not 0 <= position < len(self.colour_keys):
+            return
+        colour = self.colour_keys[position]
+        self.colour_by_tab[self.tab] = colour
+        self.draft[self.tab + "_colour"] = colour
+        if self.tab == "fanart":
+            self.draft["fanart_style"] = "colour"
+        self._load_grid("curatr", focus=False)
+        self._show_colours()
+        self._update_preview()
+        self.setFocus(self.getControl(self.COLOUR_ID))
 
     def _active_grid(self):
         return self.getControl(self.GRID_IDS[self.tab])
@@ -173,13 +222,18 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         if source == "curatr":
             key = str(self.draft.get(self.tab + "_key") or "")
             style = str(self.draft.get(self.tab + "_style") or "")
-            return mode == "bundled" and str(row.get("key") or "") == key and style == self.style_by_tab[self.tab]
+            colour = self.draft.get(self.tab + "_colour", "default")
+            if self.tab == "fanart" and style == "monochrome":
+                style, colour = "colour", "grey"
+            return (mode == "bundled" and str(row.get("key") or "") == key
+                    and style == self.style_by_tab[self.tab]
+                    and colour == self.colour_by_tab[self.tab])
         return str(row.get("source") or "") == str(self.draft.get(self.tab + "_source") or "")
 
     def _load_grid(self, source, focus=True):
         try:
             rows = self.choice_provider(
-                self.tab, source, self.style_by_tab[self.tab]
+                self.tab, source, self.style_by_tab[self.tab], self.colour_by_tab[self.tab]
             ) or []
         except Exception as exc:
             xbmcgui.Dialog().ok("curatr", str(exc))
@@ -223,9 +277,11 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             mode = str(self.draft.get("fanart_mode") or "auto")
             if mode == "auto":
                 self._set_icon("auto", style="white")
+                self.draft["icon_colour"] = self.colour_by_tab["icon"] = self.colour_by_tab["fanart"]
             elif mode == "bundled":
                 style = "genre_colours" if self.draft.get("fanart_style") == "colour" else "white"
                 self._set_icon("bundled", key=self.draft.get("fanart_key"), style=style)
+                self.draft["icon_colour"] = self.colour_by_tab["icon"] = self.colour_by_tab["fanart"]
             elif mode in ("item", "person", "custom") and self.draft.get("fanart_source"):
                 self._set_icon(
                     "person" if mode == "person" else "custom",
@@ -240,9 +296,11 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         mode = str(self.draft.get("icon_mode") or "auto")
         if mode == "auto":
             self._set_fanart("auto")
+            self.draft["fanart_colour"] = self.colour_by_tab["fanart"] = self.colour_by_tab["icon"]
         elif mode == "bundled":
-            style = "colour" if self.draft.get("icon_style") == "genre_colours" else "monochrome"
-            self._set_fanart("bundled", key=self.draft.get("icon_key"), style=style)
+            self._set_fanart("bundled", key=self.draft.get("icon_key"), style="colour")
+            colour = self.colour_by_tab["icon"] if self.draft.get("icon_style") == "genre_colours" else "grey"
+            self.draft["fanart_colour"] = self.colour_by_tab["fanart"] = colour
         elif mode in ("person", "custom") and self.draft.get("icon_source"):
             self._set_fanart(
                 "person" if mode == "person" else "custom",
@@ -300,16 +358,22 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             key, label = self.sources[index]
             style_tab(self, control_id, label, key == source)
         show_style = source == "curatr"
-        for control_id in self.STYLE_IDS:
-            self.getControl(control_id).setVisible(show_style)
-            self.getControl(control_id).setEnabled(show_style)
+        for index, control_id in enumerate(self.STYLE_IDS):
+            show_tab(self, control_id, show_style and index < len(self._style_rows()))
+        self._show_colours()
         self._update_preview()
         self._wire_navigation()
 
     def _choose_style(self, control_id):
         index = self.STYLE_IDS.index(control_id)
+        if index >= len(self._style_rows()):
+            return
         style, _label = self._style_rows()[index]
         self.style_by_tab[self.tab] = style
+        if self.draft.get(self.tab + "_mode", "auto") == "auto":
+            preview = self.preview_provider(dict(self.draft)) or {}
+            self.draft[self.tab + "_mode"] = "bundled"
+            self.draft[self.tab + "_key"] = preview.get("automatic_key", "drama")
         if self.tab == "icon" and self.draft.get("icon_mode") == "bundled":
             self.draft["icon_style"] = style
         elif self.tab == "fanart" and self.draft.get("fanart_mode") == "bundled":
@@ -328,6 +392,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
         image = str(row.get("source") or "")
         label = str(row.get("label") or "Artwork")
         if source == "curatr":
+            self.draft[self.tab + "_colour"] = self.colour_by_tab[self.tab]
             if self.tab == "icon":
                 self._set_icon(
                     "bundled", key=row.get("key"),
@@ -377,8 +442,13 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
                 source_controls[index - 1], source_controls[(index + 1) % len(source_controls)],
             )
 
-        style_controls = [self.getControl(control_id) for control_id in self.STYLE_IDS]
+        style_controls = [self.getControl(control_id) for control_id in self.STYLE_IDS[:len(self._style_rows())]]
         below_style = self._active_grid() if grid_visible else self.getControl(self.SAVE_ID)
+        colours = self.getControl(self.COLOUR_ID)
+        if self._colours_visible():
+            colours.setNavigation(self.getControl(self.STYLE_IDS[0]), below_style,
+                                  self.getControl(self.SAVE_ID), self.getControl(self.SAVE_ID))
+            below_style = colours
         for index, control in enumerate(style_controls):
             control.setNavigation(
                 first_source, below_style,
@@ -387,7 +457,7 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
 
         if grid_visible:
             self._active_grid().setNavigation(
-                self.getControl(self.STYLE_IDS[0]) if style_visible else first_source,
+                (colours if self._colours_visible() else self.getControl(self.STYLE_IDS[0])) if style_visible else first_source,
                 self.getControl(self.SAVE_ID),
                 self.getControl(self.SAVE_ID), self.getControl(self.SAVE_ID),
             )
@@ -408,6 +478,8 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             self._choose_source(control_id)
         elif control_id in self.STYLE_IDS:
             self._choose_style(control_id)
+        elif control_id == self.COLOUR_ID:
+            self._choose_colour()
         elif control_id in self.GRID_IDS.values():
             self._choose_grid_entry()
         elif control_id == self.SAVE_ID:
@@ -418,8 +490,9 @@ class ArtworkEditorWindow(xbmcgui.WindowXMLDialog):
             self.source_by_tab = {"icon": "curatr", "fanart": "curatr"}
             self.style_by_tab = {
                 "icon": str(self.draft.get("icon_style") or "white"),
-                "fanart": str(self.draft.get("fanart_style") or "colour"),
+                "fanart": "colour",
             }
+            self.colour_by_tab = {"icon": "default", "fanart": "default"}
             self.grid_entries = []
             self.grid_source = ""
             self._show_tab(self.tab, load_saved=True)

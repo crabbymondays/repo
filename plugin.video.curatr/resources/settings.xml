@@ -31,14 +31,18 @@
                 <setting id="ai_import_key" type="action" label="32620" help="32621">
                     <level>0</level>
                     <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_ai_key)</data>
-                    <control type="button" format="action"><close>true</close></control>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
             </group>
             <group id="2" label="32104">
                 <setting id="openai_api_key" type="string" label="32110" help="32111">
                     <level>0</level>
                     <default />
-                    <dependencies><dependency type="enable" setting="ai_provider">openai</dependency></dependencies>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">openai</dependency>
+                    </dependencies>
                     <constraints>
                         <allowempty>true</allowempty>
                     </constraints>
@@ -50,7 +54,9 @@
                 <setting id="openai_model" type="string" label="32112" help="32113">
                     <level>0</level>
                     <default>gpt-5-mini</default>
-                    <dependencies><dependency type="enable" setting="ai_provider">openai</dependency></dependencies>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">openai</dependency>
+                    </dependencies>
                     <constraints>
                         <allowempty>false</allowempty>
                     </constraints>
@@ -63,7 +69,9 @@
                 <setting id="gemini_api_key" type="string" label="32120" help="32121">
                     <level>0</level>
                     <default />
-                    <dependencies><dependency type="enable" setting="ai_provider">gemini</dependency></dependencies>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">gemini</dependency>
+                    </dependencies>
                     <constraints>
                         <allowempty>true</allowempty>
                     </constraints>
@@ -75,7 +83,9 @@
                 <setting id="gemini_model" type="string" label="32122" help="32123">
                     <level>0</level>
                     <default>gemini-3.5-flash-lite</default>
-                    <dependencies><dependency type="enable" setting="ai_provider">gemini</dependency></dependencies>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">gemini</dependency>
+                    </dependencies>
                     <constraints>
                         <allowempty>false</allowempty>
                     </constraints>
@@ -86,43 +96,102 @@
             </group>
             <group id="4" label="32500">
                 <setting id="anthropic_api_key" type="string" label="32503" help="32504">
-                    <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="ai_provider">anthropic</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32503</heading><hidden>true</hidden></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">anthropic</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32503</heading>
+                        <hidden>true</hidden>
+                    </control>
                 </setting>
                 <setting id="anthropic_model" type="string" label="32505" help="32506">
-                    <level>0</level><default>claude-sonnet-5</default><constraints><allowempty>false</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="ai_provider">anthropic</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32505</heading></control>
+                    <level>0</level>
+                    <default>claude-sonnet-5</default>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">anthropic</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32505</heading>
+                    </control>
                 </setting>
             </group>
             <group id="5" label="32501">
                 <setting id="openrouter_api_key" type="string" label="32507" help="32508">
-                    <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="ai_provider">openrouter</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32507</heading><hidden>true</hidden></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">openrouter</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32507</heading>
+                        <hidden>true</hidden>
+                    </control>
                 </setting>
                 <setting id="openrouter_model" type="string" label="32509" help="32510">
-                    <level>0</level><default>openai/gpt-5-mini</default><constraints><allowempty>false</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="ai_provider">openrouter</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32509</heading></control>
+                    <level>0</level>
+                    <default>openai/gpt-5-mini</default>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">openrouter</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32509</heading>
+                    </control>
                 </setting>
             </group>
             <group id="6" label="32502">
                 <setting id="compatible_api_key" type="string" label="32511" help="32512">
-                    <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="ai_provider">compatible</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32511</heading><hidden>true</hidden></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">compatible</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32511</heading>
+                        <hidden>true</hidden>
+                    </control>
                 </setting>
                 <setting id="compatible_base_url" type="string" label="32513" help="32514">
-                    <level>0</level><default /><constraints><allowempty>false</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="ai_provider">compatible</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32513</heading></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">compatible</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32513</heading>
+                    </control>
                 </setting>
                 <setting id="compatible_model" type="string" label="32515" help="32516">
-                    <level>0</level><default /><constraints><allowempty>false</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="ai_provider">compatible</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32515</heading></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="ai_provider">compatible</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32515</heading>
+                    </control>
                 </setting>
             </group>
             <group id="7">
@@ -134,71 +203,123 @@
                         <step>1</step>
                         <maximum>50</maximum>
                     </constraints>
-                    <control type="edit" format="integer"><heading>32310</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32310</heading>
+                    </control>
                 </setting>
             </group>
         </category>
         <category id="catalogues" label="32520" help="32521">
             <group id="1" label="32522">
                 <setting id="tmdb_enabled" type="boolean" label="32523" help="32524">
-                    <level>0</level><default>false</default><control type="toggle" />
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle" />
                 </setting>
                 <setting id="tmdb_api_key" type="string" label="32525" help="32526">
-                    <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="tmdb_enabled">true</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32525</heading><hidden>true</hidden></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="tmdb_enabled">true</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32525</heading>
+                        <hidden>true</hidden>
+                    </control>
                 </setting>
                 <setting id="tmdb_import_key" type="action" label="32622" help="32623">
-                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_tmdb_key)</data>
-                    <control type="button" format="action"><close>true</close></control>
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_tmdb_key)</data>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
                 <setting id="tmdb_region" type="string" label="32527" help="32528">
-                    <level>0</level><default>GB</default><constraints><allowempty>false</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="tmdb_enabled">true</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32527</heading></control>
+                    <level>0</level>
+                    <default>GB</default>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="tmdb_enabled">true</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32527</heading>
+                    </control>
                 </setting>
                 <setting id="tmdb_test" type="action" label="32529" help="32530">
-                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=test_tmdb)</data>
-                    <dependencies><dependency type="enable" setting="tmdb_enabled">true</dependency></dependencies>
-                    <control type="button" format="action"><close>false</close></control>
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=test_tmdb)</data>
+                    <dependencies>
+                        <dependency type="enable" setting="tmdb_enabled">true</dependency>
+                    </dependencies>
+                    <control type="button" format="action">
+                        <close>false</close>
+                    </control>
                 </setting>
             </group>
         </category>
         <category id="playback" label="32700" help="32701">
             <group id="1" label="32702">
                 <setting id="movie_player_status" type="string" label="32703" help="32704">
-                    <level>0</level><default>Automatic</default><enable>false</enable>
-                    <constraints><allowempty>false</allowempty></constraints>
-                    <control type="edit" format="string"><heading>32703</heading></control>
+                    <level>0</level>
+                    <default>Automatic</default>
+                    <enable>false</enable>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <control type="edit" format="string">
+                        <heading>32703</heading>
+                    </control>
                 </setting>
                 <setting id="choose_movie_player" type="action" label="32705" help="32706">
                     <level>0</level>
                     <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_movie_player)</data>
-                    <control type="button" format="action"><close>true</close></control>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
             </group>
             <group id="2" label="32707">
                 <setting id="show_player_status" type="string" label="32708" help="32709">
-                    <level>0</level><default>Automatic</default><enable>false</enable>
-                    <constraints><allowempty>false</allowempty></constraints>
-                    <control type="edit" format="string"><heading>32708</heading></control>
+                    <level>0</level>
+                    <default>Automatic</default>
+                    <enable>false</enable>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <control type="edit" format="string">
+                        <heading>32708</heading>
+                    </control>
                 </setting>
                 <setting id="choose_show_player" type="action" label="32710" help="32711">
                     <level>0</level>
                     <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_show_player)</data>
-                    <control type="button" format="action"><close>true</close></control>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
             </group>
             <group id="3" label="32712">
                 <setting id="community_players_url" type="string" label="32713" help="32714">
-                    <level>1</level><default>https://codeload.github.com/slrwin/tmdbh.players/zip/refs/heads/master</default>
-                    <constraints><allowempty>false</allowempty></constraints>
-                    <control type="edit" format="string"><heading>32713</heading></control>
+                    <level>1</level>
+                    <default>https://codeload.github.com/slrwin/tmdbh.players/zip/refs/heads/master</default>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <control type="edit" format="string">
+                        <heading>32713</heading>
+                    </control>
                 </setting>
                 <setting id="install_community_players" type="action" label="32715" help="32716">
                     <level>0</level>
                     <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=install_community_players)</data>
-                    <control type="button" format="action"><close>true</close></control>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
             </group>
         </category>
@@ -237,36 +358,74 @@
             </group>
             <group id="3" label="32531">
                 <setting id="mdblist_enabled" type="boolean" label="32532" help="32533">
-                    <level>0</level><default>false</default><control type="toggle" />
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle" />
                 </setting>
                 <setting id="mdblist_api_key" type="string" label="32534" help="32535">
-                    <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="mdblist_enabled">true</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32534</heading><hidden>true</hidden></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="mdblist_enabled">true</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32534</heading>
+                        <hidden>true</hidden>
+                    </control>
                 </setting>
                 <setting id="mdblist_import_key" type="action" label="32624" help="32625">
-                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_mdblist_key)</data>
-                    <control type="button" format="action"><close>true</close></control>
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=import_mdblist_key)</data>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
                 <setting id="mdblist_choose_lists" type="action" label="32542" help="32543">
-                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_mdblist_lists)</data>
-                    <dependencies><dependency type="enable" setting="mdblist_enabled">true</dependency></dependencies>
-                    <control type="button" format="action"><close>true</close></control>
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_mdblist_lists)</data>
+                    <dependencies>
+                        <dependency type="enable" setting="mdblist_enabled">true</dependency>
+                    </dependencies>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
                 <setting id="mdblist_selection_status" type="string" label="32540" help="32541">
-                    <level>0</level><default>No lists selected</default><enable>false</enable>
-                    <constraints><allowempty>false</allowempty></constraints>
-                    <control type="edit" format="string"><heading>32540</heading></control>
+                    <level>0</level>
+                    <default>No lists selected</default>
+                    <enable>false</enable>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <control type="edit" format="string">
+                        <heading>32540</heading>
+                    </control>
                 </setting>
                 <setting id="mdblist_list_url" type="string" label="32536" help="32537">
-                    <level>0</level><default /><constraints><allowempty>true</allowempty></constraints>
-                    <dependencies><dependency type="enable" setting="mdblist_enabled">true</dependency></dependencies>
-                    <control type="edit" format="string"><heading>32536</heading></control>
+                    <level>0</level>
+                    <default />
+                    <constraints>
+                        <allowempty>true</allowempty>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="mdblist_enabled">true</dependency>
+                    </dependencies>
+                    <control type="edit" format="string">
+                        <heading>32536</heading>
+                    </control>
                 </setting>
                 <setting id="mdblist_test" type="action" label="32538" help="32539">
-                    <level>0</level><data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=test_mdblist)</data>
-                    <dependencies><dependency type="enable" setting="mdblist_enabled">true</dependency></dependencies>
-                    <control type="button" format="action"><close>false</close></control>
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=test_mdblist)</data>
+                    <dependencies>
+                        <dependency type="enable" setting="mdblist_enabled">true</dependency>
+                    </dependencies>
+                    <control type="button" format="action">
+                        <close>false</close>
+                    </control>
                 </setting>
             </group>
         </category>
@@ -285,7 +444,9 @@
                         <step>1</step>
                         <maximum>720</maximum>
                     </constraints>
-                    <control type="edit" format="integer"><heading>32044</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32044</heading>
+                    </control>
                 </setting>
             </group>
             <group id="2" label="32321">
@@ -307,7 +468,9 @@
                         <step>1</step>
                         <maximum>720</maximum>
                     </constraints>
-                    <control type="edit" format="integer"><heading>32048</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32048</heading>
+                    </control>
                 </setting>
             </group>
         </category>
@@ -357,7 +520,9 @@
                         <step>50</step>
                         <maximum>1000</maximum>
                     </constraints>
-                    <control type="edit" format="integer"><heading>32018</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32018</heading>
+                    </control>
                 </setting>
                 <setting id="liked_rating_min" type="integer" label="32020" help="32021">
                     <level>0</level>
@@ -367,7 +532,9 @@
                         <step>1</step>
                         <maximum>10</maximum>
                     </constraints>
-                    <control type="edit" format="integer"><heading>32020</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32020</heading>
+                    </control>
                 </setting>
                 <setting id="profile_refresh_hours" type="integer" label="32022" help="32023">
                     <level>0</level>
@@ -377,7 +544,9 @@
                         <step>1</step>
                         <maximum>168</maximum>
                     </constraints>
-                    <control type="edit" format="integer"><heading>32022</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32022</heading>
+                    </control>
                 </setting>
                 <setting id="taste_fingerprint_refresh_hours" type="integer" label="32132" help="32133">
                     <level>0</level>
@@ -387,7 +556,9 @@
                         <step>24</step>
                         <maximum>720</maximum>
                     </constraints>
-                    <control type="edit" format="integer"><heading>32132</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32132</heading>
+                    </control>
                 </setting>
             </group>
         </category>
@@ -396,13 +567,18 @@
                 <setting id="menu_background_picker" type="action" label="32606" help="32607">
                     <level>0</level>
                     <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_menu_background)</data>
-                    <control type="button" format="action"><close>true</close></control>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
                 </setting>
                 <setting id="advanced_list_creation" type="boolean" label="32818" help="32819">
-                    <level>0</level><default>true</default><control type="toggle" />
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
                 </setting>
                 <setting id="interface_theme" type="string" label="32830" help="32831">
-                    <level>0</level><default>violet</default>
+                    <level>0</level>
+                    <default>violet</default>
                     <constraints>
                         <options>
                             <option label="32832">violet</option>
@@ -413,85 +589,188 @@
                     </constraints>
                     <control type="spinner" format="string" />
                 </setting>
-                <setting id="interface_light_mode" type="boolean" label="32836" help="32837">
-                    <level>0</level><default>false</default><control type="toggle" />
-                </setting>
                 <setting id="interface_custom_colours" type="boolean" label="32838" help="32839">
-                    <level>0</level><default>false</default><control type="toggle" />
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle" />
                 </setting>
                 <setting id="interface_primary_colour" type="string" label="32840" help="32841">
-                    <level>0</level><default>theme</default>
-                    <constraints><options>
-                        <option label="32846">theme</option><option label="32832">violet</option>
-                        <option label="32847">lilac</option><option label="32848">blue</option>
-                        <option label="32849">cyan</option><option label="32850">teal</option>
-                        <option label="32851">green</option><option label="32835">amber</option>
-                        <option label="32852">gold</option><option label="32853">red</option>
-                        <option label="32854">pink</option>
-                    </options></constraints>
-                    <dependencies><dependency type="enable" setting="interface_custom_colours">true</dependency></dependencies>
+                    <level>0</level>
+                    <default>theme</default>
+                    <constraints>
+                        <options>
+                            <option label="32846">theme</option>
+                            <option label="32900">red</option>
+                            <option label="32901">peach</option>
+                            <option label="32902">amber</option>
+                            <option label="32903">sand</option>
+                            <option label="32904">gold</option>
+                            <option label="32905">green</option>
+                            <option label="32906">sage</option>
+                            <option label="32907">teal</option>
+                            <option label="32908">turquoise</option>
+                            <option label="32909">cyan</option>
+                            <option label="32910">steel_blue</option>
+                            <option label="32911">azure</option>
+                            <option label="32912">deep_blue</option>
+                            <option label="32913">blue</option>
+                            <option label="32914">periwinkle</option>
+                            <option label="32915">lilac</option>
+                            <option label="32916">deep_violet</option>
+                            <option label="32917">violet</option>
+                            <option label="32918">plum</option>
+                            <option label="32919">mauve</option>
+                            <option label="32920">pink</option>
+                            <option label="32921">berry</option>
+                            <option label="32922">rose</option>
+                            <option label="32923">slate</option>
+                            <option label="32924">grey</option>
+                        </options>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="interface_custom_colours">true</dependency>
+                    </dependencies>
                     <control type="spinner" format="string" />
                 </setting>
                 <setting id="interface_secondary_colour" type="string" label="32842" help="32843">
-                    <level>0</level><default>theme</default>
-                    <constraints><options>
-                        <option label="32846">theme</option><option label="32832">violet</option>
-                        <option label="32847">lilac</option><option label="32848">blue</option>
-                        <option label="32849">cyan</option><option label="32850">teal</option>
-                        <option label="32851">green</option><option label="32835">amber</option>
-                        <option label="32852">gold</option><option label="32853">red</option>
-                        <option label="32854">pink</option>
-                    </options></constraints>
-                    <dependencies><dependency type="enable" setting="interface_custom_colours">true</dependency></dependencies>
+                    <level>0</level>
+                    <default>theme</default>
+                    <constraints>
+                        <options>
+                            <option label="32846">theme</option>
+                            <option label="32900">red</option>
+                            <option label="32901">peach</option>
+                            <option label="32902">amber</option>
+                            <option label="32903">sand</option>
+                            <option label="32904">gold</option>
+                            <option label="32905">green</option>
+                            <option label="32906">sage</option>
+                            <option label="32907">teal</option>
+                            <option label="32908">turquoise</option>
+                            <option label="32909">cyan</option>
+                            <option label="32910">steel_blue</option>
+                            <option label="32911">azure</option>
+                            <option label="32912">deep_blue</option>
+                            <option label="32913">blue</option>
+                            <option label="32914">periwinkle</option>
+                            <option label="32915">lilac</option>
+                            <option label="32916">deep_violet</option>
+                            <option label="32917">violet</option>
+                            <option label="32918">plum</option>
+                            <option label="32919">mauve</option>
+                            <option label="32920">pink</option>
+                            <option label="32921">berry</option>
+                            <option label="32922">rose</option>
+                            <option label="32923">slate</option>
+                            <option label="32924">grey</option>
+                        </options>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="interface_custom_colours">true</dependency>
+                    </dependencies>
                     <control type="spinner" format="string" />
                 </setting>
                 <setting id="interface_background_colour" type="string" label="32844" help="32845">
-                    <level>0</level><default>theme</default>
-                    <constraints><options>
-                        <option label="32846">theme</option><option label="32832">violet</option>
-                        <option label="32847">lilac</option><option label="32848">blue</option>
-                        <option label="32849">cyan</option><option label="32850">teal</option>
-                        <option label="32851">green</option><option label="32835">amber</option>
-                        <option label="32852">gold</option><option label="32853">red</option>
-                        <option label="32854">pink</option><option label="32855">neutral</option>
-                    </options></constraints>
-                    <dependencies><dependency type="enable" setting="interface_custom_colours">true</dependency></dependencies>
+                    <level>0</level>
+                    <default>theme</default>
+                    <constraints>
+                        <options>
+                            <option label="32846">theme</option>
+                            <option label="32900">red</option>
+                            <option label="32901">peach</option>
+                            <option label="32902">amber</option>
+                            <option label="32903">sand</option>
+                            <option label="32904">gold</option>
+                            <option label="32905">green</option>
+                            <option label="32906">sage</option>
+                            <option label="32907">teal</option>
+                            <option label="32908">turquoise</option>
+                            <option label="32909">cyan</option>
+                            <option label="32910">steel_blue</option>
+                            <option label="32911">azure</option>
+                            <option label="32912">deep_blue</option>
+                            <option label="32913">blue</option>
+                            <option label="32914">periwinkle</option>
+                            <option label="32915">lilac</option>
+                            <option label="32916">deep_violet</option>
+                            <option label="32917">violet</option>
+                            <option label="32918">plum</option>
+                            <option label="32919">mauve</option>
+                            <option label="32920">pink</option>
+                            <option label="32921">berry</option>
+                            <option label="32922">rose</option>
+                            <option label="32923">slate</option>
+                            <option label="32924">grey</option>
+                        </options>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="interface_custom_colours">true</dependency>
+                    </dependencies>
                     <control type="spinner" format="string" />
                 </setting>
             </group>
             <group id="2" label="32800">
                 <setting id="context_menu_enabled" type="boolean" label="32802" help="32803">
-                    <level>0</level><default>true</default><control type="toggle" />
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
                 </setting>
             </group>
             <group id="3" label="32804">
                 <setting id="context_add_to_list" type="boolean" label="32805" help="32806">
-                    <level>0</level><default>true</default>
-                    <dependencies><dependency type="enable" setting="context_menu_enabled">true</dependency></dependencies>
+                    <level>0</level>
+                    <default>true</default>
+                    <dependencies>
+                        <dependency type="enable" setting="context_menu_enabled">true</dependency>
+                    </dependencies>
                     <control type="toggle" />
                 </setting>
                 <setting id="context_add_to_folder" type="boolean" label="32807" help="32808">
-                    <level>0</level><default>true</default>
-                    <dependencies><dependency type="enable" setting="context_menu_enabled">true</dependency></dependencies>
+                    <level>0</level>
+                    <default>true</default>
+                    <dependencies>
+                        <dependency type="enable" setting="context_menu_enabled">true</dependency>
+                    </dependencies>
                     <control type="toggle" />
                 </setting>
                 <setting id="context_find_similar" type="boolean" label="32809" help="32810">
-                    <level>0</level><default>true</default>
-                    <dependencies><dependency type="enable" setting="context_menu_enabled">true</dependency></dependencies>
+                    <level>0</level>
+                    <default>true</default>
+                    <dependencies>
+                        <dependency type="enable" setting="context_menu_enabled">true</dependency>
+                    </dependencies>
                     <control type="toggle" />
                 </setting>
             </group>
             <group id="4" label="32811">
                 <setting id="context_similar_method" type="string" label="32812" help="32813">
-                    <level>0</level><default>keyword</default>
-                    <constraints><options><option label="32814">keyword</option><option label="32815">ai</option></options></constraints>
-                    <dependencies><dependency type="enable" setting="context_find_similar">true</dependency></dependencies>
+                    <level>0</level>
+                    <default>keyword</default>
+                    <constraints>
+                        <options>
+                            <option label="32814">keyword</option>
+                            <option label="32815">ai</option>
+                        </options>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="context_find_similar">true</dependency>
+                    </dependencies>
                     <control type="spinner" format="string" />
                 </setting>
                 <setting id="context_similar_count" type="integer" label="32816" help="32817">
-                    <level>0</level><default>20</default><constraints><minimum>5</minimum><step>1</step><maximum>50</maximum></constraints>
-                    <dependencies><dependency type="enable" setting="context_find_similar">true</dependency></dependencies>
-                    <control type="edit" format="integer"><heading>32816</heading></control>
+                    <level>0</level>
+                    <default>20</default>
+                    <constraints>
+                        <minimum>5</minimum>
+                        <step>1</step>
+                        <maximum>50</maximum>
+                    </constraints>
+                    <dependencies>
+                        <dependency type="enable" setting="context_find_similar">true</dependency>
+                    </dependencies>
+                    <control type="edit" format="integer">
+                        <heading>32816</heading>
+                    </control>
                 </setting>
             </group>
         </category>
@@ -529,7 +808,9 @@
                     <dependencies>
                         <dependency type="enable" setting="notifications_enabled">true</dependency>
                     </dependencies>
-                    <control type="edit" format="integer"><heading>32208</heading></control>
+                    <control type="edit" format="integer">
+                        <heading>32208</heading>
+                    </control>
                 </setting>
             </group>
         </category>

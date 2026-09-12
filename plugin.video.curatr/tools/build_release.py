@@ -19,9 +19,14 @@ def release_files():
         path for path in sorted(ROOT.rglob("*"))
         if path.is_file()
         and not TRANSIENT_DIRS.intersection(path.relative_to(ROOT).parts)
-        and path.suffix not in (".pyc", ".pyo")
+        and path.suffix not in (".pyc", ".pyo", ".tmp")
         and not (path.relative_to(ROOT).parts[:2] == ("resources", "media")
                  and path.relative_to(ROOT).parts[2] in RETIRED_ART_DIRS)
+        and not (path.relative_to(ROOT).parts[:3] == ("resources", "media", "menu")
+                 and path.relative_to(ROOT).parts[3] != "v9")
+        and not (path.relative_to(ROOT).parts[:3] == ("resources", "media", "list_art")
+                 and path.relative_to(ROOT).parts[3] != "v7")
+        and path.name != "control_clear.png"
     ]
 
 

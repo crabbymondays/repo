@@ -21,6 +21,8 @@ def list_signature(state):
         "hidden_movies": state.get("hidden_movies", []),
         "widget_folders": state.get("widget_folders", []),
         "linked_list_cache": linked_summary,
+        "menu_background_style": state.get("menu_background_style"),
+        "menu_background_source": state.get("menu_background_source"),
     } if isinstance(state, dict) else {}
     try:
         payload = json.dumps(records, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
@@ -29,9 +31,9 @@ def list_signature(state):
     return hashlib.sha256(payload.encode("utf-8", "replace")).hexdigest()
 
 
-def refresh_if_changed(before, state):
+def refresh_if_changed(before, state, appearance_changed=False):
     """Refresh an open curatr view without moving users away from their screen."""
-    if before == list_signature(state):
+    if not appearance_changed and before == list_signature(state):
         return False
     in_curatr = False
     try:

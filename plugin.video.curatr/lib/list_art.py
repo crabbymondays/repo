@@ -4,21 +4,14 @@ import re
 import xbmcvfs
 
 from .art_cache import ArtworkCache
-from .menu_art import current_menu_source
-
-
-CHOICES = (
-    ("action", "Action"), ("comedy", "Comedy"), ("crime", "Crime"),
-    ("drama", "Drama"), ("horror", "Horror"), ("romance", "Romance"),
-    ("sci_fi", "Sci-Fi"), ("fantasy", "Fantasy"), ("thriller", "Thriller"),
-    ("mystery", "Mystery"), ("western", "Western"),
-    ("documentary", "Documentary"), ("animation", "Animation"),
-    ("mind_bending", "Mind-Bending"), ("superhero", "Superhero"),
-    ("director", "Director"), ("actor", "Actor"),
+from .menu_art import ADDON_ICON, current_menu_source
+from .menu_background import background_source
+from .bundled_art import (
+    BUNDLE as ARTWORK_BUNDLE, CHOICES, colour_label, components, normalise_colour, rendered_source,
 )
 
+
 LABELS = dict(CHOICES)
-ARTWORK_BUNDLE = "v5"
 _LEGACY_FOLDERS = {
     "icons_v2": ("icon", "white"),
     "icons_v3": ("icon", "white"),
@@ -68,11 +61,13 @@ def default_state():
         "icon_source": "",
         "icon_label": "",
         "icon_style": "white",
+        "icon_colour": "default",
         "fanart_mode": "auto",
         "fanart_key": "",
         "fanart_source": "",
         "fanart_label": "",
         "fanart_style": "colour",
+        "fanart_colour": "default",
     }
 
 
@@ -90,23 +85,20 @@ def normalise_state(value):
         result["fanart_mode"] = "auto"
     if result["fanart_style"] not in ("colour", "monochrome"):
         result["fanart_style"] = "colour"
+    for kind in ("icon", "fanart"):
+        result[kind + "_colour"] = normalise_colour(result[kind + "_colour"])
     return result
 
 
-def _media(addon, *parts):
-    root = xbmcvfs.translatePath(addon.getAddonInfo("path"))
-    return os.path.join(root, "resources", "media", *parts)
-
-
-def bundled_source(addon, key, kind, style):
+def bundled_source(addon, key, kind, style, colour="default"):
     """Resolve one bundled artwork choice from its stable key and style."""
-    if kind == "icon":
-        folder = "colour" if style == "genre_colours" else "white"
-        extension = ".png"
-    else:
-        folder = "monochrome" if style == "monochrome" else "fanart"
-        extension = ".jpg"
-    return _media(addon, "list_art", ARTWORK_BUNDLE, folder, str(key or "") + extension)
+    root = xbmcvfs.translatePath(addon.getAddonInfo("path"))
+    try:
+        return rendered_source(root, xbmcvfs.translatePath(addon.getAddonInfo("profile")),
+                               key, kind, style, colour)
+    except (OSError, ValueError):
+        symbol, background, _palette = components(root, key, kind, style, colour)
+        return (symbol or background) if kind == "icon" else background
 
 
 def _current_source(addon, source):
@@ -115,10 +107,29 @@ def _current_source(addon, source):
     path = str(source or "").replace("\\", "/")
     if "://" in path and not path.startswith("special://"):
         return source
+    root = xbmcvfs.translatePath(addon.getAddonInfo("path"))
+    if path.endswith(("/plugin.video.curatr/icon.png", "/plugin.video.curatr/icon_addon_v2.png")):
+        return os.path.join(root, ADDON_ICON)
+    if path.endswith(("/plugin.video.curatr/fanart.jpg", "/plugin.video.curatr/fanart_addon_v2.jpg")):
+        return background_source(addon)
+    for filename, colour in (("fanart_menu_clean_v4.jpg", "theme"), ("background_1_v4.jpg", "deep_blue"),
+                             ("background_2_v4.jpg", "deep_violet"), ("background_3_v4.jpg", "slate")):
+        if path.endswith("/plugin.video.curatr/resources/media/" + filename):
+            return background_source(addon, choice=colour)
     parts = path.rsplit("/plugin.video.curatr/resources/media/list_art/", 1)
     if len(parts) != 2:
         return source
     relative = parts[1].split("/")
+    if len(relative) == 4 and relative[0] == "v6" and relative[1] == "backgrounds":
+        kind = "icon" if relative[2] == "icon" else "fanart"
+        return bundled_source(addon, "blank", kind, "colour", os.path.splitext(relative[3])[0])
+    if len(relative) == 3 and relative[0] in ("v5", "v6"):
+        previous = {"white": ("icon", "white"), "colour": ("icon", "genre_colours"),
+                    "fanart": ("fanart", "colour"), "monochrome": ("fanart", "monochrome"),
+                    "landscape": ("fanart", "colour")}
+        key = os.path.splitext(relative[2])[0]
+        if relative[1] in previous and key in LABELS:
+            return bundled_source(addon, key, *previous[relative[1]])
     if len(relative) != 2 or relative[0] not in _LEGACY_FOLDERS:
         return source
     key, extension = os.path.splitext(relative[1])
@@ -135,7 +146,7 @@ def resolved_sources(addon, record):
 
     icon = ""
     if state["icon_mode"] == "default":
-        icon = os.path.join(xbmcvfs.translatePath(addon.getAddonInfo("path")), "icon.png")
+        icon = os.path.join(xbmcvfs.translatePath(addon.getAddonInfo("path")), ADDON_ICON)
     elif state["icon_mode"] in ("person", "custom"):
         icon = _current_source(addon, state["icon_source"])
     else:
@@ -147,18 +158,18 @@ def resolved_sources(addon, record):
         icon_style = state["icon_style"]
         if state["icon_mode"] == "auto":
             icon_style = "genre_colours" if state["fanart_style"] == "colour" else "white"
-        icon = bundled_source(addon, key, "icon", icon_style)
+        icon = bundled_source(addon, key, "icon", icon_style, state["icon_colour"])
 
     fanart = ""
     if state["fanart_mode"] == "default":
-        fanart = _media(addon, "fanart_menu_clean_v4.jpg")
+        fanart = background_source(addon)
     elif state["fanart_mode"] in ("item", "person", "custom"):
         fanart = _current_source(addon, state["fanart_source"])
     else:
         key = automatic if state["fanart_mode"] == "auto" else state["fanart_key"]
         if key not in LABELS:
             key = automatic
-        fanart = bundled_source(addon, key, "fanart", state["fanart_style"])
+        fanart = bundled_source(addon, key, "fanart", state["fanart_style"], state["fanart_colour"])
     return {"icon": icon, "thumb": icon, "fanart": fanart, "landscape": fanart}
 
 
@@ -200,4 +211,8 @@ def summary(record):
         fanart = "Person artwork"
     else:
         fanart = state["fanart_mode"].replace("_", " ").title()
+    if state["icon_mode"] == "bundled" and state["icon_style"] == "genre_colours" and state["icon_colour"] != "default":
+        icon = "%s: %s" % (label(state["icon_key"]), colour_label(state["icon_colour"]))
+    if state["fanart_mode"] == "bundled" and state["fanart_style"] == "colour" and state["fanart_colour"] != "default":
+        fanart = "%s: %s" % (label(state["fanart_key"]), colour_label(state["fanart_colour"]))
     return icon, fanart, state["fanart_style"].title()

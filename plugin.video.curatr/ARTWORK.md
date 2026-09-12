@@ -1,23 +1,80 @@
 # Bundled artwork
 
-The v5 bundle contains 17 coordinated designs in four styles. White icons are
-transparent 512 × 512 PNGs; coloured icons use the same shapes over soft matte
-gradients. Colour and monochrome fanart are 1920 × 1080 JPEGs with flowing curves
-and a white genre icon on the right. Monochrome uses dark grey.
+## Artwork picker
 
-One shared shape mask supplies all four styles. The files have consistent
-padding and no baked-in rounded corners: Kodi's existing square and landscape
-controls provide the corner treatment and retain the appropriate aspect ratio.
+The v7 bundle contains 21 symbols: 17 genre and people designs, plus List,
+Folder, Movie and TV Show. The final Blank tile uses only the selected
+background. White icons stay transparent; fanart uses the colour row, which
+includes Grey instead of a separate Monochrome option.
 
-## Rebuild
+`lib/colours.py` defines all 25 palettes and their rainbow order, shared by
+artwork, menu backgrounds and window settings. Original genre colours keep
+their existing keys and tones. The deeper and additional UI colours are also
+available for every genre. Neutral shades appear at the end of the row.
 
-Genre geometry, palettes and composition live in `tools/build_artwork.py`.
-The menu geometry in `tools/build_menu_artwork.py` reuses its mask renderer;
-the v6 menu bundle contains padded 512 × 512 icons and 960 × 540 landscape
-images. Usage and Activity share one three-bar asset. Menu backgrounds remain
-unchanged, and genre artwork does not need rebuilding for a menu-only edit.
+The bundle has 92 components: 21 transparent square symbols, 21 transparent
+landscape symbols, and 25 shared backgrounds in each aspect ratio. Square
+images are 512 × 512; landscape images are 1920 × 1080. The picker layers each
+symbol over the selected background with matching bounds and aspect-ratio rules.
+Blank tiles return the shared background path directly; no extra images or
+copies of every symbol/colour combination are bundled.
 
-On a build machine with Python 3.9+, Cairo, Pillow 9.1+ and CairoSVG installed:
+Kodi skins and widgets need a single image path. `lib/bundled_art.py` composes
+each requested combination once into the add-on profile and reuses that cached
+PNG. This small compositor uses only Python's standard library, reads only our
+bundled unfiltered PNG components, keeps at most two decoded components in
+memory and writes completed images atomically. It does not process custom or
+downloaded artwork. Cache paths include the artwork bundle version.
+
+`tools/build_artwork.py` contains the original genre geometry and renders the
+components. Stable genre keys live in `lib/bundled_art.py`; palettes live in `lib/colours.py`.
+The masks, animation star and symmetrical rocket wings retain their current
+shapes. Corners remain a Kodi-control
+treatment rather than being baked into each image.
+
+## Menu artwork
+
+The v9 menu bundle combines the selected Font Awesome Classic Solid icons,
+the retained Curatr designs and matching Browse/Create page badges. The badges
+share the same circle centre and size; the magnifier is centred with room around
+its handle. Every glyph fits within 340 pixels on a
+512 × 512 transparent canvas, matching the genre icons' visible bounds. The
+960 × 540 widget images reuse those shapes with centred padding. The selected
+shuffle, heart-pulse, fingerprint and file-lines designs have separate menu
+mappings for switching method, preferences/activity, viewing preferences and
+saving preview results.
+
+`tools/build_menu_artwork.py` reads the pinned Font Awesome SVGs and generates
+the two page badges. For retained menu designs, the supplied square PNGs are
+the canonical source; no duplicate master image is needed. The renderer also
+accepts a source directory through `--source`.
+
+Font Awesome Free 7.0.1 sources are in `tools/icon_sources/fontawesome-7.0.1/`.
+See `THIRD_PARTY_NOTICES.md` for attribution and licences. SVGs and the artwork
+build dependencies are not required by Kodi.
+
+## Menu backgrounds and add-on branding
+
+The menu background picker offers Match theme, the same 25 colour choices and
+a final Custom… tile. Match theme follows the interface background tint.
+Menu backgrounds use the exact shared fanart files, without another bundled
+template or colour-rendering code. Only small 640 × 360 picker previews are
+created and cached in the add-on profile.
+
+Custom PNG, JPEG and WebP images up to 12 MiB are copied atomically into the
+add-on profile. Identical imports reuse the same copy; the original file can
+then be moved or deleted. Generated caches and user images are not bundled.
+Old numeric menu-background choices resolve to the corresponding shared
+colour choices without rewriting saved lists or folders.
+
+The supplied add-on icon is kept as `icon_v3.png`, referenced explicitly in
+`addon.xml` to avoid Kodi reusing its old icon texture. There is no duplicate
+root icon or add-on information-page fanart. The in-add-on menu backgrounds
+remain available independently.
+
+## Rebuild and verify
+
+Use Python 3.9+, Cairo, Pillow 9.1+ and CairoSVG for the artwork builders:
 
 ```bash
 python tools/build_artwork.py
@@ -26,17 +83,19 @@ python tools/release_checks.py
 python tools/build_release.py --output /path/to/releases
 ```
 
-Only Pillow is needed to run the checks. Kodi loads the prebuilt PNG/JPEG files;
-the existing repository packager excludes `tools/`, `ARTWORK.md` and `README.md`
-from its install ZIP. The source ZIP includes all of them.
+Only Pillow is needed in addition to Python to run the checks. The release
+packager excludes `tools/`, `ARTWORK.md` and `README.md` from the install ZIP;
+the source ZIP includes them. Both packages include third-party attribution. The source includes
+`tools/clean_repository.sh` for the existing Termux publishing workflow.
 
-Genre keys and saved style values remain unchanged. `lib/list_art.py` resolves
-them through the versioned bundle to avoid stale Kodi textures. A read-only
-compatibility map handles local paths to retired bundled artwork while leaving
-custom files and URLs alone. Change the bundle version in both the renderer and
-resolver when replacing artwork again.
+Stable genre keys and existing style values remain supported. `lib/list_art.py`
+resolves saved choices and local paths to retired artwork through the current
+bundle, leaving custom files and URLs alone. Replace the bundle version when
+changing components again to prevent stale Kodi textures or composed images.
 
-The release checks cover parsing, artwork dimensions and transparency, saved
-choices, content loading, metadata caching and Kodi-control regressions with
-local stubs. Device testing in Kodi is still required for Android/Xbox rendering
-and skin-specific scaling.
+The checks cover source/XML parsing, geometry, transparency, pixel-correct
+composition, cache reuse, saved colours, cancellation, folder navigation,
+deleted references, keyword editing, menu backgrounds, custom-image imports,
+directory refreshes and metadata behaviour using Kodi stubs.
+Actual Android/Xbox rendering and skin-specific font/scaling behaviour still
+need testing in Kodi.

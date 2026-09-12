@@ -7,7 +7,7 @@ import xbmc
 import xbmcgui
 
 from .keyword_matcher import confirmation_parts, format_rules, parse_prompt
-from .ui_theme import is_light_mode, skin_name, theme_palette
+from .ui_theme import bold, skin_name
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -20,15 +20,7 @@ _PALETTE = {
     "runtime": ("0x70383F66", "0xFFDDE2FF"),
     "place": ("0x702A554B", "0xFFD2F4EA"),
 }
-_LIGHT_FOREGROUND = {
-    "genre": "0xFF5A2935",
-    "person": "0xFF263F55",
-    "film": "0xFF493064",
-    "number": "0xFF55451E",
-    "year": "0xFF5A3328",
-    "runtime": "0xFF30385C",
-    "place": "0xFF234D43",
-}
+
 
 
 class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
@@ -49,13 +41,13 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         self.edit_existing = bool(edit_existing)
         self.result = None
         self.edit_mode = bool(start_editing)
-        self.confirm_label = confirm_label or ("Save Changes" if edit_existing else "Create List")
+        self.confirm_label = confirm_label or ("Save" if edit_existing else "Create List")
         self.dynamic_controls = []
         self.filter_groups = []
         self.control_actions = {}
         self.action_controls = {}
-        self.light_mode = is_light_mode()
-        self.palette = theme_palette()
+        self.neutral_background = "0x404C4D55"
+        self.neutral_focus = "0xFF505159"
 
     @staticmethod
     def _text_width(text, chip=False):
@@ -76,7 +68,7 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         self.action_controls = {}
 
     def _add_label(self, x, y, width, text, colour=""):
-        colour = colour or ("0xFF444751" if self.light_mode else "0xFFD7D3DF")
+        colour = colour or "0xFFD7D3DF"
         control = xbmcgui.ControlLabel(x, y, width, 50, str(text or ""), font="font13", textColor=colour, alignment=4)
         self.addControl(control); self.dynamic_controls.append(control)
 
@@ -93,15 +85,16 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         self.addControls(controls); self.dynamic_controls.extend(controls)
         return controls
 
-    def _filter_button(self, x, y, width, height, label, colour, font="font13"):
-        """Native focus conditions tint shared shapes; no per-theme bitmaps."""
+    def _filter_button(self, x, y, width, height, label, colour, focus_colour,
+                       font="font13", alignment=6, text_offset=0, focused_text="0xFFFFFFFF"):
+        """Use tag or neutral focus colours with the same shared shapes."""
         focus_images = self._chip_images(
-            x, y, width, "0x" + self.palette["CuratrPrimary"], height,
+            x, y, width, focus_colour, height,
         )
-        clear = os.path.join(self.addon_path, "resources", "media", "control_clear.png")
+        clear = os.path.join(self.addon_path, "resources", "media", "control_clear_v2.png")
         control = xbmcgui.ControlButton(
             x, y, width, height, label, font=font, textColor=colour,
-            focusedColor="0xFFFFFFFF", alignment=6,
+            focusedColor=focused_text, alignment=alignment, textOffsetX=text_offset,
             focusTexture=clear, noFocusTexture=clear,
         )
         self.addControl(control)
@@ -113,8 +106,6 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
     def _add_chip(self, x, y, width, part, index):
         kind = str(part.get("kind") or "genre")
         background, foreground = _PALETTE.get(kind, _PALETTE["genre"])
-        if self.light_mode:
-            foreground = _LIGHT_FOREGROUND.get(kind, _LIGHT_FOREGROUND["genre"])
         self._chip_images(x, y, width, background)
         if not self.edit_mode:
             label = xbmcgui.ControlLabel(x + 18, y + 10, width - 36, 40, "[B]%s[/B]" % part.get("text", ""), font="font13", textColor=foreground, alignment=6)
@@ -122,11 +113,13 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
             return
 
         minus = self._filter_button(
-            x + 7, y + 7, 48, 46, "−", foreground, font="font30",
+            x + 6, y + 7, 36, 46, "−", foreground,
+            "0xFF" + background[-6:], font="font30",
         )
         tag_text = self._filter_button(
-            x + 56, y + 7, max(48, width - 63), 46,
+            x + 46, y + 7, max(48, width - 52), 46,
             "[B]%s[/B]" % part.get("text", ""), foreground,
+            "0xFF" + background[-6:], alignment=4, text_offset=2,
         )
         minus_id, text_id = minus.getId(), tag_text.getId()
         self.control_actions[minus_id] = ("remove", index)
@@ -137,13 +130,13 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
 
     def _build_flow(self):
         self._clear_flow()
-        left, right, x, y = 360, 1560, 360, 468
+        left, right, x, y = 360, 1560, 360, 492
         parts = confirmation_parts(self.rules)
         for index, part in enumerate(parts):
             connector = str(part.get("connector") or "").strip()
             chip_text = str(part.get("text") or "").strip()
             connector_width = self._text_width(connector) if connector else 0
-            chip_width = self._text_width(chip_text, chip=True) + (42 if self.edit_mode else 0)
+            chip_width = self._text_width(chip_text, chip=True)
             required = connector_width + (12 if connector else 0) + chip_width + 14
             if x > left and x + required > right:
                 x, y = left, y + 72
@@ -155,10 +148,11 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         if self.edit_mode:
             if x + 64 > right:
                 x, y = left, y + 72
-            self._chip_images(x, y, 60, "0x" + self.palette["CuratrButton"])
+            self._chip_images(x, y, 60, self.neutral_background)
+            plus_text = "0xFFDAD6E0"
             plus = self._filter_button(
-                x, y, 60, 60, "[B]+[/B]",
-                "0xFF444751" if self.light_mode else "0xFFDAD6E0", font="font35",
+                x, y, 60, 60, "[B]+[/B]", plus_text, self.neutral_focus,
+                font="font35", focused_text=plus_text,
             )
             plus_id = plus.getId()
             self.control_actions[plus_id] = ("add", -1)
@@ -217,9 +211,9 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
             else:
                 exclusion = "Watched, rated and hidden items will be excluded  •  No AI will be used"
             self.getControl(13).setLabel(exclusion)
-            self.getControl(self.PROMPT_EDIT_ID).setLabel("EDIT REQUEST" if self.edit_existing else "EDIT PROMPT")
-            self.getControl(self.FILTER_EDIT_ID).setLabel("DONE" if self.edit_mode else "EDIT FILTERS")
-            self.getControl(self.CREATE_ID).setLabel(self.confirm_label.upper())
+            self.getControl(self.PROMPT_EDIT_ID).setLabel(bold("Edit Request" if self.edit_existing else "Edit Prompt"))
+            self.getControl(self.FILTER_EDIT_ID).setLabel("Done" if self.edit_mode else "Edit Filters")
+            self.getControl(self.CREATE_ID).setLabel(bold(self.confirm_label))
             self._refresh_flow(focus_first_action=self.edit_mode)
             if not self.edit_mode:
                 self.setFocus(self.getControl(self.CREATE_ID))
@@ -326,7 +320,7 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
             self.result = "create"; self.close()
         elif control_id == self.FILTER_EDIT_ID:
             self.edit_mode = not self.edit_mode
-            self.getControl(self.FILTER_EDIT_ID).setLabel("DONE" if self.edit_mode else "EDIT FILTERS")
+            self.getControl(self.FILTER_EDIT_ID).setLabel("Done" if self.edit_mode else "Edit Filters")
             self._refresh_flow(self.CREATE_ID if not self.edit_mode else None, focus_first_action=self.edit_mode)
         elif control_id in self.control_actions:
             action, index = self.control_actions[control_id]
@@ -342,7 +336,7 @@ class KeywordConfirmWindow(xbmcgui.WindowXMLDialog):
         if action.getId() in _BACK_ACTIONS:
             if self.edit_mode:
                 self.edit_mode = False
-                self.getControl(self.FILTER_EDIT_ID).setLabel("EDIT FILTERS")
+                self.getControl(self.FILTER_EDIT_ID).setLabel("Edit Filters")
                 self._refresh_flow(self.CREATE_ID)
             else: self.close()
 
@@ -368,9 +362,9 @@ def confirm_keyword_rules(addon_path, prompt, rules, footer="", edit_existing=Fa
     if footer: message = "%s\n\n%s" % (message, footer)
     try:
         edit_label = "Edit Request" if edit_existing else "Edit Prompt"
-        save_label = confirm_label or ("Save Changes" if edit_existing else "Create List")
+        save_label = confirm_label or ("Save" if edit_existing else "Create List")
         choice = xbmcgui.Dialog().yesnocustom("Keyword Matching", message, edit_label, nolabel="Cancel", yeslabel=save_label)
         return "edit" if choice == 2 else ("create" if choice == 1 else None)
     except (AttributeError, TypeError):
-        save_label = confirm_label or ("Save Changes" if edit_existing else "Create List")
+        save_label = confirm_label or ("Save" if edit_existing else "Create List")
         return "create" if xbmcgui.Dialog().yesno("Keyword Matching", message, nolabel="Cancel", yeslabel=save_label) else None

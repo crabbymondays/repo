@@ -1,6 +1,6 @@
 import xbmcgui
 
-from .ui_theme import skin_name, style_tab
+from .ui_theme import bold, skin_name, style_tab
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -30,8 +30,8 @@ class ListSettingsWindow(xbmcgui.WindowXMLDialog):
     def onInit(self):
         if self.existing:
             save, cancel, hidden = self.getControl(300), self.getControl(301), self.getControl(302)
-            save.setLabel("Save Changes")
-            cancel.setLabel("Cancel")
+            save.setLabel(bold("Save Changes"))
+            cancel.setLabel(bold("Cancel"))
             save.setPosition(610, 750)
             cancel.setPosition(970, 750)
             hidden.setVisible(False)

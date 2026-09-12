@@ -16,7 +16,8 @@ from lib.catalogue_clients import CatalogueError
 from lib.core import Curator
 from lib.list_art import resolved_sources as resolved_list_art
 from lib.metadata_cache import MetadataCache
-from lib.menu_art import menu_source
+from lib.menu_art import ADDON_ICON, menu_source
+from lib.menu_background import appearance_signature, background_source
 from lib.player_registry import PlayerRegistry
 from lib.trakt import TraktError
 from lib.view_refresh import list_signature, refresh_if_changed
@@ -28,7 +29,7 @@ BASE_URL = sys.argv[0]
 HANDLE = int(sys.argv[1])
 ADDON_PATH = xbmcvfs.translatePath(ADDON.getAddonInfo("path"))
 MEDIA_PATH = os.path.join(ADDON_PATH, "resources", "media")
-MENU_BACKGROUND_STYLE = "0"
+MENU_BACKGROUND_SOURCE = ""
 PLAYERS = PlayerRegistry(ADDON)
 METADATA = MetadataCache(ADDON)
 _LIBRARY_CACHE = {}
@@ -162,16 +163,11 @@ def _apply_menu_art(item, icon_name="", custom_art=None):
     # Keep navigation glyphs as item icons while every menu entry uses the
     # same restrained global background. Never promote an icon or per-menu
     # image to fanart: many TV skins display that artwork full-screen.
-    background_style = str(MENU_BACKGROUND_STYLE or "0")
+    global MENU_BACKGROUND_SOURCE
     icon = _existing_art(icon_name)
-
-    background_names = {
-        "0": "fanart_menu_clean_v4.jpg",
-        "1": "background_1_v4.jpg",
-        "2": "background_2_v4.jpg",
-        "3": "background_3_v4.jpg",
-    }
-    fanart = _existing_art(background_names.get(background_style, background_names["0"]))
+    if not MENU_BACKGROUND_SOURCE:
+        MENU_BACKGROUND_SOURCE = background_source(ADDON)
+    fanart = MENU_BACKGROUND_SOURCE
     landscape = ""
     if icon_name:
         landscape_path = menu_source(ADDON_PATH, icon_name, landscape=True)
@@ -179,7 +175,7 @@ def _apply_menu_art(item, icon_name="", custom_art=None):
             landscape = landscape_path
 
     if not icon:
-        root_icon = os.path.join(ADDON_PATH, "icon.png")
+        root_icon = os.path.join(ADDON_PATH, ADDON_ICON)
         if xbmcvfs.exists(root_icon):
             icon = root_icon
 
@@ -289,7 +285,7 @@ def _record_art(curator, record):
 def _root(curator):
     xbmcplugin.setPluginCategory(HANDLE, NAME)
     _add_folder(
-        _loc(32410, "My Lists"), "my",
+        _loc(32410, "Lists"), "my",
         _loc(32414, "Create, browse and manage your personalised movie and TV lists."),
         icon_name="menu_my_lists.png",
     )
@@ -301,7 +297,7 @@ def _root(curator):
     _add_folder(
         _loc(32412, "Preferences & Activity"), "taste_activity",
         _loc(32416, "View your preferences, connections, usage and recent activity."),
-        icon_name="menu_taste_v3.png",
+        icon_name="menu_preferences.png",
     )
     _add_action(
         _loc(32413, "Settings"), "settings",
@@ -317,8 +313,8 @@ def _root(curator):
 
 
 def _my(curator):
-    xbmcplugin.setPluginCategory(HANDLE, _loc(32410, "My Lists"))
-    _add_folder(_loc(32418, "Browse My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_list.png")
+    xbmcplugin.setPluginCategory(HANDLE, _loc(32410, "Lists"))
+    _add_folder(_loc(32418, "My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_list.png")
     _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create_v2.png")
     _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png")
     _add_folder("Folders", "folders", "Organise lists and shortcuts into custom folders for browsing or widgets.", icon_name="menu_widget_folders.png")
@@ -352,7 +348,7 @@ def _taste_activity(curator):
 
 
 def _lists(curator):
-    xbmcplugin.setPluginCategory(HANDLE, _loc(32410, "My Lists"))
+    xbmcplugin.setPluginCategory(HANDLE, _loc(32418, "My Lists"))
     records = _managed_records(curator)
     if not records:
         _add_action("Create your first list", "create", "You do not have any saved lists yet.")
@@ -401,7 +397,7 @@ def _folders(curator):
                 name, "folder", plot=plot, context_items=context,
                 art=_record_art(curator, folder), tagline=tagline, folder_id=folder_id,
             )
-        _add_action("Manage Folders", "folders_manage", "Create, edit, reorder or delete folders.", icon_name="menu_manage_folders.png")
+        _add_action("Manage Folders", "folders_manage", "Create, edit, reorder or delete folders.", icon_name="menu_manage.png")
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -512,7 +508,7 @@ def _folder(curator, params):
         elif entry.get("type") == "provider_list" and _add_provider_list_folder(curator, folder, entry):
             added += 1
     if not added:
-        _add_folder("Manage this folder", "folder_manage", "Add items to this folder.", icon_name="menu_manage_folders.png", folder_id=str(folder.get("id") or ""))
+        _add_folder("Manage this folder", "folder_manage", "Add items to this folder.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -1024,7 +1020,7 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
     return bool(xbmcplugin.addDirectoryItem(HANDLE, target_url, item, isFolder=is_folder))
 
 
-def _render_movies(curator, rows, category):
+def _render_movies(curator, rows, category, update_listing=False):
     xbmcplugin.setPluginCategory(HANDLE, category)
     rows = list(rows or [])
     enriched_rows = []
@@ -1111,7 +1107,7 @@ def _render_movies(curator, rows, category):
             xbmc.log("curatr sort method skipped: %s" % exc, xbmc.LOGDEBUG)
     if skipped:
         xbmc.log("curatr rendered %d movie(s), skipped %d" % (added, skipped), xbmc.LOGWARNING)
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+    xbmcplugin.endOfDirectory(HANDLE, updateListing=update_listing, cacheToDisc=False)
 
 def _single_list(curator, params):
     list_id = params.get("list_id") or params.get("trakt_id")
@@ -1278,21 +1274,22 @@ def _similar_preview(curator, params):
     _add_route_action(
         "Add To New List", "similar_save",
         "Save these results to a new curatr list.", token=token,
-        icon_name="menu_create_v2.png",
+        icon_name="menu_save_results.png",
     )
     _add_folder(
-        "Generate a new set of results", "similar_preview",
-        "Generate another temporary preview using %s." % method_label,
+        "Refresh Results", "similar_preview",
+        "Refresh results using %s." % method_label,
         icon_name="menu_refresh.png", token=token, method=method,
     )
     other = "keyword" if method == "ai" else "ai"
     _add_folder(
-        "Generate new results using %s" % ("keyword matching" if other == "keyword" else "AI"),
-        "similar_preview", "Generate a new temporary preview using the other matching method.",
+        "Switch Method", "similar_preview",
+        "Refresh results using %s." % ("Keyword Matching" if other == "keyword" else "AI"),
         icon_name="menu_branching_v2.png", token=token, method=other,
     )
     rows = [({}, movie, "Similar to %s" % source, "", False) for movie in preview.get("movies", [])]
-    _render_movies(curator, rows, "Similar to %s • %s" % (source, method_label))
+    _render_movies(curator, rows, "Similar to %s • %s" % (source, method_label),
+                   update_listing=previous is not None)
 
 
 def _run_command(curator, command):
@@ -1329,10 +1326,12 @@ def _run_command(curator, command):
     if not function:
         raise RuntimeError("Unknown addon action: %s" % command)
     before = list_signature(curator.state)
+    appearance_before = appearance_signature(ADDON, curator.state)
     result = function()
     if isinstance(result, dict) and result.get("kind") == "list_preview":
         _open_list_preview(result)
-    refresh_if_changed(before, curator.state)
+    refresh_if_changed(before, curator.state,
+                       appearance_changed=appearance_before != appearance_signature(ADDON, curator.state))
 
 
 def _kodi_info():
@@ -1341,17 +1340,13 @@ def _kodi_info():
 
 
 def main():
-    global MENU_BACKGROUND_STYLE
+    global MENU_BACKGROUND_SOURCE
     params = _params()
     action = params.get("action") or "root"
     curator = None
     try:
         curator = Curator(ADDON)
-        MENU_BACKGROUND_STYLE = str(
-            curator.state.get("menu_background_style")
-            or ADDON.getSetting("menu_background_style")
-            or "0"
-        )
+        MENU_BACKGROUND_SOURCE = background_source(ADDON, curator.state)
         before = list_signature(curator.state)
         if action == "root":
             curator.maybe_show_first_run()

@@ -14,6 +14,7 @@ from .ai_factory import create_ai_client
 from .art_cache import ArtworkCache
 from .artwork_editor import edit_artwork
 from .artwork_grid import choose_artwork
+from .bundled_art import components as artwork_components
 from .catalogue_clients import CatalogueError, MDBListClient, TMDBClient
 from .collection_manager import manage_collection
 from .folder_contents import manage_folder_contents
@@ -24,12 +25,14 @@ from .keyword_matcher import PARSER_VERSION, candidate_matches, format_rules, pa
 from .list_settings import edit_list_settings
 from .metadata_cache import MetadataCache
 from .menu_art import menu_source
+from .menu_background import background_entries, current_choice, import_custom_background
 from .list_art import CHOICES as LIST_ART_CHOICES
 from .list_art import bundled_source as bundled_list_art_source
 from .list_art import label as list_art_label
 from .list_art import normalise_state as normalise_list_art
 from .list_art import resolved_sources as list_art_sources
 from .list_art import summary as list_art_summary
+from .list_art import suggest_key as suggested_art_key
 from .trakt import (
     TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, TRAKT_REDIRECT_URI,
     TraktClient, TraktError,
@@ -1735,7 +1738,7 @@ class Curator:
             return "Artwork  •  %s / %s" % (icon, fanart)
         return values.get(field, field.replace("_", " ").title())
 
-    def _edit_list_draft_field(self, field, draft):
+    def _edit_list_draft_field(self, field, draft, existing=False):
         if field == "name":
             value = xbmcgui.Dialog().input("List name", defaultt=str(draft.get("name") or ""))
             if value and value.strip():
@@ -1748,7 +1751,9 @@ class Curator:
             )
         elif field == "prompt":
             if draft.get("generation_method") == "keyword":
-                return self._edit_keyword_list_draft(draft) or draft
+                return self._edit_keyword_list_draft(
+                    draft, confirm_label="Save" if existing else "Use Filters",
+                ) or draft
             value = xbmcgui.Dialog().input("What are you in the mood for?", defaultt=str(draft.get("prompt") or ""))
             if value and value.strip():
                 draft["prompt"] = value.strip()
@@ -2359,18 +2364,22 @@ class Curator:
         self._save_state()
         return updated
 
-    def _bundled_art_source(self, key, kind, style):
-        return bundled_list_art_source(self.addon, key, kind, style)
+    def _bundled_art_source(self, key, kind, style, colour="default"):
+        return bundled_list_art_source(self.addon, key, kind, style, colour)
 
-    def _bundled_art_entries(self, kind, style):
-        return [
-            {
-                "key": key,
-                "label": label,
-                "source": self._bundled_art_source(key, kind, style),
-            }
-            for key, label in LIST_ART_CHOICES
-        ]
+    def _bundled_art_entries(self, kind, style, colour="default", layered=False):
+        root = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
+        entries = []
+        for key, label in LIST_ART_CHOICES:
+            if key == "blank" and kind == "icon" and style == "white":
+                continue
+            symbol, background, _palette = artwork_components(root, key, kind, style, colour)
+            entries.append({
+                "key": key, "label": label, "colour": colour,
+                "source": (symbol or background) if layered else self._bundled_art_source(key, kind, style, colour),
+                "background": background if layered and symbol else "", "layered": bool(layered and symbol),
+            })
+        return entries
 
     def _person_artwork_entries(self):
         tmdb = getattr(self, "tmdb", None)
@@ -2421,12 +2430,13 @@ class Curator:
             preview_record_value["artwork"] = normalise_list_art(draft)
             sources = list_art_sources(self.addon, preview_record_value)
             icon, fanart, _style = list_art_summary(preview_record_value)
-            sources.update({"icon_label": icon, "fanart_label": fanart})
+            sources.update({"icon_label": icon, "fanart_label": fanart,
+                            "automatic_key": suggested_art_key(record.get("name"), record.get("prompt"))})
             return sources
 
-        def choice_provider(kind, source, style):
+        def choice_provider(kind, source, style, colour="default"):
             if source == "curatr":
-                return self._bundled_art_entries(kind, style)
+                return self._bundled_art_entries(kind, style, colour, layered=True)
             if source == "contents" and content_entries:
                 if not loaded_contents:
                     loaded_contents.extend(content_entries() or [])
@@ -2457,10 +2467,7 @@ class Curator:
             style = "genre_colours" if style_choice == 1 else "white"
             layout = "icon"
         else:
-            style_choice = xbmcgui.Dialog().select("Fanart style", ["Colours", "Monochrome"])
-            if style_choice < 0:
-                return "", ""
-            style = "monochrome" if style_choice == 1 else "colour"
+            style = "colour"
             layout = "fanart"
         entries = self._bundled_art_entries(kind, style)
         selected = choose_artwork(
@@ -2693,19 +2700,6 @@ class Curator:
         updated = self._store_list_artwork(record, art)
         self.record_activity("Updated the fanart for %s" % (updated.get("name") or "curatr list"), notify=True)
         return updated
-
-    def _change_list_fanart_style(self, list_id):
-        record = self._managed_record_by_id(list_id)
-        if not record:
-            raise RuntimeError("That list has already been removed.")
-        art = normalise_list_art(record.get("artwork"))
-        if art.get("fanart_mode") not in ("auto", "bundled"):
-            return record
-        choice = xbmcgui.Dialog().select("Fanart style", ["Colours", "Monochrome"])
-        if choice < 0:
-            return record
-        art["fanart_style"] = "monochrome" if choice == 1 else "colour"
-        return self._store_list_artwork(record, art)
 
     def _suggest_list_artwork(self, list_id):
         record = self._managed_record_by_id(list_id)
@@ -2983,7 +2977,8 @@ class Curator:
         }
         action, draft = edit_list_settings(
             xbmcvfs.translatePath(self.addon.getAddonInfo("path")), draft,
-            self._edit_list_draft_field, self._format_list_draft_field, existing=True,
+            lambda field, values: self._edit_list_draft_field(field, values, existing=True),
+            self._format_list_draft_field, existing=True,
         )
         if action != "save":
             return record
@@ -2999,7 +2994,7 @@ class Curator:
         method = draft.get("generation_method")
         rules = None
         if method == "keyword":
-            edited = self._prepare_keyword_list_draft(draft, "Save Changes")
+            edited = self._prepare_keyword_list_draft(draft, "Save")
             if edited is None:
                 return record
             draft = edited
@@ -3509,64 +3504,41 @@ class Curator:
         self._save_state()
         return updated
 
+    def _visible_folder_entries(self, entries):
+        return [row for row in entries if isinstance(row, dict)
+                and str(row.get("id") or "")
+                and (row.get("type") != "curatr_list"
+                     or self._managed_record_by_id(row.get("list_id")))]
+
+    def _reorder_folder_entries(self, entries, entry_id, operation):
+        """Move among visible items while preserving any unresolved stored links."""
+        entries = [dict(row) for row in entries if isinstance(row, dict)]
+        visible = self._visible_folder_entries(entries)
+        index = next((i for i, row in enumerate(visible)
+                      if str(row.get("id") or "") == str(entry_id or "")), -1)
+        if index < 0:
+            return entries
+        target = {"move_up": max(0, index - 1), "move_down": min(len(visible) - 1, index + 1),
+                  "move_front": 0, "move_back": len(visible) - 1}.get(operation, index)
+        item = visible.pop(index)
+        visible.insert(target, item)
+        ids = {str(row["id"]) for row in visible}
+        ordered = iter(visible)
+        return [next(ordered) if str(row.get("id") or "") in ids else row for row in entries]
+
     def _folder_entry_label(self, entry):
         if not isinstance(entry, dict):
             return "Unknown item"
         if entry.get("type") == "curatr_list":
             record = self._managed_record_by_id(entry.get("list_id"))
-            return str((record or {}).get("name") or "Missing curatr list")
+            return str((record or {}).get("name") or "")
         if entry.get("type") == "provider_list":
             return str(entry.get("name") or ("Trakt list" if entry.get("provider") == "trakt" else "MDBList list"))
         return str(entry.get("name") or "External Shortcut")
 
     def _folder_content_rows(self, folder_id):
         folder = self.widget_folder_by_id(folder_id)
-        if not folder:
-            return []
-        entries = [
-            row for row in folder.get("entries", [])
-            if isinstance(row, dict) and str(row.get("id") or "")
-        ]
-        rows = []
-        for index, entry in enumerate(entries):
-            entry_id = str(entry.get("id") or "")
-            kind = str(entry.get("type") or "")
-            label = self._folder_entry_label(entry)
-            art_record = entry
-            if kind == "curatr_list":
-                record = self._managed_record_by_id(entry.get("list_id"))
-                if record:
-                    art_record = record
-                    item_count = len([
-                        row for row in record.get("movies", []) if isinstance(row, dict)
-                    ])
-                    detail = "curatr list  •  %d item%s" % (
-                        item_count, "" if item_count == 1 else "s",
-                    )
-                else:
-                    art_record = {
-                        "name": label,
-                        "artwork": normalise_list_art({"icon_mode": "default", "fanart_mode": "default"}),
-                    }
-                    detail = "Missing curatr list"
-            elif kind == "provider_list":
-                provider = "Trakt" if entry.get("provider") == "trakt" else "MDBList"
-                item_count = max(0, self._safe_int(entry.get("item_count"), 0))
-                detail = "%s list  •  %d item%s" % (
-                    provider, item_count, "" if item_count == 1 else "s",
-                )
-            else:
-                detail = "Add-on path"
-            rows.append({
-                "key": entry_id,
-                "label": label,
-                "detail": detail,
-                "kind": kind,
-                "index": index,
-                "total": len(entries),
-                "art": list_art_sources(self.addon, art_record),
-            })
-        return rows
+        return self._draft_folder_content_rows(folder) if folder else []
 
     @staticmethod
     def _folder_content_actions(row):
@@ -3597,26 +3569,9 @@ class Curator:
 
     def _move_widget_folder_entry(self, folder_id, entry_id, operation):
         folder, _entry = self._widget_folder_entry(folder_id, entry_id)
-        entries = [dict(row) for row in folder.get("entries", []) if isinstance(row, dict)]
-        index = next((
-            position for position, row in enumerate(entries)
-            if str(row.get("id") or "") == str(entry_id)
-        ), -1)
-        if index < 0:
-            return folder
-        item = entries.pop(index)
-        if operation == "move_up":
-            target = max(0, index - 1)
-        elif operation == "move_down":
-            target = min(len(entries), index + 1)
-        elif operation == "move_front":
-            target = 0
-        elif operation == "move_back":
-            target = len(entries)
-        else:
-            return folder
-        entries.insert(target, item)
-        if target == index:
+        original = folder.get("entries", [])
+        entries = self._reorder_folder_entries(original, entry_id, operation)
+        if entries == original:
             return folder
         updated = dict(folder)
         updated["entries"] = entries
@@ -3788,10 +3743,7 @@ class Curator:
                 art.update({"fanart_mode": "default", "fanart_key": "", "fanart_source": "", "fanart_label": ""})
 
     def _draft_folder_content_rows(self, draft):
-        entries = [
-            dict(row) for row in draft.get("entries", [])
-            if isinstance(row, dict) and str(row.get("id") or "")
-        ]
+        entries = self._visible_folder_entries(draft.get("entries", []))
         rows = []
         for index, entry in enumerate(entries):
             kind = str(entry.get("type") or "")
@@ -3808,8 +3760,6 @@ class Curator:
                     detail = "curatr list  •  %d item%s" % (
                         count, "" if count == 1 else "s",
                     )
-                else:
-                    detail = "Missing curatr list"
             elif kind == "provider_list":
                 provider = "Trakt" if entry.get("provider") == "trakt" else "MDBList"
                 count = max(0, self._safe_int(entry.get("item_count"), 0))
@@ -3861,16 +3811,7 @@ class Curator:
             return draft
         entry = entries[index]
         if action in ("move_up", "move_down", "move_front", "move_back"):
-            item = entries.pop(index)
-            if action == "move_up":
-                target = max(0, index - 1)
-            elif action == "move_down":
-                target = min(len(entries), index + 1)
-            elif action == "move_front":
-                target = 0
-            else:
-                target = len(entries)
-            entries.insert(target, item)
+            entries = self._reorder_folder_entries(entries, entry_id, action)
         elif action == "settings" and entry.get("type") in ("provider_list", "external_path"):
             name = xbmcgui.Dialog().input(
                 "Item name", defaultt=str(entry.get("name") or "")
@@ -3966,7 +3907,7 @@ class Curator:
             return "Description  •  %s" % (self._shorten_text(draft.get("description"), 56) or "None")
         if field == "manage_contents":
             folder = self.widget_folder_by_id(draft.get("id")) or {}
-            count = len([row for row in folder.get("entries", []) if isinstance(row, dict)])
+            count = len(self._visible_folder_entries(folder.get("entries", [])))
             return "Manage Contents  •  %d item%s" % (count, "" if count == 1 else "s")
         icon, fanart, _style = list_art_summary({"name": draft.get("name"), "artwork": draft.get("artwork")})
         return "Artwork  •  %s / %s" % (icon, fanart)
@@ -4778,7 +4719,7 @@ class Curator:
             elif choice == 4:
                 folder = self.import_kodi_favourite_interactive(folder_id) or folder
             elif choice == 5:
-                entries = [row for row in folder.get("entries", []) if isinstance(row, dict)]
+                entries = self._visible_folder_entries(folder.get("entries", []))
                 if not entries:
                     xbmcgui.Dialog().ok(self.name, "This folder is empty.")
                     continue
@@ -4853,13 +4794,13 @@ class Curator:
             folder_id = str(folder.get("id") or "")
             if not folder_id:
                 continue
-            entries = [row for row in folder.get("entries", []) if isinstance(row, dict)]
+            entries = self._visible_folder_entries(folder.get("entries", []))
             curatr_count = sum(row.get("type") == "curatr_list" for row in entries)
             linked_count = sum(row.get("type") == "provider_list" for row in entries)
             path_count = sum(row.get("type") == "external_path" for row in entries)
             parts = []
             if curatr_count:
-                parts.append("%d curatr" % curatr_count)
+                parts.append("%d local" % curatr_count)
             if linked_count:
                 parts.append("%d linked" % linked_count)
             if path_count:
@@ -5428,30 +5369,40 @@ class Curator:
         xbmcgui.Dialog().textviewer("Privacy & Data", text)
 
     def choose_menu_background_interactive(self):
-        """Choose the global menu background from a visual, skin-neutral grid."""
+        """Choose a theme gradient or custom image without leaving the picker on cancel."""
         addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
-        media = os.path.join(addon_path, "resources", "media")
-        entries = [
-            {"key": "0", "label": "Clean", "source": os.path.join(media, "fanart_menu_clean_v4.jpg")},
-            {"key": "1", "label": "Deep Blue", "source": os.path.join(media, "background_1_v4.jpg")},
-            {"key": "2", "label": "Purple Glow", "source": os.path.join(media, "background_2_v4.jpg")},
-            {"key": "3", "label": "Midnight Waves", "source": os.path.join(media, "background_3_v4.jpg")},
-        ]
-        current = str(
-            self.state.get("menu_background_style")
-            or self.addon.getSetting("menu_background_style")
-            or "0"
-        )
-        for entry in entries:
-            if entry["key"] == current:
-                entry["subtitle"] = "Selected"
-        selected = choose_artwork(addon_path, "Choose Menu Background", entries, "fanart")
+        current = current_choice(self.addon, self.state)
+        entries = background_entries(self.addon, self.state)
+
+        def select(entry):
+            if entry["key"] != "custom":
+                return entry
+            source = xbmcgui.Dialog().browseSingle(
+                2, "Choose a background image", "files", ".png|.jpg|.jpeg|.webp",
+                defaultt=str(self.state.get("menu_background_source") or ""),
+            )
+            if not source:
+                return None
+            try:
+                return dict(entry, source=import_custom_background(self.addon, source))
+            except (OSError, ValueError, RuntimeError) as exc:
+                message = str(exc) if isinstance(exc, ValueError) else "Could not read that image. Please choose another file."
+                xbmcgui.Dialog().ok("Menu Background", message)
+                return None
+
+        selected = choose_artwork(addon_path, "Menu Background", entries, "fanart", selection_handler=select)
         if not selected:
             return current
-        value = str(selected.get("key") or "0")
+        value = str(selected["key"])
+        source = str(selected.get("source") or "")
+        if value == current and (value != "custom" or source == self.state.get("menu_background_source")):
+            return current
         self.state["menu_background_style"] = value
+        if value == "custom":
+            self.state["menu_background_source"] = source
         self._save_state()
-        self.record_activity("Changed menu background to %s" % selected.get("label"), notify=True)
+        label = "Custom" if value == "custom" else selected.get("label")
+        self.record_activity("Changed menu background to %s" % label, notify=True)
         return value
 
     def set_list_trakt_sync(self, list_id, enabled):
@@ -7191,7 +7142,7 @@ class Curator:
         """Compact script menu; the video-plugin interface offers the same sections with artwork."""
         while True:
             choice = xbmcgui.Dialog().select(self.name, [
-                self._loc(32410, "My Lists"),
+                self._loc(32410, "Lists"),
                 self._loc(32411, "Explore"),
                 self._loc(32412, "Preferences & Activity"),
                 self._loc(32413, "Settings"),
@@ -7199,7 +7150,7 @@ class Curator:
             if choice < 0:
                 return
             if choice == 0:
-                sub = xbmcgui.Dialog().select(self._loc(32410, "My Lists"), [
+                sub = xbmcgui.Dialog().select(self._loc(32410, "Lists"), [
                     self._loc(32420, "Create a new list"),
                     self._loc(32421, "Manage my lists"),
                     "Folders",

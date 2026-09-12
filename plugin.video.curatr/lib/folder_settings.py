@@ -1,7 +1,7 @@
 import xbmc
 import xbmcgui
 
-from .ui_theme import skin_name, style_tab
+from .ui_theme import bold, skin_name, style_tab
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -73,7 +73,7 @@ class FolderSettingsWindow(xbmcgui.WindowXMLDialog):
     def onInit(self):
         try:
             if self.existing:
-                self.getControl(self.CREATE_ID).setLabel("Save Changes")
+                self.getControl(self.CREATE_ID).setLabel(bold("Save Changes"))
                 self.getControl(20).setLabel("Save when you're ready.")
             self._show_tab("appearance")
         except Exception as exc:
@@ -231,7 +231,7 @@ class FolderSettingsWindow(xbmcgui.WindowXMLDialog):
         self._set_visible(self.SCROLLBAR_ID, True)
         self._set_visible(self.SIDE_PANEL_ID, True)
         self._set_visible(self.SIDE_LABEL_ID, True)
-        self.getControl(self.SIDE_LABEL_ID).setLabel("Select an item")
+        self.getControl(self.SIDE_LABEL_ID).setLabel(bold("Select an item"))
         self._set_visible(self.ACTION_LIST_ID, False)
         self.getControl(20).setLabel("Folders can be created empty.")
         self.actions = []
@@ -273,7 +273,7 @@ class FolderSettingsWindow(xbmcgui.WindowXMLDialog):
         control.reset()
         control.addItems([self._action_item(row) for row in self.actions])
         control.setVisible(True)
-        self.getControl(self.SIDE_LABEL_ID).setLabel("Choose an action")
+        self.getControl(self.SIDE_LABEL_ID).setLabel(bold("Choose an action"))
         self._set_navigation(self.getControl(self.GRID_ID), self.getControl(self.GRID_ID), self.getControl(self.CREATE_ID), self.getControl(101), control)
         self._set_navigation(control, control, control, self.getControl(self.GRID_ID), control)
         position = 0
@@ -291,7 +291,7 @@ class FolderSettingsWindow(xbmcgui.WindowXMLDialog):
         control.setVisible(False)
         self.actions = []
         self.active_key = ""
-        self.getControl(self.SIDE_LABEL_ID).setLabel("Select an item")
+        self.getControl(self.SIDE_LABEL_ID).setLabel(bold("Select an item"))
         self._set_focus(self.getControl(self.GRID_ID))
 
     def _add_item(self):

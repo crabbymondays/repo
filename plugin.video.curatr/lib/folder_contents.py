@@ -1,6 +1,6 @@
 import xbmcgui
 
-from .ui_theme import skin_name
+from .ui_theme import bold, skin_name
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -56,10 +56,11 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
 
     def onInit(self):
         try:
-            self.getControl(10).setLabel(self.heading)
+            self.getControl(10).setLabel(bold(self.heading))
             self.getControl(11).setLabel(self.description)
             self._refresh_entries()
-            self._leave_actions(set_focus=False)
+            self.getControl(self.GRID_ID).selectItem(0)
+            self._sync_actions()
             self.setFocus(self.getControl(self.GRID_ID))
         except Exception:
             self.failed = True
@@ -103,21 +104,21 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
             return self.entries[position]
         return None
 
-    def _open_actions(self, entry, preferred_action=""):
+    def _open_actions(self, entry, preferred_action="", set_focus=True):
         self.active_key = str(entry.get("key") or "")
         self.actions = [
             dict(row) for row in (self.action_provider(dict(entry)) or [])
             if isinstance(row, dict) and str(row.get("key") or "")
         ]
         if not self.actions:
-            self.active_key = ""
+            self._leave_actions(set_focus=False)
             return
         control = self.getControl(self.ACTION_LIST_ID)
         control.reset()
         control.addItems([self._action_item(row) for row in self.actions])
         control.setVisible(True)
         control.setEnabled(True)
-        self.getControl(self.ACTIVE_LABEL_ID).setLabel("Choose an action")
+        self.getControl(self.ACTIVE_LABEL_ID).setLabel(bold("Choose an action"))
         self.getControl(self.ACTIVE_HELP_ID).setLabel("")
         position = 0
         wanted = str(preferred_action or "")
@@ -127,7 +128,15 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
                 if str(row.get("key") or "") == wanted
             ), 0)
         control.selectItem(position)
-        self.setFocus(control)
+        if set_focus:
+            self.setFocus(control)
+
+    def _sync_actions(self):
+        entry = self._selected_entry()
+        if not entry or entry.get("key") == _ADD_KEY:
+            self._leave_actions(set_focus=False)
+        elif str(entry.get("key") or "") != self.active_key:
+            self._open_actions(entry, set_focus=False)
 
     def _leave_actions(self, set_focus=True):
         control = self.getControl(self.ACTION_LIST_ID)
@@ -135,7 +144,7 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
         control.setEnabled(False)
         self.actions = []
         self.active_key = ""
-        self.getControl(self.ACTIVE_LABEL_ID).setLabel("Select an item")
+        self.getControl(self.ACTIVE_LABEL_ID).setLabel(bold("Select an item"))
         self.getControl(self.ACTIVE_HELP_ID).setLabel("")
         if set_focus:
             self.setFocus(self.getControl(self.GRID_ID))
@@ -153,6 +162,7 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
             if str(row.get("key") or "") not in before
         ), "")
         self._refresh_entries(new_key or _ADD_KEY)
+        self._sync_actions()
 
     def _run_action(self):
         position = self.getControl(self.ACTION_LIST_ID).getSelectedPosition()
@@ -179,7 +189,8 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
         if entry:
             self._open_actions(entry, action_key)
         else:
-            self._leave_actions()
+            self._sync_actions()
+            self.setFocus(self.getControl(self.GRID_ID))
 
     def onClick(self, control_id):
         if control_id == self.GRID_ID:
@@ -189,19 +200,26 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
             if str(entry.get("key") or "") == _ADD_KEY:
                 self._add_item()
             else:
-                self._open_actions(entry)
+                self._open_actions(entry, set_focus=False)
         elif control_id == self.ACTION_LIST_ID:
             self._run_action()
         elif control_id == self.CLOSE_ID:
             self.close()
 
+    def onFocus(self, control_id):
+        if control_id == self.GRID_ID:
+            self._sync_actions()
+
     def onAction(self, action):
+        focus = self.getFocusId()
         if action.getId() not in _BACK_ACTIONS:
+            if focus == self.GRID_ID:
+                self._sync_actions()
             return
-        if self.active_key:
-            self._leave_actions()
-        else:
-            self.close()
+        if focus == self.ACTION_LIST_ID:
+            self.setFocus(self.getControl(self.GRID_ID))
+            return
+        self.close()
 
 
 def manage_folder_contents(

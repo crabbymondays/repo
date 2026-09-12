@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <window type="dialog">
     <defaultcontrol always="true">100</defaultcontrol>
     <coordinates>
@@ -7,134 +7,244 @@
     </coordinates>
     <controls>
         <control type="image">
-            <left>0</left><top>0</top><width>1920</width><height>1080</height>
+            <left>0</left>
+            <top>0</top>
+            <width>1920</width>
+            <height>1080</height>
             <texture colordiffuse="$INFO[Window(Home).Property(CuratrBackdrop)]">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
         </control>
         <control type="label" id="10">
-            <left>100</left><top>42</top><width>1720</width><height>58</height>
-            <font>font30</font><textcolor>FFFFFFFF</textcolor><align>center</align>
-            <label>Choose artwork</label>
+            <left>100</left>
+            <top>42</top>
+            <width>1720</width>
+            <height>58</height>
+            <font>font30</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <align>center</align>
+            <label>[B]Choose artwork[/B]</label>
+            <aligny>center</aligny>
         </control>
         <control type="label">
-            <left>100</left><top>102</top><width>1720</width><height>38</height>
-            <font>font13</font><textcolor>FFBBBBBB</textcolor><align>center</align>
+            <left>100</left>
+            <top>102</top>
+            <width>1720</width>
+            <height>38</height>
+            <font>font13</font>
+            <textcolor>FFBBBBBB</textcolor>
+            <align>center</align>
             <label>Select an image to use it  •  Press Back to cancel</label>
         </control>
-
         <control type="panel" id="100">
-            <left>120</left><top>158</top><width>1680</width><height>820</height>
-            <onleft>100</onleft><onright>100</onright><onup>100</onup><ondown>100</ondown>
-            <pagecontrol>300</pagecontrol><scrolltime>180</scrolltime>
+            <left>120</left>
+            <top>158</top>
+            <width>1680</width>
+            <height>820</height>
+            <onleft>100</onleft>
+            <onright>100</onright>
+            <onup>100</onup>
+            <ondown>100</ondown>
+            <pagecontrol>300</pagecontrol>
+            <scrolltime>180</scrolltime>
             <itemlayout width="420" height="400">
                 <control type="image">
-                    <left>50</left><top>8</top><width>320</width><height>320</height>
+                    <left>44</left>
+                    <top>2</top>
+                    <width>332</width>
+                    <height>332</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <visible>String.IsEqual(ListItem.Property(CuratrSelected),true)</visible>
+                </control>
+                <control type="image">
+                    <left>50</left>
+                    <top>8</top>
+                    <width>320</width>
+                    <height>320</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
                 </control>
                 <control type="image">
-                    <left>58</left><top>16</top><width>304</width><height>304</height>
+                    <left>58</left>
+                    <top>16</top>
+                    <width>304</width>
+                    <height>304</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="image">
-                    <left>58</left><top>16</top><width>304</width><height>304</height>
+                    <left>58</left>
+                    <top>16</top>
+                    <width>304</width>
+                    <height>304</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_mask_square_v2.png</texture>
                 </control>
                 <control type="label">
-                    <left>40</left><top>334</top><width>340</width><height>54</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align><aligny>center</aligny>
+                    <left>40</left>
+                    <top>334</top>
+                    <width>340</width>
+                    <height>54</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>center</align>
+                    <aligny>center</aligny>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </itemlayout>
             <focusedlayout width="420" height="400">
                 <control type="image">
-                    <left>44</left><top>2</top><width>332</width><height>332</height>
+                    <left>44</left>
+                    <top>2</top>
+                    <width>332</width>
+                    <height>332</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
-                    <animation effect="fade" start="80" end="100" time="120">Focus</animation>
                 </control>
                 <control type="image">
-                    <left>50</left><top>8</top><width>320</width><height>320</height>
+                    <left>50</left>
+                    <top>8</top>
+                    <width>320</width>
+                    <height>320</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
                 </control>
                 <control type="image">
-                    <left>58</left><top>16</top><width>304</width><height>304</height>
+                    <left>58</left>
+                    <top>16</top>
+                    <width>304</width>
+                    <height>304</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="image">
-                    <left>58</left><top>16</top><width>304</width><height>304</height>
+                    <left>58</left>
+                    <top>16</top>
+                    <width>304</width>
+                    <height>304</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_mask_square_v2.png</texture>
                 </control>
                 <control type="label">
-                    <left>40</left><top>334</top><width>340</width><height>54</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align><aligny>center</aligny>
+                    <left>40</left>
+                    <top>334</top>
+                    <width>340</width>
+                    <height>54</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>center</align>
+                    <aligny>center</aligny>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </focusedlayout>
         </control>
-
         <control type="panel" id="200">
-            <left>120</left><top>158</top><width>1680</width><height>820</height>
-            <onleft>200</onleft><onright>200</onright><onup>200</onup><ondown>200</ondown>
-            <pagecontrol>300</pagecontrol><scrolltime>180</scrolltime>
+            <left>120</left>
+            <top>158</top>
+            <width>1680</width>
+            <height>820</height>
+            <onleft>200</onleft>
+            <onright>200</onright>
+            <onup>200</onup>
+            <ondown>200</ondown>
+            <pagecontrol>300</pagecontrol>
+            <scrolltime>180</scrolltime>
             <itemlayout width="560" height="360">
                 <control type="image">
-                    <left>18</left><top>8</top><width>524</width><height>300</height>
+                    <left>12</left>
+                    <top>2</top>
+                    <width>536</width>
+                    <height>312</height>
+                    <aspectratio align="center" aligny="center">keep</aspectratio>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <visible>String.IsEqual(ListItem.Property(CuratrSelected),true)</visible>
+                </control>
+                <control type="image">
+                    <left>18</left>
+                    <top>8</top>
+                    <width>524</width>
+                    <height>300</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
                 </control>
                 <control type="image">
-                    <left>24</left><top>14</top><width>512</width><height>288</height>
+                    <left>24</left>
+                    <top>14</top>
+                    <width>512</width>
+                    <height>288</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="image">
-                    <left>24</left><top>14</top><width>512</width><height>288</height>
+                    <left>24</left>
+                    <top>14</top>
+                    <width>512</width>
+                    <height>288</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_mask_landscape_v4.png</texture>
                 </control>
                 <control type="label">
-                    <left>24</left><top>318</top><width>512</width><height>36</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
+                    <left>24</left>
+                    <top>318</top>
+                    <width>512</width>
+                    <height>36</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>center</align>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </itemlayout>
             <focusedlayout width="560" height="360">
                 <control type="image">
-                    <left>12</left><top>2</top><width>536</width><height>312</height>
+                    <left>12</left>
+                    <top>2</top>
+                    <width>536</width>
+                    <height>312</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
-                    <animation effect="fade" start="80" end="100" time="120">Focus</animation>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
                 </control>
                 <control type="image">
-                    <left>18</left><top>8</top><width>524</width><height>300</height>
+                    <left>18</left>
+                    <top>8</top>
+                    <width>524</width>
+                    <height>300</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
                 </control>
                 <control type="image">
-                    <left>24</left><top>14</top><width>512</width><height>288</height>
+                    <left>24</left>
+                    <top>14</top>
+                    <width>512</width>
+                    <height>288</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture background="true">$INFO[ListItem.Art(thumb)]</texture>
                 </control>
                 <control type="image">
-                    <left>24</left><top>14</top><width>512</width><height>288</height>
+                    <left>24</left>
+                    <top>14</top>
+                    <width>512</width>
+                    <height>288</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
                     <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_mask_landscape_v4.png</texture>
                 </control>
                 <control type="label">
-                    <left>24</left><top>318</top><width>512</width><height>36</height>
-                    <font>font13</font><textcolor>FFFFFFFF</textcolor><align>center</align>
+                    <left>24</left>
+                    <top>318</top>
+                    <width>512</width>
+                    <height>36</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>center</align>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
             </focusedlayout>
         </control>
         <control type="scrollbar" id="300">
-            <left>1828</left><top>170</top><width>18</width><height>790</height>
-            <orientation>vertical</orientation><showonepage>false</showonepage>
+            <left>1828</left>
+            <top>170</top>
+            <width>18</width>
+            <height>790</height>
+            <orientation>vertical</orientation>
+            <showonepage>false</showonepage>
         </control>
     </controls>
 </window>

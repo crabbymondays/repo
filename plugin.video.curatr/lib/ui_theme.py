@@ -1,42 +1,14 @@
 """Palette handling for Curatr's custom Kodi windows."""
 
+from .colours import COLOURS, BACKGROUND_COLOURS, normalise_colour
+
+
 _PRESETS = {
-    "violet": {
-        "primary": "7653B9",
-        "secondary": "A365D1",
-        "tint": "39294F",
-    },
-    "ocean": {
-        "primary": "356FC2",
-        "secondary": "169CB4",
-        "tint": "203A55",
-    },
-    "emerald": {
-        "primary": "2E8B69",
-        "secondary": "58A884",
-        "tint": "25483D",
-    },
-    "amber": {
-        "primary": "B66B22",
-        "secondary": "D49A35",
-        "tint": "51381F",
-    },
+    "violet": {"primary": "deep_violet", "secondary": "violet", "tint": "deep_violet"},
+    "ocean": {"primary": "deep_blue", "secondary": "cyan", "tint": "deep_blue"},
+    "emerald": {"primary": "green", "secondary": "sage", "tint": "green"},
+    "amber": {"primary": "amber", "secondary": "gold", "tint": "amber"},
 }
-
-_COLOURS = {
-    "violet": "7653B9",
-    "lilac": "A365D1",
-    "blue": "356FC2",
-    "cyan": "169CB4",
-    "teal": "278F8A",
-    "green": "2E8B69",
-    "amber": "B66B22",
-    "gold": "D49A35",
-    "red": "B64B59",
-    "pink": "BE558C",
-    "neutral": "626775",
-}
-
 
 def _setting(addon, setting_id, default=""):
     try:
@@ -95,75 +67,53 @@ def _for_white_text(rgb):
 
 
 def _selected_colour(addon, setting_id, fallback):
-    selected = _setting(addon, setting_id, "theme")
-    return _rgb(_COLOURS.get(selected, fallback))
+    key = normalise_colour(_setting(addon, setting_id, "theme"))
+    return _rgb(COLOURS[key if key != "default" else fallback][1])
 
 
-def is_light_mode(addon=None):
-    if addon is None:
-        try:
-            import xbmcaddon
+def background_colour(addon, colour="theme"):
+    """Resolve a menu/theme choice to the same palette key used by list artwork."""
+    key = normalise_colour(colour)
+    if key != "default":
+        return key
+    preset = _PRESETS.get(_setting(addon, "interface_theme", "violet"), _PRESETS["violet"])
+    if _enabled(addon, "interface_custom_colours"):
+        key = normalise_colour(_setting(addon, "interface_background_colour", "theme"))
+        if key != "default":
+            return key
+    return preset["tint"]
 
-            addon = xbmcaddon.Addon("plugin.video.curatr")
-        except Exception:
-            addon = None
-    return bool(addon and _enabled(addon, "interface_light_mode"))
+
+def background_palette(addon, colour="theme"):
+    return COLOURS[background_colour(addon, colour)]
 
 
 def theme_palette(addon=None):
-    """Return the complete colour palette used by the custom window XML."""
+    """Return the shared accent colours and darker surfaces for custom windows."""
     if addon is None:
         try:
             import xbmcaddon
-
             addon = xbmcaddon.Addon("plugin.video.curatr")
         except Exception:
             addon = None
-
-    preset_name = _setting(addon, "interface_theme", "violet") if addon else "violet"
-    preset = _PRESETS.get(preset_name, _PRESETS["violet"])
-    custom = bool(addon and _enabled(addon, "interface_custom_colours"))
-    light = is_light_mode(addon)
-
-    primary = _rgb(preset["primary"])
-    secondary = _rgb(preset["secondary"])
-    tint = _rgb(preset["tint"])
-    if custom:
+    preset = _PRESETS.get(_setting(addon, "interface_theme", "violet"), _PRESETS["violet"])
+    primary, secondary = (_rgb(COLOURS[preset[key]][1]) for key in ("primary", "secondary"))
+    if _enabled(addon, "interface_custom_colours"):
         primary = _selected_colour(addon, "interface_primary_colour", preset["primary"])
         secondary = _selected_colour(addon, "interface_secondary_colour", preset["secondary"])
-        tint_choice = _setting(addon, "interface_background_colour", "theme")
-        if tint_choice != "theme":
-            tint = _rgb(_COLOURS.get(tint_choice, preset["tint"]))
-
-    danger = _rgb(_COLOURS["red"])
-    if light:
-        primary = _mix(primary, (0, 0, 0), 0.12)
-        secondary = _mix(secondary, (0, 0, 0), 0.15)
-        danger = _mix(danger, (0, 0, 0), 0.10)
-        backdrop = _mix(tint, (255, 255, 255), 0.86)
-        panel = _mix(tint, (255, 255, 255), 0.80)
-        surface = _mix(tint, (255, 255, 255), 0.74)
-        row = _mix(tint, (255, 255, 255), 0.68)
-    else:
-        backdrop = _mix(tint, (0, 0, 0), 0.78)
-        panel = _mix(tint, (0, 0, 0), 0.64)
-        surface = _mix(tint, (0, 0, 0), 0.52)
-        row = _mix(tint, (255, 255, 255), 0.12)
-
-    primary = _for_white_text(primary)
-    secondary = _for_white_text(secondary)
-    danger = _for_white_text(danger)
-
+    tint = _rgb(background_palette(addon)[2])
+    surface = _mix(tint, (0, 0, 0), 0.52)
+    row = _mix(tint, (255, 255, 255), 0.12)
     return {
-        "CuratrPrimary": _argb("FF", primary),
-        "CuratrSecondary": _argb("FF", secondary),
-        "CuratrDanger": _argb("FF", danger),
-        "CuratrBackdrop": _argb("ED", backdrop),
-        "CuratrBackdropAlt": _argb("E8", backdrop),
-        "CuratrPanel": _argb("E5", panel),
+        "CuratrPrimary": _argb("FF", _for_white_text(primary)),
+        "CuratrSecondary": _argb("FF", _for_white_text(secondary)),
+        "CuratrDanger": _argb("FF", _for_white_text(_rgb(COLOURS["red"][1]))),
+        "CuratrBackdrop": _argb("ED", _mix(tint, (0, 0, 0), 0.78)),
+        "CuratrBackdropAlt": _argb("E8", _mix(tint, (0, 0, 0), 0.78)),
+        "CuratrPanel": _argb("E5", _mix(tint, (0, 0, 0), 0.64)),
         "CuratrPanelMedium": _argb("AA", surface),
         "CuratrPanelSoft": _argb("66", surface),
-        "CuratrKeywordPanel": _argb("B9", panel),
+        "CuratrKeywordPanel": "FF25262B",
         "CuratrButton": _argb("66", row),
         "CuratrButtonFaint": _argb("44", row),
         "CuratrRow": _argb("55", row),
@@ -183,7 +133,7 @@ def _publish_palette(palette):
 
 
 def skin_name():
-    """Publish the active palette and select the dark or light text layout."""
+    """Publish the active palette for the custom windows."""
     try:
         import xbmcaddon
 
@@ -191,7 +141,7 @@ def skin_name():
     except Exception:
         addon = None
     _publish_palette(theme_palette(addon))
-    return "Light" if is_light_mode(addon) else "Default"
+    return "Default"
 
 
 def style_tab(window, control_id, label, selected):
@@ -199,12 +149,23 @@ def style_tab(window, control_id, label, selected):
     palette = getattr(window, "_tab_palette", None)
     if palette is None:
         palette = window._tab_palette = theme_palette()
-        window._tab_text = "FF444751" if is_light_mode() else "FFE2DEE8"
-    window.setProperty(
-        "CuratrTab%d" % control_id,
-        palette["CuratrPrimary" if selected else "CuratrButtonFaint"],
+        window._tab_text = "FFE2DEE8"
+    # A control-owned colour survives native dialogs opening above this window.
+    window.getControl(1000 + control_id).setColorDiffuse(
+        "0x" + palette["CuratrPrimary" if selected else "CuratrButtonFaint"]
     )
     window.getControl(control_id).setLabel(
         "[B]%s[/B]" % label if selected else label,
         textColor="0xFFFFFFFF" if selected else "0x" + window._tab_text,
     )
+
+
+def show_tab(window, control_id, visible):
+    window.getControl(1000 + control_id).setVisible(visible)
+    control = window.getControl(control_id)
+    control.setVisible(visible)
+    control.setEnabled(visible)
+
+
+def bold(label):
+    return "[B]%s[/B]" % label
