@@ -3,7 +3,7 @@ import json
 import random
 import sys
 import time
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 import xbmc
 import xbmcaddon
@@ -14,13 +14,16 @@ import xbmcvfs
 from lib.art_cache import ArtworkCache
 from lib.catalogue_clients import CatalogueError
 from lib.core import Curator
+from lib import dynamic_lists as dynamic
+from lib.dynamic_display import prepare_items as prepare_dynamic_items, native_art
+from lib.shortcuts import BY_KEY as CURATR_SHORTCUTS
 from lib.list_art import resolved_sources as resolved_list_art
 from lib.metadata_cache import MetadataCache
 from lib.menu_art import ADDON_ICON, menu_source
 from lib.menu_background import appearance_signature, background_source
 from lib.player_registry import PlayerRegistry
 from lib.trakt import TraktError
-from lib.view_refresh import list_signature, refresh_if_changed
+from lib.view_refresh import in_video_navigation, list_signature, open_directory, refresh_if_changed
 
 
 ADDON = xbmcaddon.Addon()
@@ -85,16 +88,19 @@ def _mark_curatr_item(item):
 
 
 def _in_video_navigation():
-    """Dialog shortcuts in home widgets must not execute during widget probing."""
-    try:
-        if xbmcgui.getCurrentWindowId() == 10025:
-            return True
-    except Exception:
-        pass
-    try:
-        return bool(xbmc.getCondVisibility("Window.IsActive(videos)"))
-    except Exception:
-        return False
+    return in_video_navigation()
+
+
+def _action_target(item, url, plot=""):
+    """Give widgets an executable item, even when they rebuild its video tags."""
+    if plot:
+        item.setProperty("plot", plot)
+    item.setProperty("IsPlayable", "false")
+    target = "favourites://" + quote("RunPlugin(%s)" % url, safe="")
+    item.setProperty("node.target_url", target)
+    # Videos runs non-playable plugin items directly. Home list providers must
+    # see the favourite as the item's path, before processing any video tags.
+    return url if _in_video_navigation() else target
 
 
 def _relative_time(timestamp, verb="Refreshed"):
@@ -196,6 +202,7 @@ def _apply_menu_art(item, icon_name="", custom_art=None):
 def _add_folder(label, action, plot="", context_items=None, icon_name="", art=None, tagline="", **params):
     item = xbmcgui.ListItem(label=label, offscreen=True)
     _mark_curatr_item(item)
+    item.setProperty("node.target", "videos")
     try:
         info = {"title": label, "plot": plot or ""}
         if tagline:
@@ -222,38 +229,23 @@ def _add_folder(label, action, plot="", context_items=None, icon_name="", art=No
     xbmcplugin.addDirectoryItem(HANDLE, _url(action=action, **params), item, isFolder=True)
 
 
-def _add_action(label, command, plot="", icon_name="", widget_fallback=""):
+def _add_action(label, command, plot="", icon_name=""):
     item = xbmcgui.ListItem(label=label, offscreen=True)
     _mark_curatr_item(item)
-    try:
-        item.setInfo("video", {"title": label, "plot": plot or ""})
-    except Exception:
-        pass
-    try:
-        tag = item.getVideoInfoTag()
-        tag.setTitle(label)
-        if plot:
-            tag.setPlot(plot)
-    except Exception:
-        pass
+    target = _url(action="run", command=command)
+    target = _action_target(item, target, plot)
     _apply_menu_art(item, icon_name)
-    item.setProperty("IsPlayable", "false")
-    widget_safe = bool(widget_fallback and not _in_video_navigation())
-    target = _url(action=widget_fallback) if widget_safe else _url(action="run", command=command)
-    xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=widget_safe)
+    xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=False)
 
 
 def _add_route_action(label, action, plot="", art=None, icon_name="", **params):
     """Run a dialog-style route without making Kodi enter another folder."""
     item = xbmcgui.ListItem(label=label, offscreen=True)
     _mark_curatr_item(item)
-    try:
-        item.setInfo("video", {"title": label, "plot": plot or ""})
-        item.setProperty("IsPlayable", "false")
-    except Exception:
-        pass
+    target = _url(action=action, **params)
+    target = _action_target(item, target, plot)
     _apply_menu_art(item, icon_name, custom_art=art)
-    xbmcplugin.addDirectoryItem(HANDLE, _url(action=action, **params), item, isFolder=False)
+    xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=False)
 
 
 def _managed_records(curator):
@@ -317,6 +309,7 @@ def _my(curator):
     _add_folder(_loc(32418, "My Lists"), "lists", _loc(32419, "Open and browse your saved lists."), icon_name="menu_list.png")
     _add_action(_loc(32420, "Create a New List"), "create", _loc(32424, "Describe what you want to watch and create a personalised list."), icon_name="menu_create_v2.png")
     _add_action(_loc(32421, "Manage My Lists"), "manage", _loc(32425, "Change list names, prompts, artwork and refresh settings."), icon_name="menu_manage.png")
+    _add_folder("Dynamic Lists", "dynamic_lists", "Combine lists and add-on paths into one sorted list.", icon_name="menu_dynamic.png")
     _add_folder("Folders", "folders", "Organise lists and shortcuts into custom folders for browsing or widgets.", icon_name="menu_widget_folders.png")
     _add_action(_loc(32422, "Refresh All Lists"), "update", _loc(32426, "Refresh every saved list using its chosen creation method."), icon_name="menu_refresh.png")
     _add_action(_loc(32423, "Backup & Restore"), "backup", _loc(32427, "Save or restore a backup of your lists, prompts, hidden items and folders."), icon_name="menu_backup.png")
@@ -328,7 +321,7 @@ def _explore(curator):
     _add_action(
         _loc(32430, "Quick Pick"), "quick",
         _loc(32433, "Choose a mood and quickly create a personalised list with AI."),
-        icon_name="menu_quick.png", widget_fallback="explore",
+        icon_name="menu_quick.png",
     )
     _add_action(_loc(32431, "Saved Prompts"), "templates", _loc(32434, "Reuse and manage prompts you have saved for later."), icon_name="menu_templates.png")
     _add_folder("All Picks", "all", "Browse recommendations from all your current lists.", icon_name="menu_all.png")
@@ -401,6 +394,10 @@ def _folders(curator):
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
+def _folder_context(folder_id):
+    return [("Folder Settings", _plugin_command("folder_manage", folder_id=str(folder_id)))] if folder_id else []
+
+
 def _add_external_shortcut(curator, folder, entry):
     path = curator._valid_external_plugin_path(entry.get("path"))
     if not path:
@@ -424,7 +421,7 @@ def _add_external_shortcut(curator, folder, entry):
     except Exception:
         available = True
     try:
-        item.addContextMenuItems([
+        item.addContextMenuItems(_folder_context(folder_id) + [
             ("Artwork", _plugin_command("folder_entry_artwork", folder_id=folder_id, entry_id=entry_id)),
             ("Shortcut settings", _plugin_command("folder_edit_entry", folder_id=folder_id, entry_id=entry_id)),
             ("Remove from folder", _plugin_command("folder_remove_entry", folder_id=folder_id, entry_id=entry_id)),
@@ -432,6 +429,7 @@ def _add_external_shortcut(curator, folder, entry):
     except Exception:
         pass
     target = path if available else _url(action="external_missing", addon_id=external_addon_id, name=name)
+    item.setProperty("node.target", "videos")
     return bool(xbmcplugin.addDirectoryItem(HANDLE, target, item, isFolder=True))
 
 
@@ -458,7 +456,7 @@ def _add_provider_list_folder(curator, folder, entry):
     plot = _summary_plot(tagline, description)
     folder_id = str(folder.get("id") or "")
     entry_id = str(entry.get("id") or "")
-    context = [
+    context = _folder_context(folder_id) + [
         ("Refresh linked list", "RunPlugin(%s)" % _url(
             action="linked_list", folder_id=folder_id, entry_id=entry_id, force="1",
         )),
@@ -494,21 +492,165 @@ def _folder(curator, params):
             local_id = curator._record_key(record)
             name = str(record.get("name") or "curatr list")
             tagline, plot = _list_metadata(record)
-            context = [
+            context = _folder_context(folder_id) + [
                 ("Refresh this list", _plugin_command("refresh_list", list_id=local_id)),
                 ("List settings", _plugin_command("edit_list", list_id=local_id)),
                 ("Create Similar List", _plugin_command("create_related_local", list_id=local_id)),
                 ("Artwork", _plugin_command("artwork_list", list_id=local_id)),
                 ("Remove from folder", _plugin_command("folder_remove_entry", folder_id=str(folder.get("id") or ""), entry_id=str(entry.get("id") or ""))),
             ]
-            _add_folder(name, "list", plot=plot, context_items=context, art=_record_art(curator, record), tagline=tagline, list_id=local_id, name=name)
+            _add_folder(name, "list", plot=plot, context_items=context, art=_record_art(curator, record), tagline=tagline, list_id=local_id, name=name, folder_id=folder_id)
             added += 1
+        elif entry.get("type") == "curatr_action":
+            if _add_curatr_shortcut(curator, folder, entry):
+                added += 1
+        elif entry.get("type") == "dynamic_list":
+            record = dynamic.by_id(curator, entry.get("list_id"))
+            if record:
+                context = _folder_context(folder_id) + [("List Settings", _plugin_command("dynamic_edit", list_id=record["id"])),
+                    ("Remove from Folder", _plugin_command("folder_remove_entry", folder_id=folder_id, entry_id=entry["id"]))]
+                _add_folder(record["name"], "dynamic_list", plot=record.get("description", ""),
+                            art=_record_art(curator, record), context_items=context, list_id=record["id"], folder_id=folder_id)
+                added += 1
         elif entry.get("type") == "external_path" and _add_external_shortcut(curator, folder, entry):
             added += 1
         elif entry.get("type") == "provider_list" and _add_provider_list_folder(curator, folder, entry):
             added += 1
     if not added:
         _add_folder("Manage this folder", "folder_manage", "Add items to this folder.", icon_name="menu_manage.png", folder_id=str(folder.get("id") or ""))
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+
+
+def _add_curatr_shortcut(curator, folder, entry):
+    shortcut = CURATR_SHORTCUTS.get(entry.get("shortcut"))
+    if not shortcut:
+        return False
+    _key, title, kind, target, icon = shortcut
+    folder_id = str(folder["id"])
+    context = _folder_context(folder_id) + [
+        ("Remove from Folder", _plugin_command("folder_remove_entry", folder_id=folder_id, entry_id=entry["id"])),
+    ]
+    item = xbmcgui.ListItem(label=str(entry.get("name") or title), offscreen=True)
+    _mark_curatr_item(item)
+    _apply_menu_art(item, icon, custom_art=_record_art(curator, entry) if entry.get("artwork") else None)
+    item.setProperty("IsPlayable", "false")
+    item.addContextMenuItems(context)
+    url = (_url(action=target, folder_id=folder_id) if kind == "route" else
+           _url(action="folder_shortcut", folder_id=folder_id, entry_id=entry["id"]))
+    if kind == "route":
+        item.setInfo("video", {"title": str(entry.get("name") or title), "plot": str(entry.get("description") or "")})
+        item.setProperty("node.target", "videos")
+    else:
+        url = _action_target(item, url, str(entry.get("description") or ""))
+    return bool(xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=kind == "route"))
+
+
+def _folder_shortcut(curator, params):
+    # Kodi executes a selected non-playable, non-folder plugin item with handle -1.
+    # A Files.GetDirectory/widget probe has a directory handle: return an empty
+    # directory without opening dialogs or running the referenced action.
+    if HANDLE >= 0:
+        xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+        return
+    folder = curator.widget_folder_by_id(params.get("folder_id"))
+    if not folder:
+        return
+    entry = next((e for e in folder.get("entries", []) if isinstance(e, dict) and
+                  str(e.get("id")) == str(params.get("entry_id")) and e.get("type") == "curatr_action"), {})
+    shortcut = CURATR_SHORTCUTS.get(entry.get("shortcut"))
+    if not shortcut:
+        return
+    _key, _title, kind, target, _icon = shortcut
+    before = list_signature(curator.state)
+    if kind == "command":
+        _run_command(curator, target)
+    elif kind == "folder":
+        if target == "add_item":
+            curator._add_widget_folder_content_interactive(folder["id"])
+        elif target == "settings":
+            curator.manage_widget_folder_interactive(folder["id"])
+        refresh_if_changed(before, curator.state)
+
+
+def _dynamic_lists(curator):
+    xbmcplugin.setPluginCategory(HANDLE, "Dynamic Lists")
+    _add_action("Create Dynamic List", "dynamic_create", "Combine sources and choose their order.", icon_name="menu_create_v2.png")
+    _add_action("Manage Dynamic Lists", "dynamic_manage", icon_name="menu_manage.png")
+    for record in dynamic.records(curator):
+        _add_folder(record["name"], "dynamic_list", plot=record.get("description") or "",
+                    art=_record_art(curator, record), list_id=record["id"], context_items=[
+                        ("List Settings", _plugin_command("dynamic_edit", list_id=record["id"]))])
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+
+
+def _add_native_dynamic(data, context, art=None):
+    item = xbmcgui.ListItem(label=str(data.get("label") or data.get("title") or "Item"), offscreen=True)
+    _mark_curatr_item(item)
+    info = {key: data[key] for key in ("title", "year", "rating", "playcount", "plot", "lastplayed", "season", "episode",
+                                      "showtitle", "dateadded", "genre", "premiered", "studio", "mpaa", "votes") if key in data}
+    kind = dynamic.media_type(data)
+    if kind in ("movie", "tvshow", "episode", "musicvideo"):
+        info["mediatype"] = kind
+    if data.get("runtime"):
+        info["duration"] = data["runtime"]
+    item.setInfo("video", info)
+    item.setArt(art if art is not None else native_art(data))
+    properties = data.get("customproperties")
+    if isinstance(properties, dict):
+        for key, value in properties.items():
+            item.setProperty(str(key), str(value))
+    is_folder = data.get("filetype") == "directory"
+    if is_folder:
+        item.setProperty("node.target", "videos")
+    playable = next((str(v).lower() for k, v in properties.items() if str(k).lower() == "isplayable"), "true") if isinstance(properties, dict) else "true"
+    item.setProperty("IsPlayable", "false" if is_folder else playable)
+    if data.get("mimetype"):
+        item.setMimeType(str(data["mimetype"]))
+    ids = data.get("uniqueid") or {}
+    try:
+        if isinstance(ids, dict):
+            item.getVideoInfoTag().setUniqueIDs({key: str(value) for key, value in ids.items() if value})
+    except (AttributeError, TypeError):
+        pass
+    resume = data.get("resume") or {}
+    if isinstance(resume, dict) and resume.get("position"):
+        item.setProperty("ResumeTime", str(resume["position"]))
+        item.setProperty("TotalTime", str(resume.get("total") or 0))
+        try:
+            item.getVideoInfoTag().setResumePoint(float(resume["position"]), float(resume.get("total") or 0))
+        except (AttributeError, TypeError):
+            pass
+    item.addContextMenuItems(context)
+    _set_item_ratings(item, {"ratings": data.get("ratings")})
+    xbmcplugin.addDirectoryItem(HANDLE, data["file"], item, isFolder=is_folder)
+
+
+def _dynamic_list(curator, params):
+    record = dynamic.by_id(curator, params.get("list_id"))
+    if not record:
+        xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+        return
+    xbmcplugin.setPluginCategory(HANDLE, record["name"])
+    xbmcplugin.setContent(HANDLE, "videos")
+    result = dynamic.load(curator, record)
+    folder_id = params.get("folder_id", "")
+    context = [("List Settings", _plugin_command("dynamic_edit", list_id=record["id"]))]
+    context.append(("Source Information", _plugin_command("dynamic_info", list_id=record["id"])))
+    for row in prepare_dynamic_items(curator, result["items"]):
+        try:
+            if row["kind"] == "native":
+                _add_native_dynamic(row["data"], context + _folder_context(folder_id), art=row["art"])
+            else:
+                movie = row["data"]
+                _add_movie(movie, row["art"], list_name=record["name"],
+                           recommendation_actions=False, folder_id=folder_id, extra_context=context)
+        except Exception as exc:
+            xbmc.log("curatr Dynamic List item could not be displayed: %s" % type(exc).__name__, xbmc.LOGWARNING)
+    if not result["items"]:
+        _add_route_action("No items available", "dynamic_edit", plot=" · ".join(result["warnings"]), list_id=record["id"])
+    method = getattr(xbmcplugin, "SORT_METHOD_UNSORTED", None)
+    if method is not None:
+        xbmcplugin.addSortMethod(HANDLE, method)
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
 
@@ -611,33 +753,8 @@ def _safe_tag_call(tag, method, *args):
     return False
 
 
-def _set_movie_info(item, movie):
-    """Populate a movie ListItem without letting one metadata field break a widget.
-
-    Kodi 21 supports InfoTagVideo, but this deliberately uses best-effort setters
-    and a legacy setInfo fallback so unusual platform/skin builds still render.
-    """
-    if not isinstance(movie, dict):
-        movie = {}
-    media_type = "tvshow" if str(movie.get("media_type") or "movie") == "show" else "movie"
-    title = str(movie.get("title") or ("Unknown show" if media_type == "tvshow" else "Unknown movie"))
-    year = _safe_int(movie.get("year"), 0)
-    overview = str(movie.get("overview") or movie.get("ai_reason") or "")
-    tagline = str(movie.get("tagline") or "")
-    genres = movie.get("genres") or []
-    if not isinstance(genres, list):
-        genres = [genres] if genres else []
-    runtime = _safe_int(movie.get("runtime"), 0)
-    released = str(movie.get("released") or "")
-    certification = str(movie.get("certification") or "")
-    cast = movie.get("cast") or []
-    directors = movie.get("directors") or []
-    writers = movie.get("writers") or []
-    studios = movie.get("studios") or []
-    countries = movie.get("countries") or []
-    trailer = str(movie.get("trailer") or "")
-    status = str(movie.get("status") or "")
-    original_title = str(movie.get("original_title") or "")
+def _set_item_ratings(item, movie):
+    """Publish the same source ratings for local lists and native Dynamic items."""
     rating = movie.get("rating")
     try:
         rating = float(rating)
@@ -691,10 +808,6 @@ def _set_movie_info(item, movie):
         (source for source in ("trakt", "tmdb", "imdb") if source in source_ratings),
         next(iter(source_ratings), ""),
     )
-    if default_rating:
-        rating = source_ratings[default_rating]["rating"]
-        votes = source_ratings[default_rating]["votes"]
-
     for source in ("trakt", "tmdb", "imdb", "metacritic"):
         data = source_ratings.get(source)
         if not data:
@@ -720,6 +833,55 @@ def _set_movie_info(item, movie):
         except Exception:
             pass
 
+    try:
+        tag = item.getVideoInfoTag()
+    except Exception:
+        return
+    for source, data in source_ratings.items():
+        _safe_tag_call(
+            tag, "setRating", data["rating"], data["votes"], source,
+            source == default_rating,
+        )
+        if source == "tmdb":
+            _safe_tag_call(tag, "setRating", data["rating"], data["votes"], "themoviedb", False)
+
+
+def _set_movie_info(item, movie):
+    """Populate a movie ListItem without letting one metadata field break a widget.
+
+    Kodi 21 supports InfoTagVideo, but this deliberately uses best-effort setters
+    and a legacy setInfo fallback so unusual platform/skin builds still render.
+    """
+    if not isinstance(movie, dict):
+        movie = {}
+    media_type = "tvshow" if str(movie.get("media_type") or "movie") == "show" else "movie"
+    title = str(movie.get("title") or ("Unknown show" if media_type == "tvshow" else "Unknown movie"))
+    year = _safe_int(movie.get("year"), 0)
+    overview = str(movie.get("overview") or movie.get("ai_reason") or "")
+    tagline = str(movie.get("tagline") or "")
+    genres = movie.get("genres") or []
+    if not isinstance(genres, list):
+        genres = [genres] if genres else []
+    runtime = _safe_int(movie.get("runtime"), 0)
+    released = str(movie.get("released") or "")
+    certification = str(movie.get("certification") or "")
+    cast = movie.get("cast") or []
+    directors = movie.get("directors") or []
+    writers = movie.get("writers") or []
+    studios = movie.get("studios") or []
+    countries = movie.get("countries") or []
+    trailer = str(movie.get("trailer") or "")
+    status = str(movie.get("status") or "")
+    original_title = str(movie.get("original_title") or "")
+    rating = movie.get("rating")
+    try:
+        rating = float(rating)
+    except (TypeError, ValueError):
+        rating = 0.0
+    votes = _safe_int(movie.get("votes"), 0)
+    ids = movie.get("ids") or {}
+    if not isinstance(ids, dict):
+        ids = {}
     # Kodi still supports setInfo in 21.x. Use it as a compatibility baseline,
     # then enrich with the modern InfoTagVideo API where available.
     try:
@@ -765,6 +927,8 @@ def _set_movie_info(item, movie):
         item.setInfo("video", legacy)
     except Exception as exc:
         xbmc.log("curatr legacy metadata fallback skipped: %s" % exc, xbmc.LOGDEBUG)
+
+    _set_item_ratings(item, movie)
 
     try:
         tag = item.getVideoInfoTag()
@@ -817,14 +981,6 @@ def _set_movie_info(item, movie):
         _safe_tag_call(tag, "setTvShowStatus", status)
     if original_title:
         _safe_tag_call(tag, "setOriginalTitle", original_title)
-    for source, data in source_ratings.items():
-        _safe_tag_call(
-            tag, "setRating", data["rating"], data["votes"], source,
-            source == default_rating,
-        )
-        if source == "tmdb":
-            _safe_tag_call(tag, "setRating", data["rating"], data["votes"], "themoviedb", False)
-
     unique_ids = {}
     for key in ("trakt", "tmdb", "imdb"):
         value = ids.get(key)
@@ -922,12 +1078,12 @@ def _play_using(params):
         return
     url = choices[choice][1]
     if media_type == "show":
-        xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % url)
+        open_directory(url)
     else:
         xbmc.executebuiltin("PlayMedia(%s)" % url)
 
 
-def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=True):
+def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=True, folder_id="", extra_context=()):
     if not isinstance(movie, dict):
         return False
     media_type = str(movie.get("media_type") or "movie")
@@ -983,14 +1139,15 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
                     _plugin_command("add_media_to_list", **media_params),
                 ))
             if _setting_enabled("context_find_similar"):
-                preview_url = _url(action="similar_preview", **media_params)
                 context.append((
                     _loc(32823, "Find Similar"),
-                    'ActivateWindow(Videos,"%s",return)' % preview_url.replace('"', "%22"),
+                    _plugin_command("open_similar", **media_params),
                 ))
         if list_id:
             refresh_url = _url(action="refresh_list", list_id=str(list_id))
             context.append(("Refresh this list", "RunPlugin(%s)" % refresh_url))
+        context.extend(extra_context)
+        context.extend(_folder_context(folder_id))
         item.addContextMenuItems(context)
     except Exception as exc:
         xbmc.log("curatr context menu skipped: %s" % exc, xbmc.LOGDEBUG)
@@ -1017,10 +1174,12 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
         target_url = _url(action="linked_movie", title=title, year=str(year or ""))
         is_folder = True
 
+    if is_folder:
+        item.setProperty("node.target", "videos")
     return bool(xbmcplugin.addDirectoryItem(HANDLE, target_url, item, isFolder=is_folder))
 
 
-def _render_movies(curator, rows, category, update_listing=False):
+def _render_movies(curator, rows, category, update_listing=False, folder_id=""):
     xbmcplugin.setPluginCategory(HANDLE, category)
     rows = list(rows or [])
     enriched_rows = []
@@ -1067,7 +1226,7 @@ def _render_movies(curator, rows, category, update_listing=False):
                 xbmc.log("curatr artwork skipped for %s: %s" % (movie.get("title"), exc), xbmc.LOGDEBUG)
             if _add_movie(
                 movie, artwork, list_name=list_name, list_id=list_id,
-                recommendation_actions=recommendation_actions,
+                recommendation_actions=recommendation_actions, folder_id=folder_id,
             ):
                 added += 1
             else:
@@ -1120,7 +1279,7 @@ def _single_list(curator, params):
         return
     name = params.get("name") or "curatr Recommendations"
     rows = [(row, movie, name, list_id) for row, movie in _movie_rows_for_list(curator, list_id) if not curator.is_movie_hidden(movie)]
-    _render_movies(curator, rows, name)
+    _render_movies(curator, rows, name, folder_id=params.get("folder_id", ""))
 
 
 def _linked_list(curator, params):
@@ -1130,7 +1289,7 @@ def _linked_list(curator, params):
     )
     name = str(entry.get("name") or "Linked list")
     rows = [({}, movie, name, "", False) for movie in movies]
-    _render_movies(curator, rows, name)
+    _render_movies(curator, rows, name, folder_id=params.get("folder_id", ""))
 
 
 def _all(curator):
@@ -1231,9 +1390,9 @@ def _read_list_preview(token):
     return preview
 
 
-def _open_list_preview(preview):
+def _open_list_preview(preview, replace=False):
     token = _write_list_preview(preview)
-    xbmc.executebuiltin("ActivateWindow(Videos,%s,return)" % _url(action="list_preview", token=token))
+    open_directory(_url(action="list_preview", token=token), replace=replace)
 
 
 def _list_preview(curator, params):
@@ -1252,6 +1411,11 @@ def _list_preview(curator, params):
 def _similar_preview(curator, params):
     token = str(params.get("token") or "")
     previous = _read_similar_preview(token) if token else None
+    current_path = str(xbmc.getInfoLabel("Container.FolderPath") or "")
+    current = parse_qs(urlsplit(current_path).query)
+    replacing = bool(previous and _in_video_navigation() and
+                     current_path.startswith("plugin://plugin.video.curatr/") and
+                     current.get("action") == ["similar_preview"])
     reference = dict((previous or {}).get("reference") or {})
     if not reference:
         ids = {
@@ -1289,7 +1453,7 @@ def _similar_preview(curator, params):
     )
     rows = [({}, movie, "Similar to %s" % source, "", False) for movie in preview.get("movies", [])]
     _render_movies(curator, rows, "Similar to %s • %s" % (source, method_label),
-                   update_listing=previous is not None)
+                   update_listing=replacing)
 
 
 def _run_command(curator, command):
@@ -1318,6 +1482,9 @@ def _run_command(curator, command):
         "choose_mdblist_lists": curator.choose_mdblist_lists_interactive,
         "privacy": curator.show_privacy_and_data,
         "choose_menu_background": curator.choose_menu_background_interactive,
+        "customise_theme": curator.customise_theme_interactive,
+        "dynamic_create": curator.create_dynamic_list_interactive,
+        "dynamic_manage": curator.manage_dynamic_lists_interactive,
         "choose_movie_player": lambda: PLAYERS.choose("movie"),
         "choose_show_player": lambda: PLAYERS.choose("show"),
         "install_community_players": PLAYERS.install_interactive,
@@ -1359,6 +1526,32 @@ def main():
             _taste_activity(curator)
         elif action == "lists":
             _lists(curator)
+        elif action == "dynamic_lists":
+            _dynamic_lists(curator)
+        elif action == "dynamic_list":
+            _dynamic_list(curator, params)
+        elif action == "open_similar":
+            if HANDLE >= 0:
+                xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+                return
+            target = dict(params, action="similar_preview")
+            open_directory(_url(**target))
+        elif action in ("dynamic_edit", "dynamic_info"):
+            if HANDLE >= 0:
+                xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+                return
+            if action == "dynamic_edit":
+                from lib.dynamic_settings import edit
+                edit(curator, params.get("list_id", ""))
+                refresh_if_changed(before, curator.state)
+            else:
+                record = dynamic.by_id(curator, params.get("list_id"))
+                if record:
+                    info = dynamic.load(curator, record)
+                    xbmcgui.Dialog().textviewer("Source Information", dynamic.REFRESH_DETAILS + "\n\n" +
+                                               ("\n\n".join(info["warnings"]) or "All sources are available."))
+        elif action == "folder_shortcut":
+            _folder_shortcut(curator, params)
         elif action == "folders":
             _folders(curator)
         elif action == "folder":
@@ -1485,7 +1678,7 @@ def main():
             result = curator.create_list_interactive(initial=preview.get("draft") or {})
             if isinstance(result, dict) and result.get("kind") == "list_preview":
                 xbmcvfs.delete(_list_preview_file(token))
-                _open_list_preview(result)
+                _open_list_preview(result, replace=True)
             elif result:
                 xbmcvfs.delete(_list_preview_file(token))
                 xbmc.executebuiltin("Action(Back)")
@@ -1496,6 +1689,9 @@ def main():
             xbmc.executebuiltin("Action(Back)")
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
         elif action == "run":
+            if HANDLE >= 0:
+                xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+                return
             _run_command(curator, params.get("command") or "")
         elif action == "play_using":
             _play_using(params)

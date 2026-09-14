@@ -517,6 +517,11 @@ class TMDBClient:
         }
 
 
+class RatingResults(dict):
+    complete = False
+    retry_after = 0
+
+
 class MDBListClient:
     API_URL = "https://api.mdblist.com"
     def __init__(self, api_key="", session=None, user_agent=None):
@@ -629,7 +634,12 @@ class MDBListClient:
             if response.status_code in (401, 403):
                 raise CatalogueError("MDBList rejected the API key.")
             if response.status_code == 429:
-                raise CatalogueError("MDBList request limit reached. Try again later.")
+                error = CatalogueError("MDBList request limit reached. Try again later.")
+                try:
+                    error.retry_after = max(300, int(response.headers.get("Retry-After") or 300))
+                except (TypeError, ValueError):
+                    error.retry_after = 300
+                raise error
             raise CatalogueError("MDBList request failed (HTTP %s)." % response.status_code)
         try:
             return response.json()
@@ -657,7 +667,7 @@ class MDBListClient:
             "audience": "tomatometerallaudience",
             "metacritic": "metacritic",
         }
-        output = {value: {} for value in ids}
+        output = RatingResults({value: {} for value in ids})
         completed = 0
         for source, kodi_name in source_names.items():
             try:
@@ -665,8 +675,9 @@ class MDBListClient:
                     "/rating/%s/%s" % (kind, source),
                     {"ids": ids, "provider": "tmdb"},
                 )
-            except CatalogueError:
+            except CatalogueError as exc:
                 if completed:
+                    output.retry_after = getattr(exc, "retry_after", 0)
                     break
                 raise
             completed += 1
@@ -696,6 +707,7 @@ class MDBListClient:
                 }
         if not completed:
             raise CatalogueError("MDBList ratings are temporarily unavailable.")
+        output.complete = completed == len(source_names)
         return output
 
     def user_lists(self):

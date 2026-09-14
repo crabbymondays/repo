@@ -25,7 +25,9 @@ from .keyword_matcher import PARSER_VERSION, candidate_matches, format_rules, pa
 from .list_settings import edit_list_settings
 from .metadata_cache import MetadataCache
 from .menu_art import menu_source
-from .menu_background import background_entries, current_choice, import_custom_background
+from .menu_background import current_choice
+from . import dynamic_lists as dynamic
+from .shortcuts import BY_KEY as CURATR_SHORTCUTS, choose as choose_shortcut
 from .list_art import CHOICES as LIST_ART_CHOICES
 from .list_art import bundled_source as bundled_list_art_source
 from .list_art import label as list_art_label
@@ -69,6 +71,7 @@ class Curator:
             self.state_path, self.state_path + ".bak", self.recovery_state_path,
         ))
         self.state = self._load_state()
+        self.state.setdefault("dynamic_lists", [])
         self._capture_state_baseline()
         if not self.state.get("install_origin"):
             self.state["install_origin"] = "pre-0.13" if self._had_state_file else (addon.getAddonInfo("version") or "0.13.0")
@@ -233,7 +236,7 @@ class Curator:
                 errors.append("%s: %s" % (os.path.basename(path), exc))
         if candidates:
             live = next((data for path, data in candidates if path == self.state_path), None)
-            if live is not None and self._state_content_score(live) > 0:
+            if live is not None and (self._state_content_score(live) > 0 or live.get("dynamic_lists_written")):
                 return live
             path, data = max(candidates, key=lambda row: self._state_content_score(row[1]))
             if path != self.state_path:
@@ -257,7 +260,7 @@ class Curator:
         self._state_baseline = deepcopy(self.state)
         self._user_collection_baselines = {
             name: deepcopy(self.state.get(name) if isinstance(self.state.get(name), list) else [])
-            for name in ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies")
+            for name in ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies", "dynamic_lists")
         }
 
     @classmethod
@@ -266,14 +269,14 @@ class Curator:
             return 0
         return sum(
             len(state.get(name) or []) if isinstance(state.get(name), list) else 0
-            for name in ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies")
+            for name in ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies", "dynamic_lists")
         )
 
     def _preserve_recovery_snapshot(self, current):
         """Retain recoverable local content even after later backup rotations."""
         if self._state_content_score(current) <= 0:
             return
-        collection_names = ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies")
+        collection_names = ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies", "dynamic_lists")
         recovery = {}
         raw_recovery = ""
         if xbmcvfs.exists(self.recovery_state_path):
@@ -326,7 +329,7 @@ class Curator:
         if not isinstance(current, dict):
             return
 
-        collection_names = ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies")
+        collection_names = ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies", "dynamic_lists")
         baseline = self._state_baseline if isinstance(self._state_baseline, dict) else {}
 
         # For ordinary state fields, keep local changes and otherwise adopt the
@@ -505,6 +508,9 @@ class Curator:
         if not isinstance(self.state.get("hidden_movies"), list):
             self.state["hidden_movies"] = []
             changed = True
+        if not isinstance(self.state.get("dynamic_lists"), list):
+            self.state["dynamic_lists"] = []
+            changed = True
         if not isinstance(self.state.get("widget_folders"), list):
             self.state["widget_folders"] = []
             changed = True
@@ -534,6 +540,11 @@ class Curator:
                 item["id"] = self._safe_reference_id(item.get("id"))
                 if item.get("type") == "curatr_list" and item.get("list_id"):
                     item = {"id": item["id"], "type": "curatr_list", "list_id": str(item.get("list_id"))}
+                elif item.get("type") == "dynamic_list" and item.get("list_id"):
+                    item = {"id": item["id"], "type": "dynamic_list", "list_id": str(item["list_id"])}
+                elif item.get("type") == "curatr_action" and item.get("shortcut") in CURATR_SHORTCUTS:
+                    item.update(name=str(item.get("name") or CURATR_SHORTCUTS[item["shortcut"]][1]),
+                                description=str(item.get("description") or ""))
                 elif item.get("type") == "external_path" and self._valid_external_plugin_path(item.get("path")):
                     item.update({
                         "type": "external_path",
@@ -3437,9 +3448,9 @@ class Curator:
             )
             return False
         additions = {name: [] for name in (
-            "ai_lists", "widget_folders", "prompt_templates", "hidden_movies",
+            "ai_lists", "widget_folders", "prompt_templates", "hidden_movies", "dynamic_lists",
         )}
-        for name in ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies"):
+        for name in ("ai_lists", "widget_folders", "prompt_templates", "hidden_movies", "dynamic_lists"):
             current = [dict(row) for row in self.state.get(name, []) if isinstance(row, dict)]
             current_ids = {self._user_collection_key(name, row) for row in current}
             for snapshot in snapshots:
@@ -3455,11 +3466,11 @@ class Curator:
             return False
         message = (
             "Restore missing local content from curatr's safety snapshot?\n\n"
-            "Lists: %d\nFolders: %d\nSaved prompts: %d\nHidden items: %d\n\n"
+            "Lists: %d\nFolders: %d\nSaved prompts: %d\nHidden items: %d\nDynamic Lists: %d\n\n"
             "Existing content will be kept."
         ) % (
             len(additions["ai_lists"]), len(additions["widget_folders"]),
-            len(additions["prompt_templates"]), len(additions["hidden_movies"]),
+            len(additions["prompt_templates"]), len(additions["hidden_movies"]), len(additions["dynamic_lists"]),
         )
         if not xbmcgui.Dialog().yesno(self.name, message):
             return False
@@ -3508,7 +3519,9 @@ class Curator:
         return [row for row in entries if isinstance(row, dict)
                 and str(row.get("id") or "")
                 and (row.get("type") != "curatr_list"
-                     or self._managed_record_by_id(row.get("list_id")))]
+                     or self._managed_record_by_id(row.get("list_id")))
+                and (row.get("type") != "dynamic_list" or dynamic.by_id(self, row.get("list_id")))
+                and (row.get("type") != "curatr_action" or row.get("shortcut") in CURATR_SHORTCUTS)]
 
     def _reorder_folder_entries(self, entries, entry_id, operation):
         """Move among visible items while preserving any unresolved stored links."""
@@ -3532,6 +3545,11 @@ class Curator:
         if entry.get("type") == "curatr_list":
             record = self._managed_record_by_id(entry.get("list_id"))
             return str((record or {}).get("name") or "")
+        if entry.get("type") == "dynamic_list":
+            return str((dynamic.by_id(self, entry.get("list_id")) or {}).get("name") or "")
+        if entry.get("type") == "curatr_action":
+            shortcut = CURATR_SHORTCUTS.get(entry.get("shortcut"))
+            return str(entry.get("name") or (shortcut[1] if shortcut else ""))
         if entry.get("type") == "provider_list":
             return str(entry.get("name") or ("Trakt list" if entry.get("provider") == "trakt" else "MDBList list"))
         return str(entry.get("name") or "External Shortcut")
@@ -3557,6 +3575,8 @@ class Curator:
             "curatr_list": "List Settings",
             "provider_list": "Linked List Settings",
             "external_path": "Shortcut Settings",
+            "curatr_action": "Shortcut Settings",
+            "dynamic_list": "List Settings",
         }.get(kind, "Item Settings")
         actions.append({"key": "settings", "label": settings_label, "detail": "Change this item's details"})
         if kind == "provider_list":
@@ -3584,6 +3604,8 @@ class Curator:
             raise RuntimeError("That folder no longer exists.")
         choices = [
             ("curatr", "Add a curatr list"),
+            ("dynamic", "Add a Dynamic List"),
+            ("shortcut", "Add Curatr Shortcut"),
             ("path", "Add a path"),
             ("trakt", "Add from Trakt"),
             ("mdblist", "Add from MDBList"),
@@ -3596,6 +3618,12 @@ class Curator:
         if selected < 0:
             return folder
         action = choices[selected][0]
+        if action in ("shortcut", "dynamic"):
+            entry = self._choose_curatr_folder_entry(action, folder.get("entries", []))
+            if entry:
+                updated = dict(folder, entries=list(folder.get("entries", [])) + [entry], updated_at=int(time.time()))
+                return self._store_widget_folder(updated, folder)
+            return folder
         if action == "curatr":
             return self.add_list_to_widget_folder_interactive(folder_id=folder_id) or folder
         if action == "path":
@@ -3611,6 +3639,9 @@ class Curator:
         if action == "settings":
             if entry.get("type") == "curatr_list":
                 return self.list_settings_interactive(entry.get("list_id"))
+            if entry.get("type") == "dynamic_list":
+                from .dynamic_settings import edit
+                return edit(self, entry.get("list_id"))
             return self.edit_widget_folder_entry_interactive(folder_id, entry_id, details_only=True)
         if action == "refresh" and entry.get("type") == "provider_list":
             cache_key = self._provider_cache_key(entry.get("provider"), entry.get("provider_list_id"))
@@ -3760,6 +3791,11 @@ class Curator:
                     detail = "curatr list  •  %d item%s" % (
                         count, "" if count == 1 else "s",
                     )
+            elif kind == "dynamic_list":
+                art_record = dynamic.by_id(self, entry.get("list_id")) or entry
+                detail = "Dynamic List · %d sources" % len(art_record.get("sources", []))
+            elif kind == "curatr_action":
+                detail = "Curatr Shortcut"
             elif kind == "provider_list":
                 provider = "Trakt" if entry.get("provider") == "trakt" else "MDBList"
                 count = max(0, self._safe_int(entry.get("item_count"), 0))
@@ -3777,6 +3813,10 @@ class Curator:
                 "total": len(entries),
                 "art": list_art_sources(self.addon, art_record),
             })
+            if kind == "curatr_action" and not entry.get("artwork"):
+                icon = CURATR_SHORTCUTS[entry["shortcut"]][4]
+                source = menu_source(xbmcvfs.translatePath(self.addon.getAddonInfo("path")), icon)
+                rows[-1]["art"] = {"icon": source, "thumb": source}
         return rows
 
     @staticmethod
@@ -3791,7 +3831,7 @@ class Curator:
             {"key": "move_front", "label": "Move to Front", "enabled": not first},
             {"key": "move_back", "label": "Move to Back", "enabled": not last},
         ]
-        if row.get("kind") in ("provider_list", "external_path"):
+        if row.get("kind") in ("provider_list", "external_path", "curatr_action"):
             actions.extend([
                 {"key": "settings", "label": "Item Settings"},
                 {"key": "artwork", "label": "Artwork"},
@@ -3812,7 +3852,7 @@ class Curator:
         entry = entries[index]
         if action in ("move_up", "move_down", "move_front", "move_back"):
             entries = self._reorder_folder_entries(entries, entry_id, action)
-        elif action == "settings" and entry.get("type") in ("provider_list", "external_path"):
+        elif action == "settings" and entry.get("type") in ("provider_list", "external_path", "curatr_action"):
             name = xbmcgui.Dialog().input(
                 "Item name", defaultt=str(entry.get("name") or "")
             )
@@ -3824,7 +3864,7 @@ class Curator:
             )
             entry["description"] = str(description or "").strip()
             entries[index] = entry
-        elif action == "artwork" and entry.get("type") in ("provider_list", "external_path"):
+        elif action == "artwork" and entry.get("type") in ("provider_list", "external_path", "curatr_action"):
             content_entries = None
             if entry.get("type") == "external_path":
                 content_entries = lambda: self._fanart_entries_from_external_path(
@@ -3846,6 +3886,12 @@ class Curator:
         draft["entries"] = entries
         return draft
 
+    def _choose_curatr_folder_entry(self, kind, entries):
+        if kind == "shortcut":
+            return choose_shortcut(entries)
+        from .dynamic_settings import choose_list
+        return choose_list(self, entries)
+
     def _add_draft_folder_content(self, draft):
         entries = [
             dict(row) for row in draft.get("entries", []) if isinstance(row, dict)
@@ -3853,6 +3899,8 @@ class Curator:
         folder = {"name": draft.get("name") or "New Folder", "entries": entries}
         choices = [
             ("curatr", "Add a curatr list"),
+            ("dynamic", "Add a Dynamic List"),
+            ("shortcut", "Add Curatr Shortcut"),
             ("path", "Add a path"),
             ("trakt", "Add from Trakt"),
             ("mdblist", "Add from MDBList"),
@@ -3889,6 +3937,8 @@ class Curator:
                     "type": "curatr_list",
                     "list_id": self._record_key(available[choice]),
                 }
+        elif kind in ("shortcut", "dynamic"):
+            entry = self._choose_curatr_folder_entry(kind, entries)
         elif kind == "path":
             entry = self._choose_external_folder_entry(folder)
         elif kind in ("trakt", "mdblist"):
@@ -4563,6 +4613,13 @@ class Curator:
 
     def edit_widget_folder_entry_artwork_interactive(self, folder_id, entry_id):
         folder, entry = self._widget_folder_entry(folder_id, entry_id)
+        if entry.get("type") == "dynamic_list":
+            record = dynamic.by_id(self, entry.get("list_id"))
+            if record:
+                updated = dict(record)
+                updated["artwork"] = self._edit_compact_artwork("Dynamic List Artwork", record.get("artwork"), preview_record=record)
+                dynamic.store(self, updated)
+            return folder
         if entry.get("type") == "curatr_list":
             return self.list_artwork_interactive(entry.get("list_id"))
         updated_entry = dict(entry)
@@ -4633,6 +4690,8 @@ class Curator:
                 actions.extend([
                     ("name", "Name"), ("description", "Description"), ("path", "Plugin path"),
                 ])
+            elif entry.get("type") == "curatr_action":
+                actions.extend([("name", "Name"), ("description", "Description")])
             elif entry.get("type") == "provider_list":
                 actions.extend([
                     ("name", "Name"), ("description", "Description"),
@@ -4658,7 +4717,7 @@ class Curator:
             if action in ("move_up", "move_down", "move_front", "move_back"):
                 folder = self._move_widget_folder_entry(folder_id, entry_id, action)
                 continue
-            if entry.get("type") == "external_path":
+            if entry.get("type") in ("external_path", "curatr_action"):
                 updated_entry = dict(entry)
                 if action == "name":
                     value = xbmcgui.Dialog().input("Shortcut name", defaultt=str(entry.get("name") or ""))
@@ -4795,9 +4854,9 @@ class Curator:
             if not folder_id:
                 continue
             entries = self._visible_folder_entries(folder.get("entries", []))
-            curatr_count = sum(row.get("type") == "curatr_list" for row in entries)
+            curatr_count = sum(row.get("type") in ("curatr_list", "dynamic_list") for row in entries)
             linked_count = sum(row.get("type") == "provider_list" for row in entries)
-            path_count = sum(row.get("type") == "external_path" for row in entries)
+            path_count = sum(row.get("type") in ("external_path", "curatr_action") for row in entries)
             parts = []
             if curatr_count:
                 parts.append("%d local" % curatr_count)
@@ -4912,9 +4971,10 @@ class Curator:
             payload_lists.append(clean)
         payload = {
             "format": "curatr-backup",
-            "version": 3,
+            "version": 4,
             "exported_at": int(time.time()),
             "lists": payload_lists,
+            "dynamic_lists": [dynamic.normalise(row) for row in dynamic.records(self)],
             "prompt_templates": [row for row in self.state.get("prompt_templates", []) if isinstance(row, dict)],
             "hidden_movies": [row for row in self.state.get("hidden_movies", []) if isinstance(row, dict)],
             "widget_folders": [row for row in self.widget_folders()],
@@ -5049,6 +5109,14 @@ class Curator:
             if entry.get("type") == "curatr_list" and entry.get("list_id"):
                 original = str(entry.get("list_id"))
                 entry = {"id": entry["id"], "type": "curatr_list", "list_id": str(mapping.get(original, original))}
+            elif entry.get("type") == "dynamic_list" and entry.get("list_id"):
+                entry = {"id": entry["id"], "type": "dynamic_list", "list_id": str(entry["list_id"])}
+            elif entry.get("type") == "curatr_action" and entry.get("shortcut") in CURATR_SHORTCUTS:
+                entry = {"id": entry["id"], "type": "curatr_action", "shortcut": entry["shortcut"],
+                         "name": str(entry.get("name") or CURATR_SHORTCUTS[entry["shortcut"]][1]),
+                         "description": str(entry.get("description") or "")}
+                if row_entry.get("artwork"):
+                    entry["artwork"] = self._prepare_restored_list({"artwork": row_entry["artwork"]})["artwork"]
             elif entry.get("type") == "external_path" and self._valid_external_plugin_path(entry.get("path")):
                 entry["path"] = self._valid_external_plugin_path(entry.get("path"))
                 entry["name"] = str(entry.get("name") or "External Shortcut").strip() or "External Shortcut"
@@ -5213,6 +5281,17 @@ class Curator:
                 name_to_indexes.setdefault(name_key, []).append(new_idx)
             list_added += 1
 
+        dynamic_rows = {r["id"]: r for r in dynamic.records(self)}
+        dynamic_restored = 0
+        for row in payload.get("dynamic_lists", []):
+            if isinstance(row, dict):
+                restored = dynamic.normalise(row, list_id_map)
+                restored["artwork"] = self._prepare_restored_list({"artwork": restored["artwork"]})["artwork"]
+                dynamic_rows[restored["id"]] = restored
+                dynamic_restored += 1
+        self.state["dynamic_lists"] = list(dynamic_rows.values())
+        if dynamic_restored:
+            self.state["dynamic_lists_written"] = True
         self.state["ai_lists"] = current_lists
         prompts_added, prompts_updated = self._merge_prompt_templates_from_backup(payload.get("prompt_templates"))
         hidden_added, hidden_updated = self._merge_hidden_movies_from_backup(payload.get("hidden_movies"))
@@ -5229,6 +5308,7 @@ class Curator:
                 ", %d kept as duplicates" % list_kept_both if list_kept_both else "",
                 ", %d skipped" % list_skipped if list_skipped else "",
             ),
+            "Dynamic Lists: %d restored" % dynamic_restored,
             "Saved prompts: %d added, %d updated" % (prompts_added, prompts_updated),
             "Hidden items: %d added, %d merged" % (hidden_added, hidden_updated),
             "Folders: %d added, %d updated" % (folders_added, folders_updated),
@@ -5368,42 +5448,30 @@ class Curator:
         )
         xbmcgui.Dialog().textviewer("Privacy & Data", text)
 
+    def customise_theme_interactive(self, background=False):
+        from .colour_picker import choose_colours
+        result = choose_colours(self.addon, self.state, background=background)
+        selected = result.get("background") if result else None
+        if selected and (selected["key"] != current_choice(self.addon, self.state) or
+                         (selected["key"] == "custom" and selected.get("source") != self.state.get("menu_background_source"))):
+            self.state["menu_background_style"] = selected["key"]
+            if selected["key"] == "custom":
+                self.state["menu_background_source"] = selected["source"]
+            self._save_state()
+        return result
+
+    def create_dynamic_list_interactive(self):
+        from .dynamic_settings import edit
+        return edit(self)
+
+    def manage_dynamic_lists_interactive(self):
+        from .dynamic_settings import manage
+        return manage(self)
+
     def choose_menu_background_interactive(self):
-        """Choose a theme gradient or custom image without leaving the picker on cancel."""
-        addon_path = xbmcvfs.translatePath(self.addon.getAddonInfo("path"))
-        current = current_choice(self.addon, self.state)
-        entries = background_entries(self.addon, self.state)
-
-        def select(entry):
-            if entry["key"] != "custom":
-                return entry
-            source = xbmcgui.Dialog().browseSingle(
-                2, "Choose a background image", "files", ".png|.jpg|.jpeg|.webp",
-                defaultt=str(self.state.get("menu_background_source") or ""),
-            )
-            if not source:
-                return None
-            try:
-                return dict(entry, source=import_custom_background(self.addon, source))
-            except (OSError, ValueError, RuntimeError) as exc:
-                message = str(exc) if isinstance(exc, ValueError) else "Could not read that image. Please choose another file."
-                xbmcgui.Dialog().ok("Menu Background", message)
-                return None
-
-        selected = choose_artwork(addon_path, "Menu Background", entries, "fanart", selection_handler=select)
-        if not selected:
-            return current
-        value = str(selected["key"])
-        source = str(selected.get("source") or "")
-        if value == current and (value != "custom" or source == self.state.get("menu_background_source")):
-            return current
-        self.state["menu_background_style"] = value
-        if value == "custom":
-            self.state["menu_background_source"] = source
-        self._save_state()
-        label = "Custom" if value == "custom" else selected.get("label")
-        self.record_activity("Changed menu background to %s" % label, notify=True)
-        return value
+        # Saved shortcuts to the old command open the background section here.
+        self.customise_theme_interactive(background=True)
+        return current_choice(self.addon, self.state)
 
     def set_list_trakt_sync(self, list_id, enabled):
         record = self._managed_record_by_id(list_id)

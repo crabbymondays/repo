@@ -2,13 +2,26 @@ import time
 
 import xbmc
 import xbmcaddon
+import xbmcvfs
+
+from lib.dynamic_lists import invalidate
 
 from lib.core import Curator
 from lib.view_refresh import list_signature, refresh_if_changed
 
 
 addon = xbmcaddon.Addon()
-monitor = xbmc.Monitor()
+class ContentMonitor(xbmc.Monitor):
+    def onNotification(self, sender, method, data):
+        if method in ("Player.OnStop", "Player.OnAVStart", "VideoLibrary.OnUpdate", "VideoLibrary.OnRemove",
+                      "VideoLibrary.OnScanFinished", "VideoLibrary.OnCleanFinished"):
+            try:
+                invalidate(xbmcvfs.translatePath(addon.getAddonInfo("profile")))
+            except OSError as exc:
+                xbmc.log("curatr Dynamic List cache invalidation failed: %s" % exc, xbmc.LOGWARNING)
+
+
+monitor = ContentMonitor()
 
 # Keep the read-only Trakt status reasonably fresh without spending two API
 # requests on every Kodi restart. A successful OAuth status check is cached for

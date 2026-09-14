@@ -910,7 +910,7 @@ msgid "Movies"
 msgstr ""
 
 msgctxt "#32703"
-msgid "Current Movie Playback"
+msgid "Current Movie Player"
 msgstr ""
 
 msgctxt "#32704"
@@ -918,7 +918,7 @@ msgid "Shows what curatr will use when you open a movie."
 msgstr ""
 
 msgctxt "#32705"
-msgid "Choose Movie Playback"
+msgid "Choose Movie Player"
 msgstr ""
 
 msgctxt "#32706"
@@ -930,7 +930,7 @@ msgid "TV Shows"
 msgstr ""
 
 msgctxt "#32708"
-msgid "Current TV Show Playback"
+msgid "Current Series Player"
 msgstr ""
 
 msgctxt "#32709"
@@ -938,7 +938,7 @@ msgid "Shows what curatr will use when you open a TV show."
 msgstr ""
 
 msgctxt "#32710"
-msgid "Choose TV Show Playback"
+msgid "Choose Series Player"
 msgstr ""
 
 msgctxt "#32711"
@@ -1063,4 +1063,12 @@ msgstr ""
 
 msgctxt "#32924"
 msgid "Grey"
+msgstr ""
+
+msgctxt "#32930"
+msgid "Customise Theme"
+msgstr ""
+
+msgctxt "#32931"
+msgid "Choose a colour from the artwork palette, or customise individual highlights and the background tint."
 msgstr ""

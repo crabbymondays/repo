@@ -5,7 +5,20 @@ set -euo pipefail
 repo_dir="$(git rev-parse --show-toplevel)"
 cd "$repo_dir"
 test -f plugin.video.curatr/addon.xml
-test -f tools/build_repo.py
+if ! git cat-file -e HEAD:tools/build_repo.py 2>/dev/null; then
+  echo "This checkout is not the Curatr hosting repository (tools/build_repo.py is not tracked)." >&2
+  exit 1
+fi
+# Materialise only the small release-support folders in a sparse checkout.
+if [ "$(git config --bool core.sparseCheckout || true)" = true ]; then
+  git sparse-checkout add tools repository.curatr .github
+  if [ "$(git config --bool core.sparseCheckoutCone || true)" != true ]; then
+    git sparse-checkout add '/*.*'
+  fi
+fi
+if [ ! -f tools/build_repo.py ]; then
+  git restore --worktree --ignore-skip-worktree-bits -- tools/build_repo.py
+fi
 
 git rm --ignore-unmatch -- \
   BETA_TESTING.md \

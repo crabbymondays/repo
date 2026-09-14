@@ -3,7 +3,7 @@
 from .colours import COLOURS, BACKGROUND_COLOURS, normalise_colour
 
 
-_PRESETS = {
+_LEGACY_PRESETS = {
     "violet": {"primary": "deep_violet", "secondary": "violet", "tint": "deep_violet"},
     "ocean": {"primary": "deep_blue", "secondary": "cyan", "tint": "deep_blue"},
     "emerald": {"primary": "green", "secondary": "sage", "tint": "green"},
@@ -66,42 +66,54 @@ def _for_white_text(rgb):
     return adjusted
 
 
-def _selected_colour(addon, setting_id, fallback):
-    key = normalise_colour(_setting(addon, setting_id, "theme"))
-    return _rgb(COLOURS[key if key != "default" else fallback][1])
+def theme_config(addon):
+    """Read a base colour, or translate the old preset without changing its look."""
+    base = normalise_colour(_setting(addon, "interface_base_colour"))
+    legacy = _LEGACY_PRESETS.get(_setting(addon, "interface_theme", "violet"), _LEGACY_PRESETS["violet"])
+    custom = _enabled(addon, "interface_custom_colours")
+    if base == "default":
+        base = legacy["primary"]
+        defaults = legacy
+    else:
+        defaults = {"primary": base, "secondary": base, "tint": base}
+    values = {}
+    for field, setting in (("primary", "primary"), ("secondary", "secondary"), ("tint", "background")):
+        key = normalise_colour(_setting(addon, "interface_%s_colour" % setting)) if custom else "default"
+        values[field] = key if key != "default" else defaults[field]
+    # Old two-colour presets are represented as custom colours on first opening.
+    values.update(base=base, custom=custom or len(set(values.values())) > 1)
+    return values
+
+
+def save_theme(addon, config):
+    for field, setting in (("primary", "primary"), ("secondary", "secondary"), ("tint", "background")):
+        addon.setSetting("interface_%s_colour" % setting, config[field])
+    addon.setSetting("interface_custom_colours", "true" if config["custom"] else "false")
+    addon.setSetting("interface_base_colour", config["base"])
 
 
 def background_colour(addon, colour="theme"):
-    """Resolve a menu/theme choice to the same palette key used by list artwork."""
+    """Resolve a menu/theme choice to the palette used by list artwork."""
     key = normalise_colour(colour)
-    if key != "default":
-        return key
-    preset = _PRESETS.get(_setting(addon, "interface_theme", "violet"), _PRESETS["violet"])
-    if _enabled(addon, "interface_custom_colours"):
-        key = normalise_colour(_setting(addon, "interface_background_colour", "theme"))
-        if key != "default":
-            return key
-    return preset["tint"]
+    return key if key != "default" else theme_config(addon)["tint"]
 
 
 def background_palette(addon, colour="theme"):
     return COLOURS[background_colour(addon, colour)]
 
 
-def theme_palette(addon=None):
-    """Return the shared accent colours and darker surfaces for custom windows."""
+def theme_palette(addon=None, config=None):
+    """Return shared accents and dark surfaces; accept an unsaved live preview."""
     if addon is None:
         try:
             import xbmcaddon
             addon = xbmcaddon.Addon("plugin.video.curatr")
         except Exception:
             addon = None
-    preset = _PRESETS.get(_setting(addon, "interface_theme", "violet"), _PRESETS["violet"])
-    primary, secondary = (_rgb(COLOURS[preset[key]][1]) for key in ("primary", "secondary"))
-    if _enabled(addon, "interface_custom_colours"):
-        primary = _selected_colour(addon, "interface_primary_colour", preset["primary"])
-        secondary = _selected_colour(addon, "interface_secondary_colour", preset["secondary"])
-    tint = _rgb(background_palette(addon)[2])
+    config = config or theme_config(addon)
+    primary = _rgb(COLOURS[config["primary"]][1])
+    secondary = _rgb(COLOURS[config["secondary"]][1])
+    tint = _rgb(COLOURS[config["tint"]][2])
     surface = _mix(tint, (0, 0, 0), 0.52)
     row = _mix(tint, (255, 255, 255), 0.12)
     return {
@@ -146,17 +158,14 @@ def skin_name():
 
 def style_tab(window, control_id, label, selected):
     """Keep an active selector coloured independently of keyboard/touch focus."""
-    palette = getattr(window, "_tab_palette", None)
-    if palette is None:
-        palette = window._tab_palette = theme_palette()
-        window._tab_text = "FFE2DEE8"
+    palette = theme_palette()
     # A control-owned colour survives native dialogs opening above this window.
     window.getControl(1000 + control_id).setColorDiffuse(
         "0x" + palette["CuratrPrimary" if selected else "CuratrButtonFaint"]
     )
     window.getControl(control_id).setLabel(
         "[B]%s[/B]" % label if selected else label,
-        textColor="0xFFFFFFFF" if selected else "0x" + window._tab_text,
+        textColor="0xFFFFFFFF" if selected else "0xFFE2DEE8",
     )
 
 

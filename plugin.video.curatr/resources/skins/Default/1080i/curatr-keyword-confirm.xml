@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <window type="dialog">
     <defaultcontrol always="true">101</defaultcontrol>
     <coordinates>
@@ -81,7 +81,7 @@
             <onright>102</onright>
             <onup>102</onup>
             <ondown>100</ondown>
-            <texturefocus border="18" colordiffuse="FF505159">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
+            <texturefocus border="18" colordiffuse="FF505159">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
             <texturenofocus border="18" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
             <textoffsetx>12</textoffsetx>
         </control>
@@ -118,8 +118,8 @@
             <aligny>center</aligny>
             <onup>102</onup>
             <onright>101</onright>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturenofocus>
         </control>
         <control type="button" id="101">
             <left>985</left>
@@ -134,8 +134,8 @@
             <aligny>center</aligny>
             <onup>102</onup>
             <onleft>100</onleft>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturenofocus>
         </control>
     </controls>
 </window>

@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <window type="dialog">
     <defaultcontrol always="true">100</defaultcontrol>
     <coordinates>
@@ -39,7 +39,7 @@
             <top>158</top>
             <width>1780</width>
             <height>790</height>
-            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanel)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
+            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanel)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
         </control>
         <control type="panel" id="100">
             <left>100</left>
@@ -58,7 +58,7 @@
                     <top>8</top>
                     <width>378</width>
                     <height>322</height>
-                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
                 </control>
                 <control type="image">
                     <left>94</left>
@@ -171,7 +171,7 @@
             <top>190</top>
             <width>440</width>
             <height>700</height>
-            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelMedium)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
+            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelMedium)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
         </control>
         <control type="label" id="20">
             <left>1400</left>
@@ -211,7 +211,7 @@
                     <top>4</top>
                     <width>390</width>
                     <height>54</height>
-                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrRow)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
                 </control>
                 <control type="label">
                     <left>22</left>
@@ -259,8 +259,8 @@
             <onright>300</onright>
             <onup>100</onup>
             <ondown>300</ondown>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrDanger)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texturenofocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrDanger)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturenofocus>
         </control>
         <control type="scrollbar" id="400">
             <left>1340</left>

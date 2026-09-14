@@ -1,6 +1,7 @@
 """Persistent, bounded TMDB metadata used to populate Kodi list items."""
 
 import json
+import hashlib
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -11,6 +12,8 @@ import xbmcvfs
 CACHE_VERSION = 1
 TTL_SECONDS = 30 * 24 * 60 * 60
 MAX_ITEMS = 1200
+RATINGS_TTL_SECONDS = 7 * 24 * 60 * 60
+RATINGS_RETRY_SECONDS = 6 * 60 * 60
 
 
 class MetadataCache:
@@ -146,11 +149,22 @@ class MetadataCache:
                 if isinstance(existing, dict):
                     merged.update({kind: source for kind, source in existing.items() if source})
                 movie[key] = merged
-            elif key != "mdblist_ratings_checked":
+            elif not key.startswith("mdblist_"):
                 movie[key] = value
 
     def _enrich_external_ratings(self, movies, mdblist):
         if not mdblist or not getattr(mdblist, "api_key", ""):
+            return False
+        now = int(time.time())
+        account = hashlib.sha256(mdblist.api_key.encode("utf-8")).hexdigest()[:16]
+        cache = self._load()
+        if cache.get("ratings_account") != account:
+            cache.update(ratings_account=account, ratings_retry_at=0)
+            for row in cache["items"].values():
+                metadata = row.get("metadata") if isinstance(row, dict) else None
+                if isinstance(metadata, dict):
+                    metadata.pop("mdblist_ratings_next_check", None)
+        if int(cache.get("ratings_retry_at") or 0) > now:
             return False
         pending = {"movie": {}, "show": {}}
         for movie in movies or []:
@@ -163,22 +177,36 @@ class MetadataCache:
             except (TypeError, ValueError):
                 continue
             cached = self.get(media_type, tmdb_id) or {}
-            if not cached.get("mdblist_ratings_checked"):
+            if int(cached.get("mdblist_ratings_next_check") or 0) <= now:
                 pending[media_type][int(tmdb_id)] = key
         changed = False
         for media_type, items in pending.items():
             if not items:
                 continue
-            fetched = mdblist.ratings_for_ids(media_type, items)
-            now = int(time.time())
+            try:
+                fetched = mdblist.ratings_for_ids(media_type, items)
+            except Exception as exc:
+                cache["ratings_retry_at"] = now + max(300, int(getattr(exc, "retry_after", 0) or 0))
+                self._save()
+                break
+            retry_after = int(getattr(fetched, "retry_after", 0) or 0)
+            if retry_after:
+                cache["ratings_retry_at"] = now + max(300, retry_after)
             for tmdb_id, key in items.items():
                 metadata = self.get(media_type, tmdb_id) or {}
                 ratings = dict(metadata.get("ratings") or {})
                 ratings.update(fetched.get(tmdb_id) or {})
                 metadata["ratings"] = ratings
-                metadata["mdblist_ratings_checked"] = True
-                self._load()["items"][key] = {"cached_at": now, "metadata": metadata}
+                complete = getattr(fetched, "complete", True)
+                delay = RATINGS_TTL_SECONDS if complete and fetched.get(tmdb_id) else RATINGS_RETRY_SECONDS
+                metadata.pop("mdblist_ratings_checked", None)
+                metadata["mdblist_ratings_next_check"] = now + delay
+                # A ratings refresh must not keep ageing TMDB details alive.
+                cached_at = (self._load()["items"].get(key) or {}).get("cached_at") or now
+                self._load()["items"][key] = {"cached_at": cached_at, "metadata": metadata}
                 changed = True
+            if retry_after:
+                break
         if changed:
             self._save()
             for movie in movies or []:
@@ -206,7 +234,8 @@ class MetadataCache:
             cached = self.get(media_type, tmdb_id)
             if cached:
                 self._apply(movie, cached)
-            if tmdb_available and (not cached or (include_artwork and "images" not in cached)):
+            if tmdb_available and (not cached or "cast" not in cached or
+                                   (include_artwork and "images" not in cached)):
                 wanted[key] = (media_type, int(tmdb_id))
 
         fetched = {}
@@ -225,6 +254,12 @@ class MetadataCache:
         if fetched:
             now = int(time.time())
             for key, metadata in fetched.items():
+                previous = (self._load()["items"].get(key) or {}).get("metadata") or {}
+                ratings = dict(previous.get("ratings") or {})
+                ratings.update(metadata.get("ratings") or {})
+                metadata["ratings"] = ratings
+                if previous.get("mdblist_ratings_next_check"):
+                    metadata["mdblist_ratings_next_check"] = previous["mdblist_ratings_next_check"]
                 self._load()["items"][key] = {"cached_at": now, "metadata": metadata}
             try:
                 self._save()

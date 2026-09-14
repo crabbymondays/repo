@@ -28,6 +28,7 @@ FONT_AWESOME = {
     "menu_widget_folders": "folder-open", "menu_add_folder": "folder-plus",
     "menu_branching_v2": "shuffle", "menu_preferences": "heart-pulse",
     "menu_taste_v3": "fingerprint", "menu_save_results": "file-lines",
+    "menu_dynamic": "layer-group",
 }
 
 

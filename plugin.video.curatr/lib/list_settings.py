@@ -8,7 +8,7 @@ _BACK_ACTIONS = {9, 10, 92}
 
 class ListSettingsWindow(xbmcgui.WindowXMLDialog):
     TAB_IDS = {100: "appearance", 101: "content", 102: "behaviour"}
-    ROW_IDS = (200, 201, 202, 203)
+    ROW_IDS = (200, 201, 202, 203, 204)
     ACTION_IDS = {300: "preview", 301: "create", 302: "cancel"}
     FIELDS = {
         "appearance": ("name", "description", "artwork"),

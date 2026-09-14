@@ -23,10 +23,10 @@ def release_files():
         and not (path.relative_to(ROOT).parts[:2] == ("resources", "media")
                  and path.relative_to(ROOT).parts[2] in RETIRED_ART_DIRS)
         and not (path.relative_to(ROOT).parts[:3] == ("resources", "media", "menu")
-                 and path.relative_to(ROOT).parts[3] != "v9")
+                 and path.relative_to(ROOT).parts[3] != "v10")
         and not (path.relative_to(ROOT).parts[:3] == ("resources", "media", "list_art")
                  and path.relative_to(ROOT).parts[3] != "v7")
-        and path.name != "control_clear.png"
+        and path.name not in {"control_clear.png", "rounded_surface_v1.png", "icon_v3.png"}
     ]
 
 

@@ -4,6 +4,26 @@ import hashlib
 import json
 
 import xbmc
+import xbmcgui
+
+
+def in_video_navigation():
+    try:
+        return xbmcgui.getCurrentWindowId() == 10025 or bool(xbmc.getCondVisibility("Window.IsActive(videos)"))
+    except Exception:
+        return False
+
+
+def directory_command(url, replace=False):
+    """Keep directory history in Videos and the originating window elsewhere."""
+    target = str(url).replace('"', '%22')
+    if in_video_navigation():
+        return 'Container.Update("%s"%s)' % (target, ",replace" if replace else "")
+    return 'ActivateWindow(Videos,"%s",return)' % target
+
+
+def open_directory(url, replace=False):
+    xbmc.executebuiltin(directory_command(url, replace=replace))
 
 
 def list_signature(state):
@@ -18,6 +38,7 @@ def list_signature(state):
     } if isinstance(linked_cache, dict) else {}
     records = {
         "ai_lists": state.get("ai_lists", []),
+        "dynamic_lists": state.get("dynamic_lists", []),
         "hidden_movies": state.get("hidden_movies", []),
         "widget_folders": state.get("widget_folders", []),
         "linked_list_cache": linked_summary,
@@ -42,7 +63,7 @@ def refresh_if_changed(before, state, appearance_changed=False):
         in_curatr = plugin_name == "plugin.video.curatr" or folder_path.startswith("plugin://plugin.video.curatr")
     except Exception:
         pass
-    if in_curatr:
+    if in_curatr and in_video_navigation():
         try:
             xbmc.executebuiltin("Container.Refresh")
         except Exception:

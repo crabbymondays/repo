@@ -182,7 +182,7 @@ class PlayerRegistry:
 
     def choose(self, media_type):
         setting = "show_player_id" if media_type == "show" else "movie_player_id"
-        heading = "Choose TV show playback" if media_type == "show" else "Choose movie playback"
+        heading = "Choose series player" if media_type == "show" else "Choose movie player"
         players = self.available(media_type)
         labels = ["Automatic", "Information only"] + [row["name"] for row in players]
         current = str(self._preferences().get(setting) or "automatic")

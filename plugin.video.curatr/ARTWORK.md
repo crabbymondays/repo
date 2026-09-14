@@ -34,7 +34,7 @@ treatment rather than being baked into each image.
 
 ## Menu artwork
 
-The v9 menu bundle combines the selected Font Awesome Classic Solid icons,
+The v10 menu bundle combines the selected Font Awesome Classic Solid icons,
 the retained Curatr designs and matching Browse/Create page badges. The badges
 share the same circle centre and size; the magnifier is centred with room around
 its handle. Every glyph fits within 340 pixels on a
@@ -42,7 +42,7 @@ its handle. Every glyph fits within 340 pixels on a
 960 × 540 widget images reuse those shapes with centred padding. The selected
 shuffle, heart-pulse, fingerprint and file-lines designs have separate menu
 mappings for switching method, preferences/activity, viewing preferences and
-saving preview results.
+saving preview results. Dynamic Lists uses the Classic Solid layer-group glyph.
 
 `tools/build_menu_artwork.py` reads the pinned Font Awesome SVGs and generates
 the two page badges. For retained menu designs, the supplied square PNGs are
@@ -55,11 +55,23 @@ build dependencies are not required by Kodi.
 
 ## Menu backgrounds and add-on branding
 
-The menu background picker offers Match theme, the same 25 colour choices and
-a final Custom… tile. Match theme follows the interface background tint.
-Menu backgrounds use the exact shared fanart files, without another bundled
-template or colour-rendering code. Only small 640 × 360 picker previews are
-created and cached in the add-on profile.
+The Menu Background section of Customise Theme shows the same 25 colours as
+small unlabelled swatches, with a compact rounded preview card and Match Theme and Custom
+Image buttons.
+Match Theme follows the interface background tint. Menu backgrounds use the
+exact shared fanart files. Swatches use the shared rounded texture with a colour
+diffuse; there are no generated thumbnail or per-colour UI image files.
+
+Customise Theme uses that same swatch window for a base colour and optional
+individual highlights/background tint. Selected tab backdrops have no
+texture-level diffuse colour: Kodi must use the control's programmatic tint.
+
+`rounded_surface_v2.png` shades filled buttons, tabs, item rows, panels and colour
+swatches. Its short edge bands stay inside the nine-slice borders, with an even
+centre and stronger bottom shade. It retains the shared rectangle's alpha and
+corner geometry; Kodi supplies each theme's colour. Artwork masks stay flat.
+`tools/build_ui_surface.py` rebuilds the surface and the preview's rounded alpha
+mask using Pillow. Neither requires a runtime image-processing dependency.
 
 Custom PNG, JPEG and WebP images up to 12 MiB are copied atomically into the
 add-on profile. Identical imports reuse the same copy; the original file can
@@ -67,7 +79,7 @@ then be moved or deleted. Generated caches and user images are not bundled.
 Old numeric menu-background choices resolve to the corresponding shared
 colour choices without rewriting saved lists or folders.
 
-The supplied add-on icon is kept as `icon_v3.png`, referenced explicitly in
+The supplied add-on icon is kept unchanged as `icon_v4.png`, referenced explicitly in
 `addon.xml` to avoid Kodi reusing its old icon texture. There is no duplicate
 root icon or add-on information-page fanart. The in-add-on menu backgrounds
 remain available independently.
@@ -79,7 +91,9 @@ Use Python 3.9+, Cairo, Pillow 9.1+ and CairoSVG for the artwork builders:
 ```bash
 python tools/build_artwork.py
 python tools/build_menu_artwork.py
+python tools/build_ui_surface.py
 python tools/release_checks.py
+python tools/feature_checks.py
 python tools/build_release.py --output /path/to/releases
 ```
 

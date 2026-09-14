@@ -1,59 +1,40 @@
-# Publish curatr from Termux
+# Publish curatr 1.0.27 from Termux
 
-This workflow updates `plugin.video.curatr/` inside `crabbymondays/repo`.
-This release also removes retired files and updates outdated repository
-wording using the supplied cleanup helper. The existing publishing workflow
-builds the current repository packages and metadata after you push.
-
-Keep one clone at `~/curatr-repo`. If it does not exist yet, create it once:
-
-```bash
-cd ~
-gh auth setup-git
-git clone https://github.com/crabbymondays/repo.git curatr-repo
-```
-
-For each release, download `curatr-1.0.24-github-source.zip` to Android's
-Downloads folder, then run:
+Download `curatr-1.0.27-github-source.zip` into Android’s Downloads folder.
+Use the existing hosting checkout at `~/curatr-repo`:
 
 ```bash
 (
 set -e
 cd ~/curatr-repo
+test -z "$(git status --porcelain)" || { echo "This checkout has local changes. Review them before publishing."; exit 1; }
 git pull --rebase origin main
-release_tmp="$(mktemp -d)"
-unzip -oq ~/storage/downloads/curatr-1.0.24-github-source.zip -d "$release_tmp"
-test -f "$release_tmp/plugin.video.curatr/addon.xml"
-rsync -av --delete --exclude='.git' "$release_tmp/plugin.video.curatr/" plugin.video.curatr/
+curatr_release_tmp="$(mktemp -d)"
+unzip -oq ~/storage/downloads/curatr-1.0.27-github-source.zip -d "$curatr_release_tmp"
+test -f "$curatr_release_tmp/plugin.video.curatr/addon.xml"
+rsync -av --delete --exclude='.git' "$curatr_release_tmp/plugin.video.curatr/" plugin.video.curatr/
 bash plugin.video.curatr/tools/clean_repository.sh
-git status --short
-rm -r -- "$release_tmp/plugin.video.curatr"
-rmdir -- "$release_tmp"
-)
-```
-
-The status includes the add-on changes plus the obsolete-file removals,
-README, download-page wording, repository description and issue template.
-Then publish them:
-
-```bash
-(
-set -e
-cd ~/curatr-repo
-git add -- plugin.video.curatr
-git commit -m "Release curatr 1.0.24"
+git add -A -- plugin.video.curatr
+git commit -m "Release curatr 1.0.27"
+git pull --rebase origin main
 git push origin main
+rm -r -- "$curatr_release_tmp/plugin.video.curatr"
+rmdir -- "$curatr_release_tmp"
 )
 ```
 
-The existing GitHub Action builds the Kodi repository after the source commit
-is pushed. The `--delete` target above is only the add-on folder; never run it
-against `~/curatr-repo/` itself because that would remove the repository files.
+The existing GitHub Action builds the Kodi repository after the push. This
+command does not publish a separate GitHub Release or change the workflow.
+The cleanup helper brings the small release-support folders into view when
+the checkout is sparse, before cleaning the explicitly named retired files.
+It keeps the current repository installer and published download paths.
 
-The subshell stops if a command fails. The first block removes only the
-temporary extracted copy after a successful sync; the downloaded ZIP and clone
-are retained.
+`rsync --delete` targets only `plugin.video.curatr/`, not the repository root.
+Kodi’s installed add-on data is separate and is not touched. If Git reports
+uncommitted local work or a rebase conflict, the block stops so that work can be
+reviewed instead of overwritten. Do not use a hard reset or force push to bypass
+it. The downloaded source ZIP is retained.
 
-The cleanup helper removes only the named retired files. It is safe to run
-again and keeps any rewritten README if it no longer contains the old
-pre-release placeholder. Existing repository installer paths remain valid.
+For a local Kodi test, install `plugin.video.curatr-1.0.27-install.zip` using
+**Add-ons → Install from ZIP file**. Uninstalling or clearing add-on data is not
+required.

@@ -6,6 +6,7 @@ import xbmcaddon
 import xbmcgui
 
 from lib.core import Curator
+from lib.view_refresh import open_directory
 
 
 ADDON = xbmcaddon.Addon()
@@ -87,7 +88,7 @@ def _open_preview(selected):
         "tvdb_id": str(ids.get("tvdb") or ""),
     }
     url = "plugin://plugin.video.curatr/?" + urlencode(params)
-    xbmc.executebuiltin('ActivateWindow(Videos,"%s",return)' % url.replace('"', '%22'))
+    open_directory(url)
 
 
 def main():

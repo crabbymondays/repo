@@ -30,12 +30,15 @@ class FakeAddon:
             "name": "curatr",
             "path": str(ROOT),
             "profile": self.profile,
-            "version": "1.0.24",
+            "version": "1.0.27",
             "id": "plugin.video.curatr",
         }.get(key, "")
 
     def getSetting(self, key):
         return self.settings.get(key, "")
+
+    def setSetting(self, key, value):
+        self.settings[key] = value
 
     def getLocalizedString(self, _key):
         return ""
@@ -163,6 +166,7 @@ def install_kodi_stubs(profile):
     xbmc.LOGERROR = 3
     xbmc.log = lambda *_args, **_kwargs: None
     xbmc.getCondVisibility = lambda _condition: False
+    xbmc.getInfoLabel = lambda _label: ""
     xbmc.executeJSONRPC = lambda _request: "{}"
     xbmc.executebuiltin = lambda *_args: None
     xbmc.sleep = lambda *_args: None
@@ -245,7 +249,7 @@ class ReleaseChecks(unittest.TestCase):
 
         client = MDBListClient("key")
         values = {"imdb": 8.2, "tomatoes": 75, "audience": 10, "metacritic": 64}
-        client._api_post = lambda path, _payload: {
+        client._api_post = lambda path, _payload, params=None: {
             "ratings": [{"id": 12, "rating": values[path.rsplit("/", 1)[-1]]}]
         }
         ratings = client.ratings_for_ids("movie", [12, 12, "bad"])[12]
@@ -255,7 +259,7 @@ class ReleaseChecks(unittest.TestCase):
         self.assertEqual(ratings["metacritic"]["rating"], 6.4)
 
         calls = []
-        def partial(path, _payload):
+        def partial(path, _payload, params=None):
             calls.append(path)
             if len(calls) == 2:
                 raise CatalogueError("temporary")
@@ -382,15 +386,19 @@ class ReleaseChecks(unittest.TestCase):
             sys.modules.pop("plugin", None)
             module = importlib.import_module("plugin")
 
-            xbmcgui.getCurrentWindowId = lambda: 10000
-            module._add_action("Quick Pick", "quick", widget_fallback="explore")
-            self.assertTrue(added[-1][3])
-            self.assertIn("action=explore", added[-1][1])
-
-            xbmcgui.getCurrentWindowId = lambda: 10025
-            module._add_action("Quick Pick", "quick", widget_fallback="explore")
+            with patch("lib.view_refresh.xbmcgui.getCurrentWindowId", return_value=10000):
+                module._add_action("Quick Pick", "quick")
             self.assertFalse(added[-1][3])
-            self.assertIn("command=quick", added[-1][1])
+            from urllib.parse import unquote
+            self.assertEqual(unquote(added[-1][1]), "favourites://RunPlugin(plugin://plugin.video.curatr/?action=run&command=quick)")
+            self.assertNotIn("video", added[-1][2].info)
+            self.assertTrue(added[-1][2].properties["node.target_url"].startswith("favourites://RunPlugin%28"))
+
+            with patch("lib.view_refresh.xbmcgui.getCurrentWindowId", return_value=10025):
+                module._add_action("Quick Pick", "quick")
+            self.assertFalse(added[-1][3])
+            self.assertEqual(added[-1][1], "plugin://plugin.video.curatr/?action=run&command=quick")
+            self.assertNotIn("video", added[-1][2].info)
 
             item = FakeListItem()
             module._set_movie_info(item, {
@@ -452,14 +460,14 @@ class ReleaseChecks(unittest.TestCase):
 
     def test_context_scope_and_versioned_create_asset(self):
         addon = ET.parse(ROOT / "addon.xml").getroot()
-        self.assertEqual(addon.attrib["version"], "1.0.24")
+        self.assertEqual(addon.attrib["version"], "1.0.27")
         visibility = [node.text or "" for node in addon.findall(".//item/visible")]
         self.assertEqual(len(visibility), 3)
         self.assertTrue(all("CuratrItem" in value for value in visibility))
         self.assertFalse((ROOT / "resources/media/menu_v5/menu_create.png").exists())
         self.assertFalse((ROOT / "resources/media/menu_landscape_v1/menu_create.png").exists())
-        self.assertTrue((ROOT / "resources/media/menu/v9/square/menu_create_v2.png").exists())
-        self.assertTrue((ROOT / "resources/media/menu/v9/landscape/menu_create_v2.png").exists())
+        self.assertTrue((ROOT / "resources/media/menu/v10/square/menu_create_v2.png").exists())
+        self.assertTrue((ROOT / "resources/media/menu/v10/landscape/menu_create_v2.png").exists())
 
 
 class InterfaceChecks(unittest.TestCase):
@@ -537,6 +545,7 @@ class InterfaceChecks(unittest.TestCase):
             sys.modules.pop("plugin", None)
             plugin = importlib.import_module("plugin")
             reference = {"title": "Arrival", "ids": {"tmdb": 329865}}
+            plugin.xbmc.getInfoLabel = lambda _label: "plugin://plugin.video.curatr/?action=similar_preview&token=previous"
             for method, other, other_label in (("ai", "keyword", "Keyword Matching"), ("keyword", "ai", "AI")):
                 curator = Mock()
                 curator.build_similar_preview.return_value = {"title": "Arrival", "movies": []}
@@ -677,7 +686,7 @@ class InterfaceChecks(unittest.TestCase):
             with patch("xbmcaddon.Addon", return_value=addon):
                 window = object.__new__(ListSettingsWindow)
                 ListSettingsWindow.__init__(window, str(ROOT), {}, lambda _f, d: d, lambda f, _d: f)
-                controls = {key: FakeControl() for key in (100, 101, 102, 200, 201, 202, 203, 300, 301, 302, 1100, 1101, 1102)}
+                controls = {key: FakeControl() for key in (100, 101, 102, 200, 201, 202, 203, 204, 300, 301, 302, 1100, 1101, 1102)}
                 window.getControl = controls.__getitem__
                 window.setFocus = lambda control: setattr(window, "focused", control)
                 window._show_tab("content")
@@ -693,7 +702,9 @@ class InterfaceChecks(unittest.TestCase):
                 for control_id in ids:
                     texture = root.find(".//control[@id='%s']/texturenofocus" % control_id)
                     self.assertEqual(texture.get("colordiffuse"), "00FFFFFF")
-                    self.assertIsNotNone(root.find(".//control[@id='%d']" % (1000 + control_id)))
+                    backdrop = root.find(".//control[@id='%d']" % (1000 + control_id))
+                    self.assertIsNotNone(backdrop)
+                    self.assertIsNone(backdrop.find("texture").get("colordiffuse"))
 
     def test_keyword_chip_focus_uses_tag_colours_and_preserves_controller_navigation(self):
         from lib.keyword_confirm import KeywordConfirmWindow
@@ -757,8 +768,19 @@ class InterfaceChecks(unittest.TestCase):
         files = [path.relative_to(ROOT).as_posix() for path in release_files()]
         for folder in ("menu_v5", "menu_landscape_v1", "keyword_controls_v5"):
             self.assertFalse(any(path.startswith("resources/media/" + folder + "/") for path in files))
-        self.assertIn("resources/media/menu/v9/square/menu_list.png", files)
-        self.assertIn("resources/media/menu/v9/landscape/menu_list.png", files)
+        self.assertIn("resources/media/menu/v10/square/menu_list.png", files)
+        self.assertIn("resources/media/menu/v10/landscape/menu_list.png", files)
+
+    def test_all_static_skin_textures_are_in_release_payload(self):
+        from tools.build_release import release_files
+        files = {path.relative_to(ROOT).as_posix() for path in release_files()}
+        prefix = "special://home/addons/plugin.video.curatr/"
+        for path in (ROOT / "resources/skins").rglob("*.xml"):
+            for node in ET.parse(path).iter():
+                values = [node.text or "", *node.attrib.values()]
+                for value in values:
+                    if value.startswith(prefix) and "$" not in value:
+                        self.assertIn(value[len(prefix):], files, "%s: %s" % (path.name, value))
 
 
 class ArtworkChecks(unittest.TestCase):
@@ -1194,44 +1216,19 @@ class MenuBackgroundChecks(unittest.TestCase):
         self.assertEqual(current_choice(addon, {"menu_background_style": "theme"}), "theme")
         self.assertEqual(current_choice(addon, {"menu_background_style": "invalid"}), "theme")
 
-    def test_background_previews_match_full_images_and_reuse_cache(self):
+    def test_background_preview_reuses_shared_full_image_without_new_files(self):
         from lib import menu_background
-
         with tempfile.TemporaryDirectory() as profile:
             addon = FakeAddon(profile)
             full = menu_background.background_source(addon)
-            preview = menu_background.background_source(addon, preview=True)
-            with Image.open(full) as image, Image.open(preview) as thumb:
+            with Image.open(full) as image:
                 self.assertEqual(image.size, (1920, 1080))
-                self.assertEqual(thumb.size, (640, 360))
                 self.assertEqual(image.mode, "RGB")
-                for x, y in ((0, 0), (319, 179), (639, 359), (91, 210)):
-                    self.assertEqual(thumb.getpixel((x, y)), image.getpixel((x * 3, y * 3)))
-            with patch.object(menu_background, "write_png", side_effect=AssertionError("cache miss")):
-                self.assertEqual(menu_background.background_source(addon), full)
-                self.assertEqual(menu_background.background_source(addon, preview=True), preview)
+            self.assertEqual(menu_background.background_source(addon), full)
+            self.assertEqual(list(Path(profile).rglob("*")), [])
             addon.settings["interface_theme"] = "ocean"
             self.assertNotEqual(menu_background.background_source(addon), full)
             self.assertIn("resources/media/list_art/v7/backgrounds/fanart", full)
-            self.assertFalse((ROOT / "resources/media/menu_background").exists())
-
-    def test_picker_order_active_choice_and_bounded_preview_sizes(self):
-        from lib.menu_background import background_entries
-        from lib.ui_theme import BACKGROUND_COLOURS
-
-        with tempfile.TemporaryDirectory() as profile:
-            addon = FakeAddon(profile)
-            entries = background_entries(addon, {"menu_background_style": "blue"})
-            self.assertEqual(entries[0]["key"], "theme")
-            self.assertEqual(entries[-1]["key"], "custom")
-            self.assertEqual([row["key"] for row in entries[1:-1]], [key for key, _ in BACKGROUND_COLOURS])
-            self.assertEqual([row["key"] for row in entries if row["selected"]], ["blue"])
-            for entry in entries[:-1]:
-                with Image.open(entry["source"]) as image:
-                    self.assertEqual(image.size, (640, 360))
-            legacy = background_entries(addon, {"menu_background_style": "3"})
-            self.assertEqual([row["key"] for row in legacy if row["selected"]], ["slate"])
-            self.assertEqual(legacy[-1]["key"], "custom")
 
     def test_custom_images_are_copied_deduplicated_and_survive_source_removal(self):
         from lib import menu_background
@@ -1309,17 +1306,12 @@ class MenuBackgroundChecks(unittest.TestCase):
         curator.state = {"ai_lists": [{"local_id": "saved", "movies": [{"title": "Keep"}]}],
                          "widget_folders": [{"id": "folder", "entries": [{"local_id": "saved"}]}]}
         original = copy.deepcopy(curator.state)
-        entries = [{"key": "theme"}, {"key": "custom"}]
-        with patch.object(core, "background_entries", return_value=entries), \
-             patch.object(core.xbmcgui, "Dialog") as dialog, \
-             patch.object(core, "choose_artwork") as picker:
-            dialog.return_value.browseSingle.return_value = ""
-            picker.side_effect = lambda *_args, **kwargs: kwargs["selection_handler"](entries[-1])
+        with patch("lib.colour_picker.choose_colours") as picker:
+            picker.return_value = None
             self.assertEqual(curator.choose_menu_background_interactive(), "theme")
             self.assertEqual(curator.state, original)
             curator._save_state.assert_not_called()
-            picker.side_effect = None
-            picker.return_value = {"key": "amber", "label": "Amber"}
+            picker.return_value = {"background": {"key": "amber"}}
             self.assertEqual(curator.choose_menu_background_interactive(), "amber")
             self.assertEqual(curator.state, dict(original, menu_background_style="amber"))
             curator._save_state.assert_called_once()
@@ -1386,8 +1378,9 @@ class PaletteAndReleaseChecks(unittest.TestCase):
         self.assertEqual(keys[-2:], ["slate", "grey"])
         self.assertTrue({"red", "blue", "deep_blue", "grey"}.issubset(keys))
         for setting in ("interface_primary_colour", "interface_secondary_colour", "interface_background_colour"):
-            options = xml.findall(".//setting[@id='%s']/constraints/options/option" % setting)
-            self.assertEqual([row.text for row in options], ["theme"] + keys)
+            row = xml.find(".//setting[@id='%s']" % setting)
+            self.assertEqual(row.findtext("visible"), "false")
+        self.assertIn("customise_theme", xml.findtext(".//setting[@id='customise_theme']/data"))
         addon = FakeAddon("", {"interface_custom_colours": "true"})
         for key in keys:
             addon.settings.update(interface_background_colour=key, interface_primary_colour=key)
@@ -1470,7 +1463,8 @@ class PaletteAndReleaseChecks(unittest.TestCase):
                     continue
                 for texture in control.findall("texture"):
                     tint = texture.get("colordiffuse", "")
-                    self.assertNotIn("CuratrSecondary", tint, str(path))
+                    if not (path.name == "curatr-colour-picker.xml" and control.get("id") == "33"):
+                        self.assertNotIn("CuratrSecondary", tint, str(path))
                     if "CuratrPrimary" in tint:
                         frames += 1
                         self.assertEqual(control.findall("animation"), [])
@@ -1500,6 +1494,7 @@ class PaletteAndReleaseChecks(unittest.TestCase):
         with patch.object(plugin, "_write_similar_preview", return_value="next"), patch.object(plugin, "_read_similar_preview", return_value={"reference": reference}), patch.object(plugin, "_add_folder"), patch.object(plugin, "_add_route_action"), patch.object(plugin, "_add_action"), patch.object(plugin.xbmcplugin, "endOfDirectory") as end:
             plugin._similar_preview(curator, {"title": "Arrival", "tmdb_id": "329865", "method": "keyword"})
             end.assert_called_with(1, updateListing=False, cacheToDisc=False)
+            plugin.xbmc.getInfoLabel = lambda _label: "plugin://plugin.video.curatr/?action=similar_preview&token=previous"
             for method in ("keyword", "ai", "keyword"):
                 plugin._similar_preview(curator, {"token": "previous", "method": method})
                 end.assert_called_with(1, updateListing=True, cacheToDisc=False)

@@ -564,149 +564,49 @@
         </category>
         <category id="appearance" label="32600" help="32601">
             <group id="1">
-                <setting id="menu_background_picker" type="action" label="32606" help="32607">
-                    <level>0</level>
-                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=choose_menu_background)</data>
-                    <control type="button" format="action">
-                        <close>true</close>
-                    </control>
-                </setting>
                 <setting id="advanced_list_creation" type="boolean" label="32818" help="32819">
                     <level>0</level>
                     <default>true</default>
                     <control type="toggle" />
                 </setting>
-                <setting id="interface_theme" type="string" label="32830" help="32831">
+                <setting id="customise_theme" type="action" label="32930" help="32931">
                     <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.curatr/?action=run&amp;command=customise_theme)</data>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
+                <setting id="interface_base_colour" type="string" label="32830">
+                    <level>4</level><visible>false</visible><default></default>
+                    <control type="edit" format="string" />
+                </setting>
+                <setting id="interface_theme" type="string" label="32830" help="32831">
+                    <level>4</level>
+                    <visible>false</visible>
                     <default>violet</default>
-                    <constraints>
-                        <options>
-                            <option label="32832">violet</option>
-                            <option label="32833">ocean</option>
-                            <option label="32834">emerald</option>
-                            <option label="32835">amber</option>
-                        </options>
-                    </constraints>
-                    <control type="spinner" format="string" />
+                    <control type="edit" format="string" />
                 </setting>
                 <setting id="interface_custom_colours" type="boolean" label="32838" help="32839">
-                    <level>0</level>
+                    <level>4</level>
+                    <visible>false</visible>
                     <default>false</default>
                     <control type="toggle" />
                 </setting>
                 <setting id="interface_primary_colour" type="string" label="32840" help="32841">
-                    <level>0</level>
+                    <level>4</level>
+                    <visible>false</visible>
                     <default>theme</default>
-                    <constraints>
-                        <options>
-                            <option label="32846">theme</option>
-                            <option label="32900">red</option>
-                            <option label="32901">peach</option>
-                            <option label="32902">amber</option>
-                            <option label="32903">sand</option>
-                            <option label="32904">gold</option>
-                            <option label="32905">green</option>
-                            <option label="32906">sage</option>
-                            <option label="32907">teal</option>
-                            <option label="32908">turquoise</option>
-                            <option label="32909">cyan</option>
-                            <option label="32910">steel_blue</option>
-                            <option label="32911">azure</option>
-                            <option label="32912">deep_blue</option>
-                            <option label="32913">blue</option>
-                            <option label="32914">periwinkle</option>
-                            <option label="32915">lilac</option>
-                            <option label="32916">deep_violet</option>
-                            <option label="32917">violet</option>
-                            <option label="32918">plum</option>
-                            <option label="32919">mauve</option>
-                            <option label="32920">pink</option>
-                            <option label="32921">berry</option>
-                            <option label="32922">rose</option>
-                            <option label="32923">slate</option>
-                            <option label="32924">grey</option>
-                        </options>
-                    </constraints>
-                    <dependencies>
-                        <dependency type="enable" setting="interface_custom_colours">true</dependency>
-                    </dependencies>
-                    <control type="spinner" format="string" />
+                    <control type="edit" format="string" />
                 </setting>
                 <setting id="interface_secondary_colour" type="string" label="32842" help="32843">
-                    <level>0</level>
+                    <level>4</level>
+                    <visible>false</visible>
                     <default>theme</default>
-                    <constraints>
-                        <options>
-                            <option label="32846">theme</option>
-                            <option label="32900">red</option>
-                            <option label="32901">peach</option>
-                            <option label="32902">amber</option>
-                            <option label="32903">sand</option>
-                            <option label="32904">gold</option>
-                            <option label="32905">green</option>
-                            <option label="32906">sage</option>
-                            <option label="32907">teal</option>
-                            <option label="32908">turquoise</option>
-                            <option label="32909">cyan</option>
-                            <option label="32910">steel_blue</option>
-                            <option label="32911">azure</option>
-                            <option label="32912">deep_blue</option>
-                            <option label="32913">blue</option>
-                            <option label="32914">periwinkle</option>
-                            <option label="32915">lilac</option>
-                            <option label="32916">deep_violet</option>
-                            <option label="32917">violet</option>
-                            <option label="32918">plum</option>
-                            <option label="32919">mauve</option>
-                            <option label="32920">pink</option>
-                            <option label="32921">berry</option>
-                            <option label="32922">rose</option>
-                            <option label="32923">slate</option>
-                            <option label="32924">grey</option>
-                        </options>
-                    </constraints>
-                    <dependencies>
-                        <dependency type="enable" setting="interface_custom_colours">true</dependency>
-                    </dependencies>
-                    <control type="spinner" format="string" />
+                    <control type="edit" format="string" />
                 </setting>
                 <setting id="interface_background_colour" type="string" label="32844" help="32845">
-                    <level>0</level>
+                    <level>4</level>
+                    <visible>false</visible>
                     <default>theme</default>
-                    <constraints>
-                        <options>
-                            <option label="32846">theme</option>
-                            <option label="32900">red</option>
-                            <option label="32901">peach</option>
-                            <option label="32902">amber</option>
-                            <option label="32903">sand</option>
-                            <option label="32904">gold</option>
-                            <option label="32905">green</option>
-                            <option label="32906">sage</option>
-                            <option label="32907">teal</option>
-                            <option label="32908">turquoise</option>
-                            <option label="32909">cyan</option>
-                            <option label="32910">steel_blue</option>
-                            <option label="32911">azure</option>
-                            <option label="32912">deep_blue</option>
-                            <option label="32913">blue</option>
-                            <option label="32914">periwinkle</option>
-                            <option label="32915">lilac</option>
-                            <option label="32916">deep_violet</option>
-                            <option label="32917">violet</option>
-                            <option label="32918">plum</option>
-                            <option label="32919">mauve</option>
-                            <option label="32920">pink</option>
-                            <option label="32921">berry</option>
-                            <option label="32922">rose</option>
-                            <option label="32923">slate</option>
-                            <option label="32924">grey</option>
-                        </options>
-                    </constraints>
-                    <dependencies>
-                        <dependency type="enable" setting="interface_custom_colours">true</dependency>
-                    </dependencies>
-                    <control type="spinner" format="string" />
+                    <control type="edit" format="string" />
                 </setting>
             </group>
             <group id="2" label="32800">

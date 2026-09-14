@@ -6,8 +6,7 @@ import tempfile
 
 import xbmcvfs
 
-from .bundled_art import BUNDLE as BACKGROUND_VERSION, components, _read_component, write_png
-from .menu_art import menu_source
+from .bundled_art import components
 from .ui_theme import BACKGROUND_COLOURS, background_colour
 
 
@@ -35,35 +34,14 @@ def appearance_signature(addon, state=None):
     return choice, background_colour(addon, choice)
 
 
-def _gradient_source(addon, colour, preview=False):
+def _gradient_source(addon, colour):
     root = xbmcvfs.translatePath(addon.getAddonInfo("path"))
     key = background_colour(addon, colour)
     _symbol, source, _palette = components(root, "blank", "fanart", "colour", key)
-    if not preview:
-        return source
-    profile = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
-    if not profile:
-        return source
-    target = os.path.join(profile, "menu_backgrounds", BACKGROUND_VERSION, key + "-preview.png")
-    if os.path.isfile(target):
-        return target
-    width, height, channels, pixels = _read_component(source)
-    if channels != 3:
-        raise ValueError("The shared background must be RGB")
-    # Pick one pixel in each 3 x 3 area for the 640 x 360 picker thumbnail.
-    # Channel slicing runs in C and avoids a Python loop over every pixel.
-    small_width, small_height = (width + 2) // 3, (height + 2) // 3
-    thumbnail = bytearray(small_width * small_height * channels)
-    for channel in range(channels):
-        thumbnail[channel::channels] = b"".join(
-            pixels[row * width * channels + channel:(row + 1) * width * channels:3 * channels]
-            for row in range(0, height, 3)
-        )
-    write_png(target, small_width, small_height, channels, thumbnail)
-    return target
+    return source
 
 
-def background_source(addon, state=None, choice=None, preview=False):
+def background_source(addon, state=None, choice=None):
     state = state if isinstance(state, dict) else {}
     choice = current_choice(addon, state) if choice is None else choice
     if choice == "custom":
@@ -72,23 +50,9 @@ def background_source(addon, state=None, choice=None, preview=False):
             return source
         choice = "theme"
     try:
-        return _gradient_source(addon, choice, preview)
+        return _gradient_source(addon, choice)
     except (OSError, ValueError):
         return ""
-
-
-def background_entries(addon, state=None):
-    state = state if isinstance(state, dict) else {}
-    current = current_choice(addon, state)
-    entries = [{"key": key, "label": label,
-                "source": background_source(addon, choice=key, preview=True), "selected": key == current}
-               for key, label in (("theme", "Match theme"),) + BACKGROUND_COLOURS]
-    custom = str(state.get("menu_background_source") or "")
-    root = xbmcvfs.translatePath(addon.getAddonInfo("path"))
-    entries.append({"key": "custom", "label": "Custom…", "selected": current == "custom",
-                    "source": custom if custom and xbmcvfs.exists(custom)
-                    else menu_source(root, "menu_widget_folders.png", landscape=True)})
-    return entries
 
 
 def import_custom_background(addon, source):

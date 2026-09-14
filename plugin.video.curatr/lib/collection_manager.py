@@ -28,7 +28,7 @@ class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
         action_provider, action_handler, create_handler,
     ):
         self.heading = str(heading or "Manage")
-        self.description = str(description or "Select an item to manage.")
+        self.description = str(description or "")
         self.create_label = str(create_label or "Create")
         self.entry_provider = entry_provider
         self.action_provider = action_provider

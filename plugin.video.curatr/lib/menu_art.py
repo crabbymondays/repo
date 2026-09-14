@@ -3,8 +3,8 @@
 import os
 
 
-MENU_BUNDLE = "v9"
-ADDON_ICON = "icon_v3.png"
+MENU_BUNDLE = "v10"
+ADDON_ICON = "icon_v4.png"
 
 
 def menu_source(addon_path, filename, landscape=False):
@@ -25,6 +25,7 @@ def current_menu_source(addon_path, source):
         ("menu/v6/square", False), ("menu/v6/landscape", True),
         ("menu/v7/square", False), ("menu/v7/landscape", True),
         ("menu/v8/square", False), ("menu/v8/landscape", True),
+        ("menu/v9/square", False), ("menu/v9/landscape", True),
     ):
         marker = "/plugin.video.curatr/resources/media/%s/" % folder
         if marker in path:

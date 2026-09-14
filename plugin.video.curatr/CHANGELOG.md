@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.0.27
+
+- Replaced the add-on icon with the supplied artwork and refreshed its filename to avoid reusing Kodi's cached icon.
+- Renamed the current/choose settings and selection headings to Movie Player and Series Player.
+- Gave home-widget actions their executable favourite URL as the item path. Kodi can resolve the action before inspecting video tags added by a skin; ordinary Videos navigation retains its direct plugin action. Background probes still cannot run list creation or other commands.
+- Added the Font Awesome Classic Solid layer-group icon for Dynamic Lists, including square and landscape artwork and folder shortcuts.
+- Concentrated surface shading in short top and bottom edge bands with an even centre. Applied the same shading to panels and colour swatches.
+- Replaced the loose background thumbnail with a smaller rounded preview in a labelled card.
+- Kept direct TMDB and available Trakt community ratings independent of optional MDBList scores.
+
+## 1.0.26
+
+- Added a subtle light-to-dark surface treatment to custom-window buttons, tabs and item rows, using one shared texture with the selected theme colours.
+- Moved Menu Background into the Customise Theme sidebar. Theme colours, Match Theme, colour backgrounds and Custom Image are edited together; Save Changes applies the choices and Cancel leaves the saved appearance unchanged.
+- Removed colour names beneath swatches and retained a small preview for the selected menu background.
+- Added the same artwork and rating enrichment to Dynamic List previews and directory listings. Missing posters and backdrops can load from TMDB; supplied source artwork, playback URLs, episode identities and resume points are retained.
+- Added an automatic-refresh explanation to Dynamic List Settings and made Source Information available on every Dynamic List item. Local lists use saved contents immediately; external sources use a shared one-minute cache that is also invalidated by playback and library changes. The skin controls when visible widgets request new contents.
+- Allowed missing or incomplete MDBList ratings to retry instead of marking them permanently checked. Kept completed scores on partial failures, respected rate-limit delays, refreshed successful scores periodically and retried when the API key changes. Ratings are supplied to Kodi's video tags and supported skin properties.
+- Fixed Create a New List, Quick Pick and other action shortcuts in standard home widgets. Action clicks use an explicit RunPlugin target; background directory requests do not launch dialogs or create lists.
+- Preserved the originating window when opening previews from home widgets, used directory history within Videos and replaced edited preview results without adding repeated Back steps. Find Similar context actions choose the navigation method when clicked.
+- Added regression coverage for artwork preservation, ratings expiry and failure handling, widget actions and navigation. No new Kodi runtime dependencies or user-data migration.
+
+## 1.0.25
+
+- Fixed sidebar colours: removed texture tints which overrode the selected theme's programmatic colours.
+- Added Customise Theme with rainbow-ordered swatches, live preview, save/cancel, one base colour and optional individual highlight, secondary highlight and background tint choices. Previous preset combinations retain their appearance.
+- Replaced full-image background tiles with small colour swatches and a single selected preview. Match Theme and Custom Image remain available; no generated preview image cache is needed.
+- Added Folder Settings to the context menus of contained lists and shortcuts, including media listed by Curatr within those folders.
+- Added Curatr menu/action shortcuts to folders. Directory probes cannot trigger their dialogs, list creation or Quick Pick actions.
+- Added Dynamic Lists to combine Curatr lists, add-on paths and linked provider lists without an AI or Keyword Matching step. Sorting and duplicate removal apply to the combined output; original external playback and browse paths are retained.
+- Added ascending/descending date and title sorting, plus Alternate sources: cycle through all sources in Source order, or alternate undated items after dated results when sorting by date.
+- Shared external-source caches across Dynamic Lists, with automatic expiry, playback/library invalidation, request coalescing and last-successful-result fallback. Missing sorting dates remain explicit rather than being fabricated.
+- Included Dynamic Lists and new shortcut types in state merging, migrations, backups and recovery; deleting the last Dynamic List does not restore it automatically from a safety copy.
+- Fixed the Termux cleanup helper for sparse checkouts and added focused regression coverage for the new flows.
+
 ## 1.0.24
 
 - Applied the new add-on icon with a fresh asset filename and removed the old add-on information-page fanart pending a replacement.

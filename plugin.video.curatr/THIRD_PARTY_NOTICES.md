@@ -15,7 +15,7 @@ Curatr uses these Classic Solid icons:
 `shield-halved`, `eye-slash`, `database`, `bell`, `arrows-rotate`,
 `clock-rotate-left`, `gift`, `bookmark`, `pizza-slice`, `border-all`,
 `cloud`, `folder-open`, `folder-plus`, `list-ul`, `film`, `tv`, `shuffle`,
-`heart-pulse`, `fingerprint`, and `file-lines`.
+`heart-pulse`, `fingerprint`, `file-lines`, and `layer-group`.
 
 The original SVGs and their embedded attribution are retained in the source
 package under `tools/icon_sources/fontawesome-7.0.1/`. Curatr converts them to
