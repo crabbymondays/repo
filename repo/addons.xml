@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="1.0.24" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="1.0.27" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -51,16 +51,16 @@
         </extension>
         <extension point="xbmc.addon.metadata">
             <summary lang="en_GB">Personalised movie and TV show lists for Kodi.</summary>
-            <description lang="en_GB">Create and maintain personalised movie and TV show lists from natural-language requests. Use Keyword Matching without AI, connect an optional AI service for nuanced recommendations, browse locally in Kodi, and optionally sync lists to Trakt.</description>
+            <description lang="en_GB">Create and maintain personalised movie and TV show lists from natural-language requests. Use Keyword Matching without AI, connect an optional AI service for nuanced recommendations, browse locally in Kodi, and optionally sync lists to Trakt. Dynamic Lists can merge existing lists and add-on paths without AI.</description>
             <platform>all</platform>
             <disclaimer lang="en_GB">curatr sends prompts and likes / dislikes information to the services you enable. API keys and Trakt tokens are stored locally by Kodi and are never included in curatr backups.</disclaimer>
             <license>MIT; CC BY 4.0 (Font Awesome icons)</license>
             <assets>
-                <icon>icon_v3.png</icon>
+                <icon>icon_v4.png</icon>
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>curatr 1.0.24 adds the new add-on icon, shared rainbow colour choices and blank artwork tiles. Removes light mode and the old information-page fanart, aligns selection borders and prevents Find Similar refreshes from accumulating in Back history. Includes repository cleanup for retired release material.</news>
+            <news>curatr 1.0.27 updates the add-on icon and gives Dynamic Lists its own layer-group icon. Player settings use clearer Movie Player and Series Player labels. Home widgets carry executable action targets directly. Theme shading is concentrated at the edges and also appears on colour swatches, with a smaller rounded background preview.</news>
         </extension>
     </addon>
 </addons>
