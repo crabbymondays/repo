@@ -1,6 +1,8 @@
 """Palette handling for Curatr's custom Kodi windows."""
 
-from .colours import COLOURS, BACKGROUND_COLOURS, normalise_colour
+import re
+
+from .colours import COLOURS, normalise_colour
 
 
 _LEGACY_PRESETS = {
@@ -81,7 +83,8 @@ def theme_config(addon):
         key = normalise_colour(_setting(addon, "interface_%s_colour" % setting)) if custom else "default"
         values[field] = key if key != "default" else defaults[field]
     # Old two-colour presets are represented as custom colours on first opening.
-    values.update(base=base, custom=custom or len(set(values.values())) > 1)
+    values.update(base=base, custom=custom or len(set(values.values())) > 1,
+                  sheen=normalise_sheen_colour(_setting(addon, "interface_sheen_colour", "white")))
     return values
 
 
@@ -90,6 +93,8 @@ def save_theme(addon, config):
         addon.setSetting("interface_%s_colour" % setting, config[field])
     addon.setSetting("interface_custom_colours", "true" if config["custom"] else "false")
     addon.setSetting("interface_base_colour", config["base"])
+    if "sheen" in config:
+        addon.setSetting("interface_sheen_colour", normalise_sheen_colour(config["sheen"]))
 
 
 def background_colour(addon, colour="theme"):
@@ -100,6 +105,23 @@ def background_colour(addon, colour="theme"):
 
 def background_palette(addon, colour="theme"):
     return COLOURS[background_colour(addon, colour)]
+
+
+def normalise_sheen_colour(value):
+    """Keep the highlight independent of theme colours; accept custom RGB."""
+    value = str(value or "white").strip().lower()
+    if value == "white" or value in COLOURS:
+        return value
+    if re.fullmatch(r"#?[0-9a-f]{6}", value):
+        return "#" + value.lstrip("#").upper()
+    return "white"
+
+
+def sheen_colour(addon, choice=None):
+    choice = normalise_sheen_colour(choice if choice is not None else _setting(addon, "interface_sheen_colour", "white"))
+    if choice == "white":
+        return "FFFFFFFF"
+    return "FF" + (COLOURS[choice][1] if choice in COLOURS else choice.lstrip("#"))
 
 
 def theme_palette(addon=None, config=None):
@@ -122,14 +144,19 @@ def theme_palette(addon=None, config=None):
         "CuratrDanger": _argb("FF", _for_white_text(_rgb(COLOURS["red"][1]))),
         "CuratrBackdrop": _argb("ED", _mix(tint, (0, 0, 0), 0.78)),
         "CuratrBackdropAlt": _argb("E8", _mix(tint, (0, 0, 0), 0.78)),
+        "CuratrKeywordBackdrop": _argb("FF", _mix(tint, (0, 0, 0), 0.78)),
         "CuratrPanel": _argb("E5", _mix(tint, (0, 0, 0), 0.64)),
         "CuratrPanelMedium": _argb("AA", surface),
         "CuratrPanelSoft": _argb("66", surface),
-        "CuratrKeywordPanel": "FF25262B",
+        "CuratrKeywordPanel": _argb("FF", _mix(tint, (0, 0, 0), 0.64)),
         "CuratrButton": _argb("66", row),
+        "CuratrFooterButton": _argb("FF", _for_white_text(_mix(surface, row, 0.38))),
         "CuratrButtonFaint": _argb("44", row),
         "CuratrRow": _argb("55", row),
         "CuratrCard": _argb("FF", surface),
+        "CuratrSheenColour": sheen_colour(addon, config.get("sheen")),
+        "CuratrListCard": _argb("FF", surface),
+        "CuratrListCardFocus": _argb("FF", _mix(_mix(tint, (0, 0, 0), 0.64), row, 0.33)),
     }
 
 
@@ -174,6 +201,25 @@ def show_tab(window, control_id, visible):
     control = window.getControl(control_id)
     control.setVisible(visible)
     control.setEnabled(visible)
+
+
+def move_finished_button(window, control_id, x, y):
+    """Move a button with its sheen, focus border and shadow."""
+    window.getControl(control_id).setPosition(x, y)
+    for base, padding in ((7000, 0), (8000, 0), (9000, 12)):
+        try:
+            window.getControl(base + control_id).setPosition(x - padding, y - padding)
+        except Exception:
+            pass
+
+
+def resize_finished_panel(window, control_id, height):
+    window.getControl(control_id).setHeight(height)
+    for base, padding in ((7000, 0), (8000, 0), (9000, 24)):
+        try:
+            window.getControl(base + control_id).setHeight(height + padding)
+        except Exception:
+            pass
 
 
 def bold(label):

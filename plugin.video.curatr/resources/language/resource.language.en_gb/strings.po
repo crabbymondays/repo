@@ -1072,3 +1072,11 @@ msgstr ""
 msgctxt "#32931"
 msgid "Choose a colour from the artwork palette, or customise individual highlights and the background tint."
 msgstr ""
+
+msgctxt "#32932"
+msgid "Sheen colour"
+msgstr ""
+
+msgctxt "#32933"
+msgid "Choose white, a palette colour or a custom colour for the smooth button sheen and subtle background corner dots."
+msgstr ""

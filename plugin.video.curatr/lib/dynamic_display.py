@@ -5,6 +5,7 @@ import xbmc
 from .art_cache import ArtworkCache
 from .metadata_cache import MetadataCache
 from .dynamic_lists import media_type
+from .episode_lists import enrich_artwork
 
 
 def native_art(data):
@@ -45,6 +46,10 @@ def prepare_items(curator, items):
             movie = {"ids": ids, "media_type": "show" if kind == "tvshow" else "movie"}
         movies.append(movie)
         targets.append(row)
+    try:
+        enrich_artwork(curator, movies)
+    except Exception as exc:
+        xbmc.log("curatr episode artwork skipped: %s" % type(exc).__name__, xbmc.LOGDEBUG)
     try:
         MetadataCache(curator.addon).enrich(movies, getattr(curator, "tmdb", None),
                                           getattr(curator, "mdblist", None), include_artwork=True)

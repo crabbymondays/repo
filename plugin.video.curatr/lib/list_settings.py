@@ -1,12 +1,13 @@
 import xbmcgui
 
-from .ui_theme import bold, skin_name, style_tab
+from .ui_theme import bold, skin_name, style_tab, move_finished_button
 
 
 _BACK_ACTIONS = {9, 10, 92}
 
 
 class ListSettingsWindow(xbmcgui.WindowXMLDialog):
+    XML_FILENAME = "curatr-list-settings.xml"
     TAB_IDS = {100: "appearance", 101: "content", 102: "behaviour"}
     ROW_IDS = (200, 201, 202, 203, 204)
     ACTION_IDS = {300: "preview", 301: "create", 302: "cancel"}
@@ -17,7 +18,7 @@ class ListSettingsWindow(xbmcgui.WindowXMLDialog):
     }
 
     def __new__(cls, addon_path, draft, editor, formatter, existing=False):
-        return super().__new__(cls, "curatr-list-settings.xml", addon_path, skin_name(), "1080i")
+        return super().__new__(cls, cls.XML_FILENAME, addon_path, skin_name(), "1080i")
 
     def __init__(self, addon_path, draft, editor, formatter, existing=False):
         self.draft = dict(draft or {})
@@ -32,8 +33,8 @@ class ListSettingsWindow(xbmcgui.WindowXMLDialog):
             save, cancel, hidden = self.getControl(300), self.getControl(301), self.getControl(302)
             save.setLabel(bold("Save Changes"))
             cancel.setLabel(bold("Cancel"))
-            save.setPosition(610, 750)
-            cancel.setPosition(970, 750)
+            move_finished_button(self, 300, 610, 750)
+            move_finished_button(self, 301, 970, 750)
             hidden.setVisible(False)
             hidden.setEnabled(False)
             self.getControl(20).setLabel("Review the saved settings above, then save or cancel your changes.")
@@ -41,6 +42,9 @@ class ListSettingsWindow(xbmcgui.WindowXMLDialog):
 
     def _show_tab(self, tab):
         self.tab = tab
+        summary = self.formatter("request_summary", self.draft)
+        if self.draft.get("request_rules") and summary:
+            self.getControl(20).setLabel(summary)
         for control_id, name in self.TAB_IDS.items():
             style_tab(self, control_id, name.title(), name == tab)
         fields = self.FIELDS[tab]

@@ -1,5 +1,7 @@
 import json
 
+from .list_request import REQUEST_KEYS, validate_request
+
 
 class AIError(Exception):
     pass
@@ -71,6 +73,8 @@ class BaseAIClient:
             "Set media_type to movie or show for every result."
             % target
         )
+        if taste_context.get("allow_watched"):
+            instructions += " The user explicitly allows rewatches. Watched examples may be recommended when suitable; retain hidden-item exclusions."
         taste_text = "REUSABLE TASTE CONTEXT:\n%s" % json.dumps(
             taste_context, ensure_ascii=False, separators=(",", ":")
         )
@@ -87,6 +91,32 @@ class BaseAIClient:
             extra_input=[{"role": "user", "content": request_text}],
         )
         return self.validate_recommendations(result, count)
+
+    def interpret_list_request(self, prompt):
+        """Interpret operational choices once; calendars and watch state remain external data."""
+        self._require_api_key()
+        properties = {
+            "content_type": {"type": "string", "enum": ["", "movies", "shows", "both", "episodes"]},
+            "source": {"type": "string", "enum": ["", "trakt", "kodi", "all"]},
+            "window": {"type": "string", "enum": ["", "next_days", "past_days", "next_calendar_month", "this_calendar_month"]},
+            "window_days": {"type": "integer", "minimum": 0, "maximum": 93},
+            "refresh_mode": {"type": "string", "enum": ["", "on", "off"]},
+            "refresh_hours": {"type": "integer", "minimum": 0, "maximum": 720},
+            "hide_watched": {"type": "boolean"},
+        }
+        instructions = (
+            "Extract only supported list instructions from the request. Do not recommend titles or invent airing dates. "
+            "Use empty strings and zero for choices the user did not specify. Default hide_watched to true. "
+            "My episodes means episodes from Trakt watched/watchlisted shows; Kodi library is a separate source. "
+            "Personal sources are supported only for episodes; leave source empty for movie/show recommendations. "
+            "In the next month means a rolling 30-day window; during next calendar month means next_calendar_month. "
+            "Update daily means refresh_mode on and refresh_hours 24. Do not turn syncing to Trakt on. "
+            "Only select episodes for an explicit episode request. The date window limit is 93 days."
+        )
+        result = self._structured_request(instructions, str(prompt),
+            {"type": "object", "properties": properties, "required": list(REQUEST_KEYS), "additionalProperties": False},
+            "list_instructions", usage_kind="list_instructions")
+        return validate_request(result)
 
     def _structured_request(
         self,

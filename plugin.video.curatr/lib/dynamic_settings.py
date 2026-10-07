@@ -11,10 +11,11 @@ from .dynamic_display import prepare_items
 from .collection_manager import CollectionManagerWindow, manage_collection
 from .list_settings import ListSettingsWindow
 from .list_art import resolved_sources, summary
-from .ui_theme import bold, show_tab
+from .ui_theme import bold, show_tab, move_finished_button
 
 
 class DynamicSettingsWindow(ListSettingsWindow):
+    XML_FILENAME = "curatr-dynamic-settings.xml"
     TAB_IDS = {100: "appearance", 101: "content"}
     FIELDS = {"appearance": ("name", "description", "artwork"),
               "content": ("sources", "sort", "direction", "alternate_sources", "count")}
@@ -23,7 +24,8 @@ class DynamicSettingsWindow(ListSettingsWindow):
         super().onInit()
         self.getControl(10).setLabel(bold("Dynamic List Settings"))
         show_tab(self, 102, False)
-        self.getControl(20).setLabel(dynamic.REFRESH_SUMMARY)
+        self.getControl(20).setLabel("")
+        self.getControl(20).setVisible(False)
         self.getControl(301).setLabel(bold("Save Changes" if self.draft.get("saved") else "Create List"))
         for cid, other in ((100, 101), (101, 100)):
             self.getControl(cid).setNavigation(self.getControl(other), self.getControl(other),
@@ -88,6 +90,10 @@ def _choose_source(curator, sources):
     return row
 
 
+class SourcesWindow(CollectionManagerWindow):
+    XML_FILENAME = "curatr-collection-dialog.xml"
+
+
 def _edit_sources(curator, draft):
     sources = deepcopy(draft["sources"])
     def entries():
@@ -115,23 +121,33 @@ def _edit_sources(curator, draft):
         if row:
             sources.append(row)
         return row
-    result = manage_collection(xbmcvfs.translatePath(curator.addon.getAddonInfo("path")), "Sources", "", "Add Source",
-                              entries, actions, action, add)
-    if result == "fallback":
-        raise RuntimeError("The sources window could not be opened.")
+    window = SourcesWindow(xbmcvfs.translatePath(curator.addon.getAddonInfo("path")), "Sources", "", "Add Source",
+                           entries, actions, action, add)
+    try:
+        window.doModal()
+        if window.failed:
+            raise RuntimeError("The sources window could not be opened.")
+    finally:
+        window.close()
     draft["sources"] = sources
     return draft
 
 
 class PreviewWindow(CollectionManagerWindow):
+    XML_FILENAME = "curatr-collection-dialog.xml"
+
     def onInit(self):
         super().onInit()
+        if self.failed:
+            return
         self.getControl(300).setLabel(bold("Close"))
-        self.getControl(300).setPosition(740, 965)
+        move_finished_button(self, 300, 740, 965)
         self.getControl(301).setVisible(False)
         self.getControl(301).setEnabled(False)
         self.getControl(300).setNavigation(self.getControl(100), self.getControl(100),
                                             self.getControl(300), self.getControl(300))
+        self.getControl(100).setNavigation(self.getControl(100), self.getControl(300),
+                                            self.getControl(100), self.getControl(200))
         self.getControl(200).setNavigation(self.getControl(200), self.getControl(300),
                                             self.getControl(100), self.getControl(300))
 
@@ -141,9 +157,22 @@ class PreviewWindow(CollectionManagerWindow):
         else:
             super().onClick(control_id)
 
+    def onAction(self, action):
+        if action.getId() in (9, 10, 92):
+            self.close()
+        else:
+            super().onAction(action)
+
 
 def _preview(curator, draft):
+    if not draft.get("sources"):
+        xbmcgui.Dialog().ok("Dynamic List Preview", "Add at least one source before previewing this list.")
+        return
     result = dynamic.load(curator, draft)
+    if not result["items"]:
+        xbmcgui.Dialog().ok("Dynamic List Preview", "No items were returned by the selected sources.\n\n" +
+                           ("\n".join(result["warnings"]) or "Check that each source contains items and can be opened."))
+        return
     rows = []
     for i, item in enumerate(prepare_items(curator, result["items"])):
         data = item["data"]
@@ -158,6 +187,8 @@ def _preview(curator, draft):
                            lambda key, action: xbmcgui.Dialog().textviewer(rows[int(key)]["label"], rows[int(key)]["summary"] or rows[int(key)]["detail"]), lambda: None)
     try:
         window.doModal()
+        if window.failed:
+            xbmcgui.Dialog().ok("Dynamic List Preview", "The preview window could not be opened. Your selected sources are kept in List Settings.")
     finally:
         window.close()
 
@@ -180,7 +211,7 @@ def edit(curator, list_id=""):
             return "Order · " + ("Source order" if value["sort"] == "source" else
                                   ("Descending" if value["descending"] else "Ascending"))
         if field == "alternate_sources":
-            return "Alternate sources · " + ("On" if value["alternate_sources"] else "Off")
+            return "Alternating sources · " + ("On" if value["alternate_sources"] else "Off")
         return "%s · %s" % ({"count": "Number of items"}.get(field, field.title()), value.get(field) or "None")
     def editor(field, value):
         if field == "sources":
@@ -216,7 +247,13 @@ def edit(curator, list_id=""):
         if result == "cancel":
             return None
         if result == "preview":
-            _preview(curator, draft)
+            try:
+                _preview(curator, draft)
+            except Exception as exc:
+                xbmcgui.Dialog().ok("Dynamic List Preview", str(exc))
+            continue
+        if not draft.get("sources"):
+            xbmcgui.Dialog().ok("Dynamic Lists", "Add at least one source before creating this list.")
             continue
         return dynamic.store(curator, draft)
 

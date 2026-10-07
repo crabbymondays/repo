@@ -220,6 +220,14 @@ class TraktClient:
     def watched_shows(self, limit=300):
         return self._paged("/users/me/watched/shows", limit, extended=False, auth=True)
 
+    def calendar_shows(self, start_date, days=30, personal=True):
+        days = max(1, min(33, int(days)))
+        path = "/calendars/%s/shows/%s/%d" % ("my" if personal else "all", quote(str(start_date), safe=""), days)
+        rows = self.request("GET", path, auth=personal, params={"extended": "full"})
+        if not isinstance(rows, list):
+            raise TraktError("Trakt returned an invalid episode calendar.", path=path)
+        return rows
+
     def ratings_movies_for_user(self, username, limit=300):
         path = "/users/%s/ratings/movies" % quote(str(username), safe="")
         return self._paged(path, limit, extended=False, auth=False)
@@ -351,6 +359,16 @@ class TraktClient:
             "POST", "/users/me/lists/%s/items/remove" % quote(str(list_id), safe=""),
             json={"shows": [{"ids": {"trakt": item_id}} for item_id in ids]},
         )
+
+    def add_episodes(self, list_id, trakt_ids):
+        ids = self._unique_int_ids(trakt_ids)
+        return self.request("POST", "/users/me/lists/%s/items" % quote(str(list_id), safe=""),
+                            json={"episodes": [{"ids": {"trakt": item_id}} for item_id in ids]}) if ids else {}
+
+    def remove_episodes(self, list_id, trakt_ids):
+        ids = self._unique_int_ids(trakt_ids)
+        return self.request("POST", "/users/me/lists/%s/items/remove" % quote(str(list_id), safe=""),
+                            json={"episodes": [{"ids": {"trakt": item_id}} for item_id in ids]}) if ids else {}
 
     @staticmethod
     def _unique_int_ids(values):

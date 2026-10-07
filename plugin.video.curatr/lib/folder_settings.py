@@ -2,6 +2,7 @@ import xbmc
 import xbmcgui
 
 from .ui_theme import bold, skin_name, style_tab
+from .action_icons import decorate_action
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -68,7 +69,7 @@ class FolderSettingsWindow(xbmcgui.WindowXMLDialog):
         item.setProperty(
             "CuratrDisabled", "true" if not row.get("enabled", True) else "false"
         )
-        return item
+        return decorate_action(item, row)
 
     def onInit(self):
         try:

@@ -1,7 +1,7 @@
 import xbmcgui
 
 from .ui_theme import bold, skin_name, style_tab, show_tab
-from .bundled_art import COLOURS, colour_label, normalise_colour
+from .colours import COLOURS, colour_label, normalise_colour
 
 
 _BACK_ACTIONS = {9, 10, 92}

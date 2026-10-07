@@ -160,12 +160,14 @@ class PlayerRegistry:
             return False
 
     def available(self, media_type, installed_only=True):
-        route = "open_show" if media_type == "show" else "play_movie"
-        rows = [row for row in self.definitions() if row.get(route)]
+        route = {"show": "open_show", "episode": "play_episode"}.get(media_type, "play_movie")
+        rows = [row for row in self.definitions() if row.get(route) or (media_type == "episode" and row.get("open_show"))]
+        if media_type == "episode":
+            rows.sort(key=lambda row: not bool(row.get("play_episode")))
         return [row for row in rows if self.installed(row)] if installed_only else rows
 
     def selected(self, media_type):
-        setting = "show_player_id" if media_type == "show" else "movie_player_id"
+        setting = "show_player_id" if media_type in ("show", "episode") else "movie_player_id"
         selected = str(self._preferences().get(setting) or "automatic")
         if selected == "information":
             return None
@@ -177,7 +179,7 @@ class PlayerRegistry:
         return available[0] if available else None
 
     def preference(self, media_type):
-        setting = "show_player_id" if media_type == "show" else "movie_player_id"
+        setting = "show_player_id" if media_type in ("show", "episode") else "movie_player_id"
         return str(self._preferences().get(setting) or "automatic")
 
     def choose(self, media_type):
@@ -218,9 +220,11 @@ class PlayerRegistry:
         return str(value or "")
 
     def build_url(self, player, movie, media_type=None):
-        media_type = "show" if (media_type or movie.get("media_type")) == "show" else "movie"
-        route = player.get("open_show" if media_type == "show" else "play_movie") or ""
-        ids = movie.get("ids") or {}
+        media_type = media_type or movie.get("media_type") or "movie"
+        route = player.get({"show": "open_show", "episode": "play_episode"}.get(media_type, "play_movie")) or ""
+        if media_type == "episode" and not route:
+            route = player.get("open_show") or ""
+        ids = (movie.get("show_ids") if media_type == "episode" else movie.get("ids")) or {}
         identifier_values = {
             "id": str(ids.get("tmdb") or ""), "tmdb": str(ids.get("tmdb") or ""),
             "tmdb_id": str(ids.get("tmdb") or ""), "imdb": str(ids.get("imdb") or ""),
@@ -229,7 +233,7 @@ class PlayerRegistry:
         identifier_fields = set(re.findall(r"\{(id|tmdb|tmdb_id|imdb|trakt)\}", route))
         if identifier_fields and not any(identifier_values.get(key) for key in identifier_fields):
             return ""
-        title = str(movie.get("title") or "")
+        title = str((movie.get("showtitle") if media_type == "episode" else movie.get("title")) or "")
         values = _Values({
             key: quote_plus(value) for key, value in identifier_values.items()
         })
@@ -240,7 +244,7 @@ class PlayerRegistry:
             "showname": quote_plus(title), "showname_url": quote_plus(title),
             "showname_+": escaped_title, "showname_escaped": escaped_title,
             "year": quote_plus(str(movie.get("year") or "")),
-            "showyear": quote_plus(str(movie.get("year") or "")),
+            "showyear": quote_plus(str(movie.get("showyear") or movie.get("year") or "")),
             "plot": quote_plus(str(movie.get("overview") or "")),
             "plot_escaped": quote_plus(str(movie.get("overview") or "")),
             "poster": quote_plus(self._image(movie, "poster")),
@@ -248,6 +252,11 @@ class PlayerRegistry:
             "premiered": quote_plus(str(movie.get("released") or "")),
             "thumbnail": quote_plus(self._image(movie, "poster")),
             "now": quote_plus(str(int(time.time()))),
+            "season": str(movie.get("season") or 0), "episode": str(movie.get("episode") or 0),
+            "season_number": str(movie.get("season") or 0), "episode_number": str(movie.get("episode") or 0),
+            "episode_title": quote_plus(str(movie.get("title") or "")),
+            "episode_tmdb": quote_plus(str((movie.get("ids") or {}).get("tmdb") or "")),
+            "episode_trakt": quote_plus(str((movie.get("ids") or {}).get("trakt") or "")),
         })
         try:
             url = route.format_map(values)
@@ -257,8 +266,8 @@ class PlayerRegistry:
         return url if route and url.startswith(expected) else ""
 
     def target(self, movie, media_type=None):
-        media_type = "show" if (media_type or movie.get("media_type")) == "show" else "movie"
-        setting = "%s_player_id" % media_type
+        media_type = media_type or movie.get("media_type") or "movie"
+        setting = "show_player_id" if media_type in ("show", "episode") else "movie_player_id"
         preference = str(self._preferences().get(setting) or "automatic")
         if preference == "information":
             return "", None

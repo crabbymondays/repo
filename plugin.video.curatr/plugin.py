@@ -14,6 +14,8 @@ import xbmcvfs
 from lib.art_cache import ArtworkCache
 from lib.catalogue_clients import CatalogueError
 from lib.core import Curator
+from lib.episode_lists import enrich_artwork as enrich_episode_artwork, watch_history as episode_history, watched_state
+from datetime import datetime, timezone
 from lib import dynamic_lists as dynamic
 from lib.dynamic_display import prepare_items as prepare_dynamic_items, native_art
 from lib.shortcuts import BY_KEY as CURATR_SHORTCUTS
@@ -659,7 +661,7 @@ def _movie_rows_for_list(curator, list_id):
     if not record:
         return []
     movies = [m for m in (record.get("movies") or []) if isinstance(m, dict)]
-    if movies:
+    if movies or record.get("content_type") == "episodes":
         return [({}, movie) for movie in movies]
 
     # Migration fallback for a record that has never been refreshed
@@ -854,7 +856,7 @@ def _set_movie_info(item, movie):
     """
     if not isinstance(movie, dict):
         movie = {}
-    media_type = "tvshow" if str(movie.get("media_type") or "movie") == "show" else "movie"
+    media_type = {"show": "tvshow", "episode": "episode"}.get(str(movie.get("media_type") or "movie"), "movie")
     title = str(movie.get("title") or ("Unknown show" if media_type == "tvshow" else "Unknown movie"))
     year = _safe_int(movie.get("year"), 0)
     overview = str(movie.get("overview") or movie.get("ai_reason") or "")
@@ -886,6 +888,9 @@ def _set_movie_info(item, movie):
     # then enrich with the modern InfoTagVideo API where available.
     try:
         legacy = {"title": title, "mediatype": media_type}
+        if media_type == "episode":
+            legacy.update(tvshowtitle=str(movie.get("showtitle") or ""), season=_safe_int(movie.get("season"), 0),
+                          episode=_safe_int(movie.get("episode"), 0), playcount=_safe_int(movie.get("playcount"), 0))
         if year:
             legacy["year"] = year
         if overview:
@@ -990,16 +995,22 @@ def _set_movie_info(item, movie):
         default_id = "tmdb" if "tmdb" in unique_ids else ("imdb" if "imdb" in unique_ids else "trakt")
         _safe_tag_call(tag, "setUniqueIDs", unique_ids, default_id)
     _safe_tag_call(tag, "setMediaType", media_type)
+    if media_type == "episode":
+        _safe_tag_call(tag, "setTvShowTitle", str(movie.get("showtitle") or ""))
+        _safe_tag_call(tag, "setSeason", _safe_int(movie.get("season"), 0))
+        _safe_tag_call(tag, "setEpisode", _safe_int(movie.get("episode"), 0))
+        _safe_tag_call(tag, "setPlaycount", _safe_int(movie.get("playcount"), 0))
 
 def _library_items(media_type):
     """Load Kodi's library once per directory render and index it by stable IDs."""
     if media_type in _LIBRARY_CACHE:
         return _LIBRARY_CACHE[media_type]
-    method = "VideoLibrary.GetTVShows" if media_type == "show" else "VideoLibrary.GetMovies"
-    result_key = "tvshows" if media_type == "show" else "movies"
+    method, result_key = {"show": ("VideoLibrary.GetTVShows", "tvshows"), "episode": ("VideoLibrary.GetEpisodes", "episodes")}.get(media_type, ("VideoLibrary.GetMovies", "movies"))
+    properties = ["title", "year", "uniqueid"] + ([] if media_type == "show" else ["file"])
+    if media_type == "episode": properties = ["title", "uniqueid", "file", "season", "episode", "tvshowid"]
     request = {
         "jsonrpc": "2.0", "id": 1, "method": method,
-        "params": {"properties": ["title", "year", "uniqueid"] + ([] if media_type == "show" else ["file"])},
+        "params": {"properties": properties},
     }
     rows = []
     try:
@@ -1014,6 +1025,13 @@ def _library_items(media_type):
 
 
 def _library_target(movie, media_type):
+    if media_type == "episode":
+        show_url = _library_target({"ids": movie.get("show_ids") or {}, "title": movie.get("showtitle"), "year": movie.get("showyear")}, "show")
+        tvshow_id = _safe_int(show_url.rstrip("/").rsplit("/", 1)[-1], -1)
+        for row in _library_items("episode"):
+            if tvshow_id >= 0 and row.get("tvshowid") == tvshow_id and row.get("season") == movie.get("season") and row.get("episode") == movie.get("episode"):
+                return str(row.get("file") or "")
+        return ""
     ids = movie.get("ids") or {}
     wanted = {key: str(ids.get(key) or "").lower() for key in ("tmdb", "imdb")}
     title = str(movie.get("title") or "").strip().casefold()
@@ -1036,8 +1054,21 @@ def _library_target(movie, media_type):
     return ""
 
 
+def _episode_aired(movie):
+    if movie.get("first_aired"):
+        try:
+            aired = datetime.fromisoformat(str(movie["first_aired"]).replace("Z", "+00:00"))
+            aired = aired.replace(tzinfo=timezone.utc) if aired.tzinfo is None else aired
+            return aired <= datetime.now(timezone.utc)
+        except ValueError:
+            return False
+    return True
+
+
 def _player_target(movie):
-    media_type = "show" if str(movie.get("media_type") or "movie") == "show" else "movie"
+    media_type = str(movie.get("media_type") or "movie")
+    if media_type == "episode" and not _episode_aired(movie):
+        return "", False, None
     if PLAYERS.preference(media_type) == "information":
         return "", False, None
     library_url = _library_target(movie, media_type)
@@ -1046,11 +1077,11 @@ def _player_target(movie):
     url, player = PLAYERS.target(movie, media_type)
     if not player:
         return "", False, None
-    return url, media_type == "show", player
+    return url, media_type == "show" or (media_type == "episode" and not player.get("play_episode")), player
 
 
 def _play_using(params):
-    media_type = "show" if params.get("media_type") == "show" else "movie"
+    media_type = params.get("media_type") if params.get("media_type") in ("show", "episode") else "movie"
     movie = {
         "title": params.get("title") or "",
         "year": _safe_int(params.get("year"), 0),
@@ -1062,14 +1093,17 @@ def _play_using(params):
             "trakt": params.get("trakt_id") or "",
         },
     }
+    if media_type == "episode":
+        movie.update(showtitle=params.get("showtitle"), show_ids={key: params.get("show_" + key) or "" for key in ("tmdb", "imdb", "trakt")},
+                     season=_safe_int(params.get("season"), 0), episode=_safe_int(params.get("episode"), 0))
     choices = []
     library_url = _library_target(movie, media_type)
     if library_url:
-        choices.append(("Kodi Library", library_url))
+        choices.append(("Kodi Library", library_url, media_type == "show"))
     for player in PLAYERS.available(media_type):
         url = PLAYERS.build_url(player, movie, media_type)
         if url:
-            choices.append((player["name"], url))
+            choices.append((player["name"], url, media_type == "show" or (media_type == "episode" and not player.get("play_episode"))))
     if not choices:
         xbmcgui.Dialog().ok(NAME, "No compatible installed player is available for this item.")
         return
@@ -1077,7 +1111,7 @@ def _play_using(params):
     if choice < 0:
         return
     url = choices[choice][1]
-    if media_type == "show":
+    if choices[choice][2]:
         open_directory(url)
     else:
         xbmc.executebuiltin("PlayMedia(%s)" % url)
@@ -1090,6 +1124,8 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
     title = str(movie.get("title") or ("Unknown show" if media_type == "show" else "Unknown movie"))
     year = _safe_int(movie.get("year"), 0)
     label = "%s (%d)" % (title, year) if year else title
+    if media_type == "episode":
+        label = "%s • S%02dE%02d • %s" % (movie.get("showtitle") or "TV Show", _safe_int(movie.get("season"), 0), _safe_int(movie.get("episode"), 0), title)
     item = xbmcgui.ListItem(label=label, offscreen=True)
     _mark_curatr_item(item)
     _set_movie_info(item, movie)
@@ -1114,18 +1150,20 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
     play_url, player_is_folder, _selected_player = _player_target(movie)
     try:
         context = []
-        if PLAYERS.available(media_type):
+        if PLAYERS.available(media_type) and (media_type != "episode" or _episode_aired(movie)):
             context.append(("Play Using…", "RunPlugin(%s)" % _url(
                 action="play_using", media_type=media_type, title=title, year=str(year or ""),
                 tmdb_id=str(ids.get("tmdb") or ""), imdb_id=str(ids.get("imdb") or ""),
                 trakt_id=str(trakt_id), overview=str(movie.get("overview") or ""),
+                showtitle=str(movie.get("showtitle") or ""), season=str(movie.get("season") or 0), episode=str(movie.get("episode") or 0),
+                **{"show_" + key: str((movie.get("show_ids") or {}).get(key) or "") for key in ("tmdb", "imdb", "trakt")},
             )))
         if recommendation_actions:
             context.extend([
                 ("Why this pick?", "RunPlugin(%s)" % why_url),
-                ("Hide %s" % ("TV Show" if media_type == "show" else "Movie"), "RunPlugin(%s)" % hide_url),
+                ("Hide %s" % {"show": "TV Show", "episode": "Episode"}.get(media_type, "Movie"), "RunPlugin(%s)" % hide_url),
             ])
-        if _setting_enabled("context_menu_enabled"):
+        if media_type != "episode" and _setting_enabled("context_menu_enabled"):
             media_params = {
                 "media_type": media_type, "title": title, "year": str(year or ""),
                 "tmdb_id": str(ids.get("tmdb") or ""), "imdb_id": str(ids.get("imdb") or ""),
@@ -1179,7 +1217,7 @@ def _add_movie(movie, artwork, list_name="", list_id="", recommendation_actions=
     return bool(xbmcplugin.addDirectoryItem(HANDLE, target_url, item, isFolder=is_folder))
 
 
-def _render_movies(curator, rows, category, update_listing=False, folder_id=""):
+def _render_movies(curator, rows, category, update_listing=False, folder_id="", empty_action=None):
     xbmcplugin.setPluginCategory(HANDLE, category)
     rows = list(rows or [])
     enriched_rows = []
@@ -1191,6 +1229,27 @@ def _render_movies(curator, rows, category, update_listing=False, folder_id=""):
         else:
             enriched_rows.append(entry)
     rows = enriched_rows
+    episode_rows = [entry[1] for entry in rows if len(entry) > 1 and isinstance(entry[1], dict) and entry[1].get("media_type") == "episode"]
+    if episode_rows:
+        try:
+            enrich_episode_artwork(curator, episode_rows)
+        except Exception as exc:
+            xbmc.log("curatr episode artwork skipped: %s" % type(exc).__name__, xbmc.LOGDEBUG)
+        try:
+            history = episode_history(curator)
+            kept = []
+            for entry in rows:
+                movie = entry[1] if len(entry) > 1 and isinstance(entry[1], dict) else {}
+                record = curator._managed_record_by_id(entry[3]) if len(entry) > 3 and entry[3] else None
+                hide = (record.get("request_rules") or {}).get("hide_watched", True) if isinstance(record, dict) else False
+                if movie.get("media_type") == "episode":
+                    plays, stamp = watched_state(movie, history)
+                    movie.update(playcount=plays, last_watched_at=stamp)
+                    if hide and plays: continue
+                kept.append(entry)
+            rows = kept
+        except Exception as exc:
+            xbmc.log("curatr episode display refresh skipped: %s" % type(exc).__name__, xbmc.LOGWARNING)
     try:
         METADATA.enrich(
             [entry[1] for entry in rows if len(entry) > 1 and isinstance(entry[1], dict)],
@@ -1199,7 +1258,7 @@ def _render_movies(curator, rows, category, update_listing=False, folder_id=""):
     except Exception as exc:
         xbmc.log("curatr metadata enrichment skipped: %s" % exc, xbmc.LOGWARNING)
     media_types = {str(entry[1].get("media_type") or "movie") for entry in rows if len(entry) > 1 and isinstance(entry[1], dict)}
-    xbmcplugin.setContent(HANDLE, "tvshows" if media_types == {"show"} else ("movies" if media_types <= {"movie"} else "videos"))
+    xbmcplugin.setContent(HANDLE, "episodes" if media_types == {"episode"} else ("tvshows" if media_types == {"show"} else ("movies" if media_types <= {"movie"} else "videos")))
     art_cache = ArtworkCache(ADDON)
 
     # Artwork or one malformed movie must never make the entire skin widget fail.
@@ -1236,7 +1295,10 @@ def _render_movies(curator, rows, category, update_listing=False, folder_id=""):
             xbmc.log("curatr movie row skipped: %s" % exc, xbmc.LOGWARNING)
 
     if not rows:
-        _add_action("No items to show", "update", "Refresh your lists, then refresh this folder.")
+        if empty_action:
+            _add_route_action(**empty_action)
+        else:
+            _add_action("No items to show", "update", "Refresh your lists, then refresh this folder.")
     elif not added:
         _add_action("Items could not be displayed", "update", "The local list exists. Refresh it, or check Recent Activity for details.")
 
@@ -1405,7 +1467,12 @@ def _list_preview(curator, params):
     _add_route_action("Edit list settings", "list_preview_edit", "Return to List Settings and change this list.", token=token, icon_name="menu_settings.png")
     _add_route_action("Close preview", "list_preview_close", "Discard this temporary preview.", token=token, icon_name="control_clear.png")
     rows = [({}, movie, name, "", False) for movie in record.get("movies", []) if isinstance(movie, dict)]
-    _render_movies(curator, rows, "%s • Preview" % name)
+    empty_action = None
+    if record.get("content_type") == "episodes":
+        window = record.get("episode_window") or {}
+        empty_action = {"label": "No episodes in this airing window", "action": "list_preview_edit", "token": token,
+                        "plot": "No matching episodes from %s to %s. You can save the list for future refreshes, or edit its settings." % (window.get("start") or "today", window.get("end") or "the selected end date")}
+    _render_movies(curator, rows, "%s • Preview" % name, empty_action=empty_action)
 
 
 def _similar_preview(curator, params):
@@ -1483,6 +1550,7 @@ def _run_command(curator, command):
         "privacy": curator.show_privacy_and_data,
         "choose_menu_background": curator.choose_menu_background_interactive,
         "customise_theme": curator.customise_theme_interactive,
+        "choose_sheen_colour": curator.choose_sheen_colour_interactive,
         "dynamic_create": curator.create_dynamic_list_interactive,
         "dynamic_manage": curator.manage_dynamic_lists_interactive,
         "choose_movie_player": lambda: PLAYERS.choose("movie"),
@@ -1731,7 +1799,7 @@ def main():
             curator.hide_movie(
                 params.get("trakt_id") or "", params.get("title") or "",
                 _safe_int(params.get("year"), 0), confirm=True,
-                media_type="show" if params.get("media_type") == "show" else "movie",
+                media_type=params.get("media_type") if params.get("media_type") in ("show", "episode") else "movie",
             )
             xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
             refresh_if_changed(before, curator.state)

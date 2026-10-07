@@ -133,9 +133,10 @@ def invalidate(profile):
 
 class SourceCache:
     """One bounded snapshot per source, shared by all lists and plugin invocations."""
-    def __init__(self, profile, clock=time.time):
+    def __init__(self, profile, clock=time.time, max_items=MAX_SOURCE_ITEMS):
         self.root = os.path.join(profile, "dynamic_cache")
         self.clock = clock
+        self.max_items = max(1, min(20000, int(max_items)))
 
     def get(self, key, fetch):
         path = os.path.join(self.root, key + ".json")
@@ -178,7 +179,7 @@ class SourceCache:
                 items = fetch()
                 if not isinstance(items, list):
                     raise ValueError("Source did not return a directory")
-                value = {"items": items[:MAX_SOURCE_ITEMS], "at": self.clock(), "epoch": epoch}
+                value = {"items": items[:self.max_items], "at": self.clock(), "epoch": epoch}
             except Exception:
                 # Keep the last successful response, even if this attempt is offline.
                 value = dict(cached, error=True, retry_at=self.clock() + RETRY_SECONDS)
@@ -356,6 +357,13 @@ def load(curator, record):
                 warnings.append("%s is no longer available." % label)
                 continue
             group = [{"kind": "curatr", "data": row} for row in local.get("movies", []) if isinstance(row, dict)]
+            if (local.get("request_rules") or {}).get("hide_watched", True) and any(row["data"].get("media_type") == "episode" for row in group):
+                from .episode_lists import watch_history, watched_state
+                try:
+                    history = watch_history(curator)
+                    group = [row for row in group if row["data"].get("media_type") != "episode" or not watched_state(row["data"], history)[0]]
+                except Exception:
+                    warnings.append("%s: episode watch history is unavailable; keeping the saved contents." % label)
         else:
             def fetch(source=source):
                 if source["type"] == "external_path":
@@ -366,6 +374,8 @@ def load(curator, record):
             if stale:
                 warnings.append("%s: using saved items while the source is unavailable or loading." % label)
         groups.append(group)
+        if not group:
+            warnings.append("%s returned no items." % label)
     items, missing = merge_items(groups, record["sort"], record["descending"], record["count"], record["alternate_sources"])
     if missing:
         order = "alternating between sources" if record["alternate_sources"] else "in source order"

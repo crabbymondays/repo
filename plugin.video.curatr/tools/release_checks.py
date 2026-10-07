@@ -30,7 +30,7 @@ class FakeAddon:
             "name": "curatr",
             "path": str(ROOT),
             "profile": self.profile,
-            "version": "1.0.27",
+            "version": "1.0.42",
             "id": "plugin.video.curatr",
         }.get(key, "")
 
@@ -460,7 +460,7 @@ class ReleaseChecks(unittest.TestCase):
 
     def test_context_scope_and_versioned_create_asset(self):
         addon = ET.parse(ROOT / "addon.xml").getroot()
-        self.assertEqual(addon.attrib["version"], "1.0.27")
+        self.assertEqual(addon.attrib["version"], "1.0.42")
         visibility = [node.text or "" for node in addon.findall(".//item/visible")]
         self.assertEqual(len(visibility), 3)
         self.assertTrue(all("CuratrItem" in value for value in visibility))
@@ -485,6 +485,133 @@ class InterfaceChecks(unittest.TestCase):
         curator._store_managed_record = Mock()
         curator.record_activity = Mock()
         return curator
+
+    def test_short_list_options_cycle_without_opening_a_dialog_or_saving(self):
+        from lib import core
+        curator = self.curator()
+        draft = {"generation_method": "ai", "content_type": "movies",
+                 "regeneration_enabled": False, "sync_to_trakt": True,
+                 "trakt_refresh_enabled": True, "keyword_rules": {"year_min": 2005}}
+        original = copy.deepcopy(draft)
+        with patch.object(core.xbmcgui, "Dialog") as dialog:
+            for expected in ("keyword", "ai"):
+                draft = curator._edit_list_draft_field("generation_method", dict(draft))
+                self.assertEqual(draft["generation_method"], expected)
+            for choice, expected in ((1, "shows"), (2, "both"), (3, "episodes"), (0, "movies")):
+                dialog.return_value.select.return_value = choice
+                draft = curator._edit_list_draft_field("content_type", dict(draft))
+                self.assertEqual(draft["content_type"], expected)
+            for expected in (True, False):
+                draft = curator._edit_list_draft_field("regeneration_enabled", dict(draft))
+                self.assertIs(draft["regeneration_enabled"], expected)
+            draft = curator._edit_list_draft_field("sync_to_trakt", dict(draft))
+            self.assertFalse(draft["sync_to_trakt"])
+            self.assertFalse(draft["trakt_refresh_enabled"])
+            draft = curator._edit_list_draft_field("sync_to_trakt", dict(draft))
+            self.assertTrue(draft["sync_to_trakt"])
+            self.assertFalse(draft["trakt_refresh_enabled"])
+            self.assertEqual(dialog.return_value.select.call_count, 4)
+        self.assertEqual(draft["keyword_rules"], original["keyword_rules"])
+        for field in ("regeneration_enabled", "sync_to_trakt"):
+            self.assertEqual(draft[field], original[field])
+        curator._save_state.assert_not_called()
+        curator._store_managed_record.assert_not_called()
+        curator._require_ai.assert_not_called()
+        curator._require_keyword_catalogue.assert_not_called()
+
+    def test_intervals_and_sync_schedules_keep_their_picker_and_custom_value_flow(self):
+        from lib import core
+        curator = self.curator()
+        draft = {"regeneration_enabled": True, "regeneration_interval_hours": 24,
+                 "sync_to_trakt": True, "trakt_refresh_enabled": True,
+                 "trakt_refresh_interval_hours": 72}
+        original = copy.deepcopy(draft)
+        with patch.object(core.xbmcgui, "Dialog") as dialog:
+            picker = dialog.return_value
+            picker.select.return_value = 5
+            picker.numeric.return_value = "37"
+            edited = curator._edit_list_draft_field("regeneration_interval_hours", dict(draft))
+            self.assertEqual(picker.select.call_args.args[1][-1], "Custom")
+            self.assertEqual(edited["regeneration_interval_hours"], 37)
+            picker.numeric.assert_called_with(0, "Refresh Interval (hours, 1-720)", defaultt="24")
+            picker.numeric.return_value = ""
+            self.assertEqual(curator._edit_list_draft_field("regeneration_interval_hours", dict(draft)), original)
+            picker.select.return_value = -1
+            self.assertEqual(curator._edit_list_draft_field("trakt_refresh_schedule", dict(draft)), original)
+            picker.select.assert_called_with("Auto Sync", ["Never", "Every day", "Every 3 days", "Every week", "Every 2 weeks", "Every month"], preselect=2)
+            picker.select.return_value = 0
+            edited = curator._edit_list_draft_field("sync_to_trakt", dict(draft))
+            self.assertFalse(edited["sync_to_trakt"])
+            self.assertFalse(edited["trakt_refresh_enabled"])
+        self.assertEqual(draft, original)
+        curator._save_state.assert_not_called()
+
+    def test_saved_list_value_cycles_keep_keyword_compatibility_and_refresh_confirmation(self):
+        from lib import core
+        curator = self.curator()
+        record = {"local_id": "keep", "name": "Test", "prompt": "crime",
+                  "content_type": "movies", "generation_method": "ai"}
+        with patch.object(core.xbmcgui, "Dialog") as dialog, patch.object(curator, "_managed_record_by_id") as lookup:
+            dialog.return_value.yesno.return_value = False
+            for choice, expected in ((1, "shows"), (2, "both"), (0, "movies")):
+                dialog.return_value.select.return_value = choice
+                lookup.return_value = record
+                updated = curator._edit_list_content_type("keep")
+                self.assertEqual(updated["content_type"], expected)
+                self.assertNotEqual(record["content_type"], expected)
+                self.assertIn("refresh this list now", dialog.return_value.yesno.call_args.args[1])
+                record = updated
+            record = dict(record, generation_method="keyword", keyword_rules={"reference_movies": [{"title": "Up"}]})
+            dialog.return_value.select.return_value = 1
+            lookup.return_value = record
+            updated = curator._edit_list_content_type("keep")
+            self.assertEqual(updated["content_type"], "both")
+            self.assertEqual(record["content_type"], "movies")
+            lookup.return_value = dict(record, keyword_rules=core.parse_prompt("crime"))
+            updated = curator._edit_list_generation_method("keep")
+            self.assertEqual(updated["generation_method"], "ai")
+            curator._require_ai.assert_called_once()
+            self.assertTrue(dialog.return_value.select.called)
+
+    def test_list_option_cycles_update_the_clicked_row_and_cancel_keeps_original(self):
+        from lib.core import Curator
+        from lib.list_settings import ListSettingsWindow
+        curator = self.curator()
+        original = {"content_type": "movies", "generation_method": "ai", "count": 20,
+                    "regeneration_enabled": True, "regeneration_interval_hours": 37,
+                    "sync_to_trakt": True, "trakt_refresh_enabled": True,
+                    "trakt_refresh_interval_hours": 72}
+        before = copy.deepcopy(original)
+        window = object.__new__(ListSettingsWindow)
+        ListSettingsWindow.__init__(window, str(ROOT), original, curator._edit_list_draft_field,
+                                    curator._format_list_draft_field, existing=True)
+        xml = ET.parse(ROOT / "resources/skins/Default/1080i/curatr-list-settings.xml")
+        controls = {int(c.get("id")): FakeControl() for c in xml.iter("control") if c.get("id")}
+        window.getControl = controls.__getitem__
+        window.setFocus = Mock()
+        window.close = Mock()
+        window.onInit()
+        window.onClick(101)
+        with patch("lib.core.xbmcgui.Dialog") as dialog:
+            for choice, expected in ((1, "TV Shows"), (2, "Movies & TV Shows"), (3, "Episodes"), (0, "Movies")):
+                dialog.return_value.select.return_value = choice
+                window.onClick(202)
+                self.assertIn(expected, controls[202].label)
+                window.setFocus.assert_called_with(controls[202])
+        window.onClick(201)
+        self.assertIn("Keyword Matching", controls[201].label)
+        window.onClick(102)
+        for ident in (200, 202):
+            for expected in ("Off", "On"):
+                window.onClick(ident)
+                self.assertIn(expected, controls[ident].label)
+                window.setFocus.assert_called_with(controls[ident])
+        self.assertEqual(window.draft["regeneration_interval_hours"], 37)
+        self.assertEqual(window.draft["trakt_refresh_interval_hours"], 72)
+        window.onClick(301)
+        self.assertEqual(window.result, "cancel")
+        self.assertEqual(original, before)
+        curator._save_state.assert_not_called()
 
     def test_request_routes_by_method_and_preserves_manual_filters(self):
         from lib import core
@@ -713,7 +840,7 @@ class InterfaceChecks(unittest.TestCase):
             with patch("xbmcaddon.Addon", return_value=FakeAddon("", {"interface_light_mode": str(light).lower(), "interface_theme": "amber"})):
                 window = object.__new__(KeywordConfirmWindow)
                 KeywordConfirmWindow.__init__(window, str(ROOT), "crime after 2000", parse_prompt("crime after 2000"), "", True, "Use Filters", True)
-                controls = {key: FakeControl() for key in (11, 12, 13, 14, 100, 101, 102)}
+                controls = {key: FakeControl() for key in (11, 12, 13, 14, 100, 101, 102, 103)}
                 window.getControl = controls.__getitem__
                 window.addControl = lambda _control: None
                 window.addControls = lambda _controls: None
@@ -723,25 +850,54 @@ class InterfaceChecks(unittest.TestCase):
                 window.onInit()
                 self.assertNotEqual(window.result, "fallback")
                 self.assertEqual(controls[101].label, "[B]Use Filters[/B]")
-                self.assertEqual(controls[102].label, "Done")
+                self.assertEqual(controls[102].label, "")
+                self.assertTrue(controls[103].image.endswith("/check.png"))
+                self.assertEqual(controls[103].xy, (10, 4))
                 self.assertGreaterEqual(len(window.action_controls), 5)
                 buttons = list(window.action_controls.values())
                 for index, button in enumerate(buttons):
                     self.assertIs(button.navigation[2], buttons[index - 1])
                     self.assertIs(button.navigation[3], buttons[(index + 1) % len(buttons)])
                     focus = [image for image in window.dynamic_controls if getattr(image, "condition", "") == "Control.HasFocus(%d)" % button.getId()]
-                    self.assertEqual(len(focus), 3)
+                    is_add = window.control_actions[button.getId()][0] == "add"
+                    self.assertEqual(len(focus), 7 if is_add else 3)
                     expected = ("0xFF4B2632", "0xFF4B2632", "0xFF5C392E", "0xFF5C392E", window.neutral_focus)[index]
-                    self.assertTrue(all(image.kwargs["colorDiffuse"] == expected for image in focus))
+                    fills = [image for image in focus if "_finish_v1.png" in image.args[4]]
+                    edges = [image for image in focus if "_edge_v1.png" in image.args[4]]
+                    self.assertEqual(len(fills), 3)
+                    self.assertEqual(len(edges), 3 if is_add else 0)
+                    self.assertTrue(all(image.kwargs["colorDiffuse"] == expected for image in fills))
+                    self.assertTrue(all(image.kwargs["colorDiffuse"] == "0x72FFFFFF" for image in edges))
                 for group in window.filter_groups:
                     minus, label = group["controls"]
                     gap = label.args[0] + label.kwargs["textOffsetX"] - (minus.args[0] + minus.args[2])
                     self.assertGreaterEqual(gap, 2)
                     self.assertLessEqual(gap, 8)
+                plus = buttons[-1]
+                plus_icons = [image for image in window.dynamic_controls if len(getattr(image, "args", ())) == 5 and str(image.args[4]).endswith("action_icons/v1/plus.png")]
+                self.assertEqual(len(plus_icons), 1)
+                icon = plus_icons[0]
+                self.assertEqual(icon.kwargs["aspectRatio"], 2)
+                with Image.open(icon.args[4]) as image:
+                    bounds = image.getchannel("A").getbbox()
+                    for axis in (0, 1):
+                        glyph_centre = icon.args[axis] + (bounds[axis] + bounds[axis + 2]) / 2 * icon.args[axis + 2] / image.size[axis]
+                        button_centre = plus.args[axis] + plus.args[axis + 2] / 2
+                        self.assertEqual(glyph_centre, button_centre)
+                self.assertEqual(window.control_actions[plus.getId()], ("add", -1))
                 window.onClick(buttons[0].getId())  # Remove a filter by the same click route used by touch/Select.
                 self.assertEqual(len(window.rules["display_parts"]), 1)
                 window.onClick(102)
-                self.assertEqual(controls[102].label, "Edit Filters")
+                self.assertEqual(controls[102].label, "")
+                self.assertTrue(controls[103].image.endswith("/pen-to-square.png"))
+                self.assertEqual(controls[103].xy, (10, 6))
+                window.onClick(102)
+                self.assertTrue(controls[103].image.endswith("/check.png"))
+                self.assertEqual(controls[103].xy, (10, 4))
+                window.onAction(types.SimpleNamespace(getId=lambda: 92))
+                self.assertFalse(window.edit_mode)
+                self.assertTrue(controls[103].image.endswith("/pen-to-square.png"))
+                self.assertEqual(controls[103].xy, (10, 6))
 
     def test_menu_assets_are_complete_padded_and_resolve_legacy_paths(self):
         from lib.menu_art import current_menu_source, menu_source
@@ -841,15 +997,17 @@ class ArtworkChecks(unittest.TestCase):
         self.assertEqual(window.result, "cancel")
         self.assertEqual(original, before)
 
-    def test_neutral_keyword_panel_and_transparent_hit_targets(self):
+    def test_themed_keyword_panel_and_borderless_edit_hit_target(self):
         from lib.ui_theme import theme_palette
-        for light, expected in ((False, "FF25262B"), (True, "FF25262B")):
+        from lib.colours import COLOURS
+        for light in (False, True):
             panels, backdrops = set(), set()
             for theme in ("violet", "ocean", "emerald", "amber"):
                 palette = theme_palette(FakeAddon("", {"interface_theme": theme, "interface_light_mode": str(light).lower()}))
                 panels.add(palette["CuratrKeywordPanel"])
                 backdrops.add(palette["CuratrBackdrop"])
-            self.assertEqual(panels, {expected})
+                self.assertEqual(palette["CuratrKeywordPanel"], "FF" + palette["CuratrPanel"][2:])
+            self.assertEqual(len(panels), 4)
             self.assertEqual(len(backdrops), 4)
         with Image.open(ROOT / "resources/media/control_clear_v2.png") as clear:
             self.assertEqual(clear.size, (32, 32))
@@ -859,12 +1017,72 @@ class ArtworkChecks(unittest.TestCase):
         for skin in ("Default",):
             xml = ET.parse(ROOT / "resources/skins" / skin / "1080i/curatr-keyword-confirm.xml")
             button = xml.find(".//control[@id='102']")
-            self.assertGreaterEqual(int(button.findtext("width")), 250)
+            self.assertEqual(int(button.findtext("width")), 56)
             self.assertGreaterEqual(int(button.findtext("height")), 56)
             self.assertLess(int(button.findtext("left")), 600)
-            self.assertEqual(button.findtext("label"), "Edit Filters")
-            self.assertEqual(button.find("texturenofocus").get("colordiffuse"), "00FFFFFF")
-            self.assertNotIn("Curatr", button.find("texturefocus").get("colordiffuse"))
+            self.assertEqual(button.findtext("label", ""), "")
+            for tag in ("texturefocus", "texturenofocus"):
+                self.assertTrue(button.findtext(tag).endswith("/control_clear_v2.png"))
+                self.assertFalse(button.find(tag).attrib)
+            icon = xml.find(".//control[@id='103']")
+            self.assertEqual(icon.findtext("aspectratio"), "keep")
+            self.assertEqual(int(icon.findtext("left")) + int(icon.findtext("width")) / 2,
+                             int(button.findtext("left")) + int(button.findtext("width")) / 2)
+            self.assertEqual(int(icon.findtext("top")) + int(icon.findtext("height")) / 2,
+                             int(button.findtext("top")) + int(button.findtext("height")) / 2 - 4)
+            animation = icon.find("animation")
+            self.assertEqual(animation.text, "Conditional")
+            self.assertEqual(animation.get("condition"), "Control.HasFocus(102)")
+            self.assertEqual(animation.get("effect"), "zoom")
+            self.assertEqual(animation.get("end"), "112")
+            self.assertEqual(animation.get("center"), "auto")
+            header = xml.find(".//control[@id='104']")
+            heading = header.find("control[@type='label']")
+            target = header.find("control[@id='105']")
+            self.assertEqual(header.get("type"), "grouplist")
+            self.assertEqual(header.findtext("orientation"), "horizontal")
+            self.assertEqual(header.findtext("usecontrolcoords"), "true")
+            self.assertEqual([int(header.findtext(tag)) for tag in ("left", "top")], [0, 0])
+            self.assertEqual(heading.findtext("width"), "auto")
+            self.assertGreater(int(heading.find("width").get("max")), 200)
+            self.assertEqual(heading.findtext("aligny"), "center")
+            self.assertEqual(heading.findtext("label"), "[B]Looking for[/B]")
+            self.assertIs(target.find("control[@id='102']"), button)
+            self.assertIs(target.find("control[@id='103']"), icon)
+            self.assertEqual(int(heading.findtext("top")) + int(heading.findtext("height")) / 2 - 4,
+                             int(target.findtext("top")) + int(icon.findtext("top")) + int(icon.findtext("height")) / 2)
+            self.assertEqual([c.get("id") for c in target.findall("control")], ["102", "103"])
+            self.assertEqual(int(header.findtext("itemgap")) + int(target.findtext("left")) + int(icon.findtext("left")), 10)
+            backdrop = xml.find("./controls/control")
+            self.assertEqual([int(backdrop.findtext(t)) for t in ("left", "top", "width", "height")], [0, 0, 1920, 1080])
+            self.assertEqual(backdrop.find("texture").get("colordiffuse"), "$INFO[Window(Home).Property(CuratrKeywordBackdrop)]")
+            for colour in COLOURS:
+                palette = theme_palette(FakeAddon("", {"interface_base_colour": colour}))
+                self.assertEqual(palette["CuratrKeywordBackdrop"], "FF" + palette["CuratrBackdrop"][2:])
+
+    def test_keyword_divider_balances_native_wrapped_height_without_overlapping_filters(self):
+        xml = ET.parse(ROOT / "resources/skins/Default/1080i/curatr-keyword-confirm.xml")
+        body = xml.find(".//control[@id='106']")
+        request, divider, header = body.findall("control")
+        self.assertEqual([c.get("id") for c in (request, divider, header)], ["11", "107", "104"])
+        self.assertEqual(body.findtext("orientation"), "vertical")
+        self.assertEqual(body.findtext("align"), "justify")
+        self.assertEqual(body.findtext("usecontrolcoords"), "true")
+        self.assertEqual(request.findtext("height"), "auto")
+        heading = header.find("control[@type='label']")
+        y, height = int(body.findtext("top")), int(body.findtext("height"))
+        divider_inset, divider_height = int(divider.findtext("top")), int(divider.findtext("height"))
+        header_height = int(header.findtext("height"))
+        # Kodi gives justified lists a half-gap at each end and equal inner gaps.
+        for text_height in range(int(request.find("height").get("min")), int(request.find("height").get("max")) + 1):
+            gap = (height - text_height - divider_inset - divider_height - header_height) / 3
+            request_bottom = y + gap / 2 + text_height
+            divider_middle = request_bottom + gap + divider_inset + divider_height / 2
+            header_top = request_bottom + 2 * gap + divider_inset + divider_height
+            heading_top = header_top + int(heading.findtext("top"))
+            self.assertAlmostEqual(divider_middle - request_bottom, heading_top - divider_middle)
+            self.assertGreater(gap, 0)
+            self.assertLessEqual(header_top + header_height, 492 - 16)
 
     def test_folder_contents_start_selected_and_actions_follow_focus(self):
         from lib.folder_contents import FolderContentsWindow, _ADD_KEY

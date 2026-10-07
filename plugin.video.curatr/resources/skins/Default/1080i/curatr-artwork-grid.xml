@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version='1.0' encoding='utf-8'?>
 <window type="dialog">
     <defaultcontrol always="true">100</defaultcontrol>
     <coordinates>
@@ -12,6 +12,15 @@
             <width>1920</width>
             <height>1080</height>
             <texture colordiffuse="$INFO[Window(Home).Property(CuratrBackdrop)]">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texture>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>0</left>
+            <top>0</top>
+            <width>1920</width>
+            <height>1080</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/corner_dots_artwork_grid_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
         </control>
         <control type="label" id="10">
             <left>100</left>
@@ -52,7 +61,7 @@
                     <width>332</width>
                     <height>332</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
                     <visible>String.IsEqual(ListItem.Property(CuratrSelected),true)</visible>
                 </control>
                 <control type="image">
@@ -61,7 +70,7 @@
                     <width>320</width>
                     <height>320</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>58</left>
@@ -98,7 +107,7 @@
                     <width>332</width>
                     <height>332</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>50</left>
@@ -106,7 +115,7 @@
                     <width>320</width>
                     <height>320</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>58</left>
@@ -155,7 +164,7 @@
                     <width>536</width>
                     <height>312</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
                     <visible>String.IsEqual(ListItem.Property(CuratrSelected),true)</visible>
                 </control>
                 <control type="image">
@@ -164,7 +173,7 @@
                     <width>524</width>
                     <height>300</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>24</left>
@@ -200,7 +209,7 @@
                     <width>536</width>
                     <height>312</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>18</left>
@@ -208,7 +217,7 @@
                     <width>524</width>
                     <height>300</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>24</left>

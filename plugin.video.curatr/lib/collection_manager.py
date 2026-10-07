@@ -1,12 +1,15 @@
 import xbmcgui
+import xbmc
 
 from .ui_theme import bold, skin_name
+from .action_icons import decorate_action
 
 
 _BACK_ACTIONS = {9, 10, 92}
 
 
 class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
+    XML_FILENAME = "curatr-collection-manager.xml"
     ENTRY_LIST_ID = 100
     ACTION_LIST_ID = 200
     EMPTY_LABEL_ID = 20
@@ -20,7 +23,7 @@ class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
         action_provider, action_handler, create_handler,
     ):
         return super().__new__(
-            cls, "curatr-collection-manager.xml", addon_path, skin_name(), "1080i"
+            cls, cls.XML_FILENAME, addon_path, skin_name(), "1080i"
         )
 
     def __init__(
@@ -46,10 +49,11 @@ class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
         if action:
             item.setProperty("CuratrDetail", str(row.get("detail") or ""))
             item.setProperty("CuratrDisabled", "true" if not row.get("enabled", True) else "false")
-            return item
+            return decorate_action(item, row)
         item.setProperty("CuratrDetail", str(row.get("detail") or ""))
         item.setProperty("CuratrStatus", str(row.get("status") or ""))
         item.setProperty("CuratrSummary", str(row.get("summary") or ""))
+        item.setProperty("CuratrCompact", "true" if not row.get("status") and not row.get("summary") else "false")
         art = row.get("art") if isinstance(row.get("art"), dict) else {}
         if art:
             item.setArt(art)
@@ -67,7 +71,8 @@ class CollectionManagerWindow(xbmcgui.WindowXMLDialog):
                 self._leave_actions(set_focus=False)
             target = self.ENTRY_LIST_ID if self.entries else self.CREATE_ID
             self.setFocus(self.getControl(target))
-        except Exception:
+        except Exception as exc:
+            xbmc.log("curatr collection dialog failed: %s" % exc, xbmc.LOGERROR)
             self.failed = True
             self.close()
 

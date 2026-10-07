@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.0.42
+
+- Apply keyword filters and local exclusions while reading recommendation/discovery pages, before filling result budgets. Share unused capacity across references, deduplicate by provider ID and prefer exact reference titles/years. Check complete person credits instead of intersecting two top-ranked lists; enforce directing/writing jobs and all named-person groups, with collective members sharing one group.
+- Keep viewing-history constraints alongside reference/creator/collection filters. Resolve history through TMDB without requiring Trakt, enforce country/language/runtime/release-window constraints and retain useful checked metadata. Honour requested sorting. Match exclusions by comparable provider IDs, using title/year only as a fallback; hidden TMDB-only items remain hidden. Refreshes prefer new matches and reuse older matches to fill remaining spaces.
+- Explain empty source results, strict all-genre combinations, credits/recommendation intersections and personal exclusions. Keep complete drafts after empty results, invalid filters, missing configuration and catalogue failures. Bound pages, title lookups, metadata checks and session caches; stop with an explicit explanation at lookup limits. Remove the obsolete standalone person-credit helper, duplicate keyword/Trakt resolution path, stale display-parts field and unused import.
+- Show all-genre combinations with “and”, retain “or” for either genre and display editable ordering tags. Balance connector gaps by removing label padding and measuring narrow/wide glyphs. Retain existing artwork, native layouts, finishes and Behaviour schedules. Add a provider-shaped end-to-end generation suite and boundary regressions; no new Kodi dependencies.
+
+## 1.0.41
+
+- Recognise standalone creator clauses after genres, themes and other catalogue filters, without requiring "films" or "movies". Short requests such as "horror by Stephen King" now show both the genre and creator tags, using the shared grammar rather than name-specific cases.
+- Keep additional reference, cast, year and rating clauses independent. Preserve explicit directed/written roles, quoted names, "by" inside reference titles, and sorting phrases. Add broader short-request regressions across genres, themes and people; retain the existing layouts, finishes, Behaviour schedules and empty-preview draft recovery.
+
+## 1.0.40
+
+- Separate creator, cast and reference-film clauses in either order. Generic "films by" uses creator credits rather than claiming the person is a director. Preserve names and titles containing filter words or prepositions; support quoted literals, deduplicated references and parenthesised reference years without turning them into release filters.
+- Fix grouped genre exclusions and the scope of genre OR matching, convert percentage and /10 ratings to the correct source scale, distinguish language wording from country filters, and show both independent constraints. Correct before/after year boundaries, show both runtime bounds and reject conflicting ranges before generation. Unrecognised tag edits preserve the existing filter; adding/removing people and references keeps the correct combined strategy.
+- Keep the complete list draft after empty Keyword Matching previews or creation attempts. Explain creator/reference intersections, allow editing and retrying, and avoid saving empty failed results. Check bounded later recommendation pages instead of stopping after one; retain distinct cast/crew roles for the same person.
+- Remove the extra focus border from keyword tag text. Reuse existing finishes, retain Behaviour refresh schedules and preserve the established layouts. Add a dedicated semantic parser suite with quoted-title matrices, malformed-input checks, catalogue fixtures and draft-retry regressions; no new runtime dependencies or artwork files.
+
+## 1.0.39
+
+- Remove refresh-schedule tags and the corresponding plus-menu option from Keyword Matching. Auto Refresh and its custom interval remain in Behaviour settings.
+- Keep custom Behaviour refresh values when keyword filters are saved. A newly edited request can still seed a schedule, without displaying it as a keyword filter. Remove the unused inline schedule-editing code and update checks and publishing instructions.
+
+## 1.0.38
+
+- Give episode source, airing-window and refresh tags the standard Keyword Matching minus/edit controls. The plus menu can restore them; removal survives saving and reopening. Missing source/date constraints use an all-shows calendar and the next 30 days, with the defaults shown in the dialog. Removing the refresh tag disables Auto Refresh.
+- Move footer buttons and their sheen, borders and shadows together below the expanding panel, retaining the normal gap when tags wrap or the editor closes. Shorten the source connector to avoid clipped text.
+- Recognise inflected schedule wording such as "refreshed every day", "updated weekly" and "regenerated every 12 hours". Keep it out of reference-title and catalogue-filter parsing. Accept calendar-month and Off values in the date/schedule editors.
+- Reuse the existing tag controls and assets, hide unsupported episode filter types in the plus menu, and validate source references, packages and editing/navigation regressions.
+
+## 1.0.37
+
+- Give Dynamic List Settings and source/preview dialogs their own native window layouts. Preview combines the selected sources, keeps a visible Close action and always accepts Back. Empty or unavailable sources produce a clear explanation and retain the draft.
+- Recognise common watch-history wording, including unwatched, not watched recently, previously watched, once/twice and play-count comparisons. Adding or editing filters retains false/zero values. History durations and refresh instructions no longer become release years, date windows or parts of names/titles. Parser upgrades preserve manually edited filters; unrelated settings edits do not trigger a refresh.
+- Add episode lists from Trakt watched/watchlisted shows, Kodi library shows or the global airing calendar. Both creation methods save the same bounded instructions for airing windows, watched-item handling and refresh schedules. AI interprets operational instructions once; episode refreshes use real calendar data without another AI request. Window dates are shown before creation; zero matching episodes is a valid result.
+- Keep episode identifiers separate from series identifiers for deduplication, watch state, artwork, Kodi metadata, library playback and optional Trakt syncing. Compatible direct episode routes receive the parent IDs and season/episode coordinates. Future episodes open information; players without an episode route can open the series browser.
+- Add a faint theme-tinted sheen to Keyword Matching panels and filter tags while keeping the existing layout, borderless minus/edit controls, proportional plus and solid footer buttons.
+- Reuse bounded calendar/history snapshots and fetch parent artwork once per unique show. Keep saved episode lists on source failure and hide newly watched episodes in ordinary and Dynamic List views. Audit imports, source/asset references and packages; automatically prune obsolete generated masks and update the publishing instructions.
+
+## 1.0.36
+
+- Toggle On/Off fields directly and cycle Creation Method and Items. Keep the interval and schedule pickers, including custom refresh values.
+- Replace the bright card bands and separate artwork overlays with one faint dotted sheen above the artwork layers and below the text.
+- Raise the Keyword Matching edit/done icon, remove its focus box and add a small proportional zoom on focus. Match the panel to the chosen theme colour while keeping the backdrop opaque.
+- Remove unused generated finish masks and unused imports; update the publishing instructions. The build prunes superseded decorative assets automatically.
+
+## 1.0.29
+
+- Added subtle surface gradients, soft shadows and thin light borders to the existing custom windows. Edge shading stays short with an even centre, and focused controls have a slightly stronger border.
+- Preserved the 1.0.27 layouts, fonts, button sizes, click areas, navigation and artwork picker actions. All runtime and settings files are unchanged; decoration uses only image layers and textures.
+- Kept moving buttons' finishes in their own textures, so borders follow the existing Save/Cancel and keyword-editor positions. Hidden controls also hide their decorative layers.
+- Retained the selected theme colours, artwork and data formats. No new runtime dependencies or migration are required.
+
 ## 1.0.27
 
 - Replaced the add-on icon with the supplied artwork and refreshed its filename to avoid reusing Kodi's cached icon.

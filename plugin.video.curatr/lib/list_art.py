@@ -7,8 +7,9 @@ from .art_cache import ArtworkCache
 from .menu_art import ADDON_ICON, current_menu_source
 from .menu_background import background_source
 from .bundled_art import (
-    BUNDLE as ARTWORK_BUNDLE, CHOICES, colour_label, components, normalise_colour, rendered_source,
+    CHOICES, components, rendered_source,
 )
+from .colours import colour_label, normalise_colour
 
 
 LABELS = dict(CHOICES)

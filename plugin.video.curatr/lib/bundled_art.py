@@ -6,7 +6,7 @@ import tempfile
 import zlib
 from functools import lru_cache
 
-from .colours import COLOURS, colour_label, normalise_colour
+from .colours import COLOURS
 
 
 BUNDLE = "v7"

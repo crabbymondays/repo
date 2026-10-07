@@ -7,20 +7,21 @@ import xbmcvfs
 from .colours import COLOURS, colour_label
 from .menu_background import background_source, current_choice, import_custom_background
 from .ui_theme import bold, save_theme, skin_name, theme_config, theme_palette, _publish_palette
+from .sheen_picker import enter_custom_colour
 
 
 class ColourPickerWindow(xbmcgui.WindowXMLDialog):
-    FIELDS = {20: "base", 22: "primary", 23: "secondary", 24: "tint", 25: "background"}
+    FIELDS = {20: "base", 22: "primary", 23: "secondary", 24: "tint", 25: "background", 28: "sheen"}
 
-    def __new__(cls, addon, state=None, background=False):
+    def __new__(cls, addon, state=None, background=False, sheen=False):
         return super().__new__(cls, "curatr-colour-picker.xml",
                                xbmcvfs.translatePath(addon.getAddonInfo("path")), skin_name(), "1080i")
 
-    def __init__(self, addon, state=None, background=False):
+    def __init__(self, addon, state=None, background=False, sheen=False):
         self.addon = addon
         self.state = dict(state or {})
         self.config = theme_config(addon)
-        self.active_field = "background" if background else "base"
+        self.active_field = "sheen" if sheen else "background" if background else "base"
         self.choice = current_choice(addon, self.state)
         self.keys = list(COLOURS)
         self.result = None
@@ -33,9 +34,11 @@ class ColourPickerWindow(xbmcgui.WindowXMLDialog):
 
     def _refresh(self):
         background = self.active_field == "background"
+        sheen = self.active_field == "sheen"
+        self.keys = (["white"] + list(COLOURS) + ["custom"]) if sheen else list(COLOURS)
         palette = theme_palette(self.addon, self.config)
         _publish_palette(palette)
-        labels = {20: "Theme", 22: "Highlight", 23: "Secondary highlight", 24: "Background tint", 25: "Menu background"}
+        labels = {20: "Theme", 22: "Highlight", 23: "Secondary highlight", 24: "Background tint", 25: "Menu background", 28: "Sheen colour"}
         background_label = {"theme": "Match Theme", "custom": "Custom Image"}.get(self.choice, colour_label(self.choice))
         for cid, field in self.FIELDS.items():
             value = background_label if field == "background" else colour_label(self.config[field])
@@ -43,7 +46,7 @@ class ColourPickerWindow(xbmcgui.WindowXMLDialog):
             selected = field == self.active_field
             self.getControl(1000 + cid).setColorDiffuse("0x" + palette["CuratrPrimary" if selected else "CuratrButtonFaint"])
             self.getControl(cid).setLabel(bold(label) if selected else label)
-            self.getControl(cid).setEnabled(cid in (20, 25) or self.config["custom"])
+            self.getControl(cid).setEnabled(cid in (20, 25, 28) or self.config["custom"])
         self.getControl(21).setLabel("Custom colours · %s" % ("On" if self.config["custom"] else "Off"))
         for cid in (26, 27, 1026, 1027, 31):
             self.getControl(cid).setVisible(background)
@@ -60,10 +63,18 @@ class ColourPickerWindow(xbmcgui.WindowXMLDialog):
             self.getControl(31).setImage(background_source(self.addon, self.state, choice))
             self.getControl(34).setLabel(background_label)
         selected = self.choice if background else self.config[self.active_field]
+        if sheen and selected.startswith("#"):
+            selected = "custom"
         items = []
         for key in self.keys:
             item = xbmcgui.ListItem(label=colour_label(key), offscreen=True)
-            item.setProperty("CuratrSwatch", "FF" + COLOURS[key][1].lstrip("#"))
+            if key == "white":
+                swatch = "FFFFFF"
+            elif key == "custom":
+                swatch = self.config["sheen"].lstrip("#") if self.config["sheen"].startswith("#") else "FFFFFF"
+            else:
+                swatch = COLOURS[key][1]
+            item.setProperty("CuratrSwatch", "FF" + swatch.lstrip("#"))
             item.setProperty("CuratrSelected", "true" if key == selected else "false")
             items.append(item)
         panel = self.getControl(100)
@@ -88,7 +99,13 @@ class ColourPickerWindow(xbmcgui.WindowXMLDialog):
             if not 0 <= position < len(self.keys):
                 return
             key = self.keys[position]
-            if self.active_field == "background":
+            if self.active_field == "sheen":
+                if key == "custom":
+                    key = enter_custom_colour(self.config["sheen"])
+                    if key is None:
+                        return
+                self.config["sheen"] = key
+            elif self.active_field == "background":
                 self.choice = key
             elif self.active_field == "base":
                 self.config.update(base=key, primary=key, secondary=key, tint=key, custom=False)
@@ -113,10 +130,10 @@ class ColourPickerWindow(xbmcgui.WindowXMLDialog):
             if not self.config["custom"]:
                 base = self.config["base"]
                 self.config.update(primary=base, secondary=base, tint=base)
-                if self.active_field not in ("base", "background"):
+                if self.active_field not in ("base", "background", "sheen"):
                     self.active_field = "base"
             self._refresh()
-        elif control_id in self.FIELDS and (control_id in (20, 25) or self.config["custom"]):
+        elif control_id in self.FIELDS and (control_id in (20, 25, 28) or self.config["custom"]):
             self.active_field = self.FIELDS[control_id]
             self._refresh()
             self.setFocus(self.getControl(100))
@@ -126,8 +143,8 @@ class ColourPickerWindow(xbmcgui.WindowXMLDialog):
             self.close()
 
 
-def choose_colours(addon, state=None, background=False):
-    window = ColourPickerWindow(addon, state, background)
+def choose_colours(addon, state=None, background=False, sheen=False):
+    window = ColourPickerWindow(addon, state, background, sheen)
     try:
         window.doModal()
         return window.result

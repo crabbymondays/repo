@@ -220,6 +220,8 @@ class MetadataCache:
         return changed
 
     def enrich(self, movies, tmdb, mdblist=None, workers=4, include_artwork=False):
+        original = movies
+        movies = [movie for movie in movies or [] if isinstance(movie, dict) and movie.get("media_type") != "episode"]
         tmdb_available = bool(tmdb and getattr(tmdb, "api_key", ""))
         wanted = {}
         for movie in movies or []:
@@ -277,4 +279,4 @@ class MetadataCache:
             self._enrich_external_ratings(movies, mdblist)
         except Exception:
             pass
-        return movies
+        return original

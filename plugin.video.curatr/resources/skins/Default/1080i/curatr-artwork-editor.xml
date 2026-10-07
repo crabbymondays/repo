@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <window type="dialog">
     <defaultcontrol always="true">100</defaultcontrol>
     <coordinates>
@@ -25,18 +25,68 @@
             <aligny>center</aligny>
         </control>
         <control type="image">
+            <description>Curatr surface finish</description>
+            <left>68</left>
+            <top>113</top>
+            <width>1784</width>
+            <height>824</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+        </control>
+        <control type="image">
             <left>80</left>
             <top>125</top>
             <width>1760</width>
             <height>800</height>
-            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanel)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanel)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>80</left>
+            <top>125</top>
+            <width>1760</width>
+            <height>800</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/corner_dots_artwork_editor_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>80</left>
+            <top>125</top>
+            <width>1760</width>
+            <height>800</height>
+            <texture border="18" infill="false" colordiffuse="12FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>93</left>
+            <top>143</top>
+            <width>574</width>
+            <height>759</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
         </control>
         <control type="image">
             <left>105</left>
             <top>155</top>
             <width>550</width>
             <height>735</height>
-            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelMedium)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelMedium)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>105</left>
+            <top>155</top>
+            <width>550</width>
+            <height>735</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_550x735_b18_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>105</left>
+            <top>155</top>
+            <width>550</width>
+            <height>735</height>
+            <texture border="18" infill="false" colordiffuse="12FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
         </control>
         <control type="label">
             <left>130</left>
@@ -54,7 +104,7 @@
             <width>510</width>
             <height>291</height>
             <aspectratio align="center" aligny="center">keep</aspectratio>
-            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
         </control>
         <control type="image" id="20">
             <left>130</left>
@@ -78,7 +128,7 @@
             <width>198</width>
             <height>198</height>
             <aspectratio align="center" aligny="center">keep</aspectratio>
-            <texture border="16" colordiffuse="EFFFFFFF">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+            <texture border="16" colordiffuse="EFFFFFFF">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
         </control>
         <control type="image">
             <left>286</left>
@@ -86,7 +136,7 @@
             <width>188</width>
             <height>188</height>
             <aspectratio align="center" aligny="center">keep</aspectratio>
-            <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+            <texture border="16" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
         </control>
         <control type="image" id="21">
             <left>294</left>
@@ -127,18 +177,43 @@
             <label>Fanart</label>
         </control>
         <control type="image">
+            <description>Curatr surface finish</description>
+            <left>668</left>
+            <top>143</top>
+            <width>1159</width>
+            <height>759</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+        </control>
+        <control type="image">
             <left>680</left>
             <top>155</top>
             <width>1135</width>
             <height>735</height>
-            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelSoft)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPanelSoft)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>680</left>
+            <top>155</top>
+            <width>1135</width>
+            <height>735</height>
+            <texture border="18" infill="false" colordiffuse="12FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>698</left>
+            <top>166</top>
+            <width>274</width>
+            <height>82</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1100)]</visible>
         </control>
         <control type="image" id="1100">
             <left>710</left>
             <top>178</top>
             <width>250</width>
             <height>58</height>
-            <texture border="18">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="18">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="100">
             <left>710</left>
@@ -151,15 +226,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="18" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>710</left>
+            <top>178</top>
+            <width>250</width>
+            <height>58</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_250x58_b18_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(100)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>710</left>
+            <top>178</top>
+            <width>250</width>
+            <height>58</height>
+            <texture border="18" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(100)] + [!Control.HasFocus(100)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>710</left>
+            <top>178</top>
+            <width>250</width>
+            <height>58</height>
+            <texture border="18" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(100)] + [Control.HasFocus(100)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>968</left>
+            <top>166</top>
+            <width>274</width>
+            <height>82</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1101)]</visible>
         </control>
         <control type="image" id="1101">
             <left>980</left>
             <top>178</top>
             <width>250</width>
             <height>58</height>
-            <texture border="18">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="18">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="101">
             <left>980</left>
@@ -172,15 +284,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="18" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>980</left>
+            <top>178</top>
+            <width>250</width>
+            <height>58</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_250x58_b18_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(101)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>980</left>
+            <top>178</top>
+            <width>250</width>
+            <height>58</height>
+            <texture border="18" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(101)] + [!Control.HasFocus(101)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>980</left>
+            <top>178</top>
+            <width>250</width>
+            <height>58</height>
+            <texture border="18" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(101)] + [Control.HasFocus(101)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>698</left>
+            <top>246</top>
+            <width>204</width>
+            <height>78</height>
+            <texture border="28" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1200)]</visible>
         </control>
         <control type="image" id="1200">
             <left>710</left>
             <top>258</top>
             <width>180</width>
             <height>54</height>
-            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="200">
             <left>710</left>
@@ -193,15 +342,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="16" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>710</left>
+            <top>258</top>
+            <width>180</width>
+            <height>54</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_180x54_b16_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(200)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>710</left>
+            <top>258</top>
+            <width>180</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(200)] + [!Control.HasFocus(200)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>710</left>
+            <top>258</top>
+            <width>180</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(200)] + [Control.HasFocus(200)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>888</left>
+            <top>246</top>
+            <width>294</width>
+            <height>78</height>
+            <texture border="28" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1201)]</visible>
         </control>
         <control type="image" id="1201">
             <left>900</left>
             <top>258</top>
             <width>270</width>
             <height>54</height>
-            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="201">
             <left>900</left>
@@ -214,15 +400,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="16" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>900</left>
+            <top>258</top>
+            <width>270</width>
+            <height>54</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_270x54_b16_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(201)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>900</left>
+            <top>258</top>
+            <width>270</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(201)] + [!Control.HasFocus(201)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>900</left>
+            <top>258</top>
+            <width>270</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(201)] + [Control.HasFocus(201)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1168</left>
+            <top>246</top>
+            <width>214</width>
+            <height>78</height>
+            <texture border="28" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1202)]</visible>
         </control>
         <control type="image" id="1202">
             <left>1180</left>
             <top>258</top>
             <width>190</width>
             <height>54</height>
-            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="202">
             <left>1180</left>
@@ -235,15 +458,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="16" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>1180</left>
+            <top>258</top>
+            <width>190</width>
+            <height>54</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_190x54_b16_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(202)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1180</left>
+            <top>258</top>
+            <width>190</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(202)] + [!Control.HasFocus(202)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1180</left>
+            <top>258</top>
+            <width>190</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(202)] + [Control.HasFocus(202)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1368</left>
+            <top>246</top>
+            <width>204</width>
+            <height>78</height>
+            <texture border="28" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1203)]</visible>
         </control>
         <control type="image" id="1203">
             <left>1380</left>
             <top>258</top>
             <width>180</width>
             <height>54</height>
-            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="203">
             <left>1380</left>
@@ -256,15 +516,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="16" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>1380</left>
+            <top>258</top>
+            <width>180</width>
+            <height>54</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_180x54_b16_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(203)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1380</left>
+            <top>258</top>
+            <width>180</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(203)] + [!Control.HasFocus(203)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1380</left>
+            <top>258</top>
+            <width>180</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(203)] + [Control.HasFocus(203)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1558</left>
+            <top>246</top>
+            <width>234</width>
+            <height>78</height>
+            <texture border="28" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1204)]</visible>
         </control>
         <control type="image" id="1204">
             <left>1570</left>
             <top>258</top>
             <width>210</width>
             <height>54</height>
-            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="204">
             <left>1570</left>
@@ -277,15 +574,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="16" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>1570</left>
+            <top>258</top>
+            <width>210</width>
+            <height>54</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_210x54_b16_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(204)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1570</left>
+            <top>258</top>
+            <width>210</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(204)] + [!Control.HasFocus(204)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1570</left>
+            <top>258</top>
+            <width>210</width>
+            <height>54</height>
+            <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(204)] + [Control.HasFocus(204)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>698</left>
+            <top>314</top>
+            <width>224</width>
+            <height>74</height>
+            <texture border="28" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1300)]</visible>
         </control>
         <control type="image" id="1300">
             <left>710</left>
             <top>326</top>
             <width>200</width>
             <height>50</height>
-            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="300">
             <left>710</left>
@@ -298,15 +632,52 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="16" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>710</left>
+            <top>326</top>
+            <width>200</width>
+            <height>50</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_200x50_b16_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(300)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>710</left>
+            <top>326</top>
+            <width>200</width>
+            <height>50</height>
+            <texture border="16" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(300)] + [!Control.HasFocus(300)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>710</left>
+            <top>326</top>
+            <width>200</width>
+            <height>50</height>
+            <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(300)] + [Control.HasFocus(300)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>913</left>
+            <top>314</top>
+            <width>304</width>
+            <height>74</height>
+            <texture border="28" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(1301)]</visible>
         </control>
         <control type="image" id="1301">
             <left>925</left>
             <top>326</top>
             <width>280</width>
             <height>50</height>
-            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+            <texture border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
         </control>
         <control type="button" id="301">
             <left>925</left>
@@ -319,8 +690,36 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
+            <texturefocus border="16" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
             <texturenofocus border="16" colordiffuse="00FFFFFF">special://home/addons/plugin.video.curatr/resources/media/pixel.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>925</left>
+            <top>326</top>
+            <width>280</width>
+            <height>50</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_280x50_b16_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(301)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>925</left>
+            <top>326</top>
+            <width>280</width>
+            <height>50</height>
+            <texture border="16" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(301)] + [!Control.HasFocus(301)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>925</left>
+            <top>326</top>
+            <width>280</width>
+            <height>50</height>
+            <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(301)] + [Control.HasFocus(301)]</visible>
         </control>
         <control type="panel" id="400">
             <left>700</left>
@@ -340,7 +739,7 @@
                     <width>145</width>
                     <height>145</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>70</left>
@@ -386,7 +785,7 @@
                     <width>152</width>
                     <height>152</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="15" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <texture border="15" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>65</left>
@@ -394,7 +793,7 @@
                     <width>145</width>
                     <height>145</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_square_v2.png</texture>
+                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_square_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>70</left>
@@ -452,7 +851,7 @@
                     <width>277</width>
                     <height>157</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>50</left>
@@ -508,7 +907,7 @@
                     <width>284</width>
                     <height>163</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="15" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <texture border="15" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>44</left>
@@ -516,7 +915,7 @@
                     <width>277</width>
                     <height>157</height>
                     <aspectratio align="center" aligny="center">keep</aspectratio>
-                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_card_landscape_v4.png</texture>
+                    <texture border="13" colordiffuse="$INFO[Window(Home).Property(CuratrCard)]">special://home/addons/plugin.video.curatr/resources/media/artwork_surface_landscape_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>50</left>
@@ -574,6 +973,15 @@
             <orientation>vertical</orientation>
             <showonepage>false</showonepage>
         </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>503</left>
+            <top>943</top>
+            <width>304</width>
+            <height>96</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(500)]</visible>
+        </control>
         <control type="button" id="500">
             <left>515</left>
             <top>955</top>
@@ -585,8 +993,45 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturenofocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrSecondary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrFooterButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>515</left>
+            <top>955</top>
+            <width>280</width>
+            <height>72</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_280x72_b18_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(500)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>515</left>
+            <top>955</top>
+            <width>280</width>
+            <height>72</height>
+            <texture border="18" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(500)] + [!Control.HasFocus(500)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>515</left>
+            <top>955</top>
+            <width>280</width>
+            <height>72</height>
+            <texture border="18" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(500)] + [Control.HasFocus(500)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>808</left>
+            <top>943</top>
+            <width>354</width>
+            <height>96</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(501)]</visible>
         </control>
         <control type="button" id="501">
             <left>820</left>
@@ -599,8 +1044,45 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturenofocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrFooterButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>820</left>
+            <top>955</top>
+            <width>330</width>
+            <height>72</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_330x72_b18_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(501)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>820</left>
+            <top>955</top>
+            <width>330</width>
+            <height>72</height>
+            <texture border="18" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(501)] + [!Control.HasFocus(501)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>820</left>
+            <top>955</top>
+            <width>330</width>
+            <height>72</height>
+            <texture border="18" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(501)] + [Control.HasFocus(501)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1163</left>
+            <top>943</top>
+            <width>304</width>
+            <height>96</height>
+            <texture border="30" infill="false">special://home/addons/plugin.video.curatr/resources/media/rounded_shadow_v3.png</texture>
+            <visible>[Control.IsVisible(502)]</visible>
         </control>
         <control type="button" id="502">
             <left>1175</left>
@@ -613,8 +1095,36 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <aligny>center</aligny>
-            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrDanger)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturefocus>
-            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texturenofocus>
+            <texturefocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrDanger)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturefocus>
+            <texturenofocus border="18" colordiffuse="$INFO[Window(Home).Property(CuratrFooterButton)]">special://home/addons/plugin.video.curatr/resources/media/rounded_control_v3.png</texturenofocus>
+        </control>
+        <control type="image">
+            <description>Curatr corner finish</description>
+            <left>1175</left>
+            <top>955</top>
+            <width>280</width>
+            <height>72</height>
+            <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_280x72_b18_v2.png</texture>
+            <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+            <visible>[Control.IsVisible(502)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1175</left>
+            <top>955</top>
+            <width>280</width>
+            <height>72</height>
+            <texture border="18" infill="false" colordiffuse="16FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
+            <visible>[Control.IsVisible(502)] + [!Control.HasFocus(502)]</visible>
+        </control>
+        <control type="image">
+            <description>Curatr surface finish</description>
+            <left>1175</left>
+            <top>955</top>
+            <width>280</width>
+            <height>72</height>
+            <texture border="18" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+            <visible>[Control.IsVisible(502)] + [Control.HasFocus(502)]</visible>
         </control>
         <control type="list" id="310">
             <left>710</left>
@@ -641,7 +1151,24 @@
                     <top>6</top>
                     <width>40</width>
                     <height>40</height>
-                    <texture colordiffuse="$INFO[ListItem.Property(CuratrColour)]" border="12">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+                    <texture colordiffuse="$INFO[ListItem.Property(CuratrColour)]" border="12">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
+                </control>
+                <control type="image">
+                    <description>Curatr corner finish</description>
+                    <left>6</left>
+                    <top>6</top>
+                    <width>40</width>
+                    <height>40</height>
+                    <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_40x40_b12_v2.png</texture>
+                    <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+                </control>
+                <control type="image">
+                    <description>Curatr surface finish</description>
+                    <left>6</left>
+                    <top>6</top>
+                    <width>40</width>
+                    <height>40</height>
+                    <texture border="12" infill="false" colordiffuse="12FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>12</left>
@@ -661,11 +1188,37 @@
                     <texture colordiffuse="$INFO[Window(Home).Property(CuratrPrimary)]" border="16">special://home/addons/plugin.video.curatr/resources/media/rounded_rect_v1.png</texture>
                 </control>
                 <control type="image">
+                    <description>Curatr corner finish</description>
+                    <left>2</left>
+                    <top>2</top>
+                    <width>48</width>
+                    <height>48</height>
+                    <texture border="16" infill="false" colordiffuse="80FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_focus_outline_v1.png</texture>
+                    <visible>[Control.HasFocus(310)]</visible>
+                </control>
+                <control type="image">
                     <left>6</left>
                     <top>6</top>
                     <width>40</width>
                     <height>40</height>
-                    <texture colordiffuse="$INFO[ListItem.Property(CuratrColour)]" border="12">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v2.png</texture>
+                    <texture colordiffuse="$INFO[ListItem.Property(CuratrColour)]" border="12">special://home/addons/plugin.video.curatr/resources/media/rounded_surface_v3.png</texture>
+                </control>
+                <control type="image">
+                    <description>Curatr corner finish</description>
+                    <left>6</left>
+                    <top>6</top>
+                    <width>40</width>
+                    <height>40</height>
+                    <texture>special://home/addons/plugin.video.curatr/resources/media/button_sheen_40x40_b12_v2.png</texture>
+                    <colordiffuse>$INFO[Window(Home).Property(CuratrSheenColour)]</colordiffuse>
+                </control>
+                <control type="image">
+                    <description>Curatr surface finish</description>
+                    <left>6</left>
+                    <top>6</top>
+                    <width>40</width>
+                    <height>40</height>
+                    <texture border="12" infill="false" colordiffuse="12FFFFFF">special://home/addons/plugin.video.curatr/resources/media/rounded_outline_v3.png</texture>
                 </control>
                 <control type="image">
                     <left>12</left>

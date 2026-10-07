@@ -1,7 +1,10 @@
 import re
+import unicodedata
 from urllib.parse import urlparse
 
 import requests
+
+from .keyword_matcher import candidate_matches
 
 
 class CatalogueError(Exception):
@@ -16,6 +19,17 @@ class TMDBClient:
         self.region = (str(region or "GB").strip().upper() or "GB")[:2]
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": user_agent or "curatr"})
+        self._filter_details = {}
+        self._filter_detail_calls = 0
+        self._credit_cache = {}
+
+    def begin_keyword_search(self):
+        self._filter_detail_calls = 0
+
+    @staticmethod
+    def _title_key(value):
+        value = unicodedata.normalize("NFKD", str(value or "")).casefold()
+        return "".join(char for char in value if char.isalnum() and not unicodedata.combining(char))
 
     @staticmethod
     def _normalise_credential(value):
@@ -39,8 +53,9 @@ class TMDBClient:
             response = self.session.get(
                 self.BASE_URL + path, params=query, headers=headers, timeout=25
             )
-        except requests.RequestException as exc:
-            raise CatalogueError("Could not contact TMDB: %s" % exc)
+        except requests.RequestException:
+            # Request exceptions can contain a credential-bearing query URL.
+            raise CatalogueError("Could not contact TMDB. Check your connection and try again.") from None
         if response.status_code >= 400:
             if response.status_code in (401, 403):
                 raise CatalogueError(
@@ -51,7 +66,10 @@ class TMDBClient:
                 raise CatalogueError("TMDB request limit reached. Try again later; cached curatr data will be reused when available.")
             raise CatalogueError("TMDB request failed (HTTP %s)." % response.status_code)
         try:
-            return response.json()
+            data = response.json()
+            if not isinstance(data, dict):
+                raise CatalogueError("TMDB returned an unexpected response. Try again.")
+            return data
         except ValueError:
             raise CatalogueError("TMDB returned an unreadable response.")
 
@@ -68,7 +86,11 @@ class TMDBClient:
         if not rows and year:
             params.pop("year", None)
             rows = (self._get("/search/movie", params).get("results") or [])
-        return rows[0] if rows and isinstance(rows[0], dict) else None
+        rows = [row for row in rows if isinstance(row, dict) and row.get("id")]
+        wanted = self._title_key(title)
+        exact = [row for row in rows if wanted in (self._title_key(row.get("title")), self._title_key(row.get("original_title")))]
+        dated = [row for row in (exact or rows) if str(row.get("release_date") or "")[:4] == str(year)] if year else []
+        return (dated or exact or rows or [None])[0]
 
     def search_show(self, title, year=0):
         params = {"query": str(title or ""), "include_adult": "false"}
@@ -109,45 +131,129 @@ class TMDBClient:
         rows = data.get("results") or [] if isinstance(data, dict) else []
         return [row for row in rows if isinstance(row, dict) and row.get("name")][:max(1, min(20, int(limit)))]
 
-    def resolve_people(self, references, maximum=3):
+    def resolve_people(self, references, maximum=3, strict=False):
         """Resolve natural person references, including generic sibling collectives."""
         output = []
         seen = set()
-        for reference in references or []:
+        queries, searches = set(), {}
+        for group, reference in enumerate(references or []):
             if not isinstance(reference, dict):
                 continue
             query = str(reference.get("query") or "").strip()
             role = str(reference.get("role") or "").strip().lower()
             if not query:
                 continue
+            query_marker = (query.casefold(), role)
+            if query_marker in queries:
+                continue
+            queries.add(query_marker)
             collective = bool(re.search(r"\b(?:brothers|sisters|siblings)\b", query, re.I))
             search_query = re.sub(r"\b(?:the|brothers|sisters|siblings)\b", " ", query, flags=re.I)
             search_query = " ".join(search_query.split()) if collective else query
-            rows = self.search_people(search_query, limit=8 if collective else 3)
-            if role == "director":
-                directed = [row for row in rows if str(row.get("known_for_department") or "").lower() in ("directing", "writing")]
-                rows = directed or rows
+            search_marker = search_query.casefold()
+            if search_marker not in searches:
+                searches[search_marker] = self.search_people(search_query, limit=8 if collective else 3)
+            rows = searches[search_marker]
+            exact = [row for row in rows if self._title_key(row.get("name")) == self._title_key(query)]
+            rows = exact or rows
+            if not rows and strict:
+                raise CatalogueError("TMDB could not find the named person '%s'. Edit that name or remove its tag." % query)
             take = 2 if collective else 1
+            initial_count = len(output)
             for row in rows[:take]:
                 try:
                     person_id = int(row.get("id"))
                 except (TypeError, ValueError):
                     continue
-                if person_id in seen:
+                marker = (person_id, role, group)
+                if marker in seen:
                     continue
-                seen.add(person_id)
+                seen.add(marker)
                 output.append({
                     "id": person_id, "name": str(row.get("name") or query), "role": role,
                     "department": str(row.get("known_for_department") or ""),
+                    "group": group,
                 })
                 if len(output) >= max(1, min(6, int(maximum))):
                     return output
+            if strict and len(output) == initial_count:
+                raise CatalogueError("TMDB could not resolve the named person '%s'. Edit or remove its tag." % query)
         return output
 
     def movie_details(self, movie_id):
         return self._get("/movie/%s" % int(movie_id), {
             "append_to_response": "keywords,credits", "language": "en-GB",
         })
+
+    def _candidate_details(self, movie_id):
+        key = str(movie_id)
+        if key not in self._filter_details:
+            if self._filter_detail_calls >= 100:
+                raise CatalogueError("Keyword Matching reached its 100 metadata-check limit. Narrow the request or remove a runtime/country filter, then try again.")
+            details = self._get("/movie/%s" % int(movie_id), {"language": "en-GB"})
+            if not isinstance(details, dict) or str(details.get("id") or "") != key:
+                raise CatalogueError("TMDB returned incomplete movie details while checking your filters. Try again.")
+            self._filter_detail_calls += 1
+            self._filter_details[key] = self._compact(details)
+            if len(self._filter_details) > 200:
+                self._filter_details.pop(next(iter(self._filter_details)))
+        return dict(self._filter_details[key])
+
+    def matches_filters(self, candidate, rules):
+        """Check cheap fields first and fetch only missing required metadata."""
+        preliminary = dict(rules)
+        missing = []
+        for fields, value in ((("runtime_min", "runtime_max"), "runtime"), (("country",), "origin_country"),
+                              (("language",), "original_language"), (("genres", "excluded_genres"), "genre_ids"),
+                              (("rating_min",), "rating"), (("year_min", "year_max"), "year")):
+            if any(rules.get(field) for field in fields) and candidate.get(value) in (None, "", 0, []):
+                missing.append(value)
+                for field in fields:
+                    preliminary[field] = [] if isinstance(rules.get(field), list) else 0
+        if (rules.get("request_rules") or {}).get("window") and not candidate.get("released"):
+            missing.append("released")
+            preliminary["request_rules"] = dict(rules["request_rules"], window="")
+        if not candidate_matches(candidate, preliminary):
+            return False
+        if missing:
+            if not candidate.get("tmdb_id"):
+                return False
+            details = self._candidate_details(candidate["tmdb_id"])
+            for field in missing:
+                candidate[field] = details.get(field)
+        return candidate_matches(candidate, rules)
+
+    @staticmethod
+    def _role_credits(data, role):
+        crew = [row for row in data.get("crew") or [] if isinstance(row, dict)]
+        if role == "director":
+            return [row for row in crew if str(row.get("job") or "").casefold() == "director"]
+        if role == "writer":
+            jobs = {"writer", "screenplay", "teleplay", "story", "novel", "characters", "original story", "original film writer", "book", "comic book"}
+            return [row for row in crew if str(row.get("department") or "").casefold() == "writing" or str(row.get("job") or "").casefold() in jobs]
+        if role == "crew":
+            return crew
+        cast = [row for row in data.get("cast") or [] if isinstance(row, dict)]
+        return cast if role == "cast" else cast + crew
+
+    def credited_movies(self, people):
+        """Intersect complete credits; members of a collective share one group."""
+        groups, movies = {}, {}
+        for index, person in enumerate((people or [])[:6]):
+            person_id = int(person["id"])
+            if person_id not in self._credit_cache:
+                self._credit_cache[person_id] = self._get("/person/%s/movie_credits" % person_id, {"language": "en-GB"})
+                if len(self._credit_cache) > 12:
+                    self._credit_cache.pop(next(iter(self._credit_cache)))
+            group = groups.setdefault(person.get("group", index), set())
+            for row in self._role_credits(self._credit_cache[person_id], person.get("role")):
+                compact = self._compact(row)
+                marker = str(compact.get("tmdb_id") or "")
+                if marker and compact.get("title") and not row.get("adult"):
+                    group.add(marker)
+                    movies[marker] = compact
+        allowed = set.intersection(*groups.values()) if groups else set()
+        return sorted((movies[key] for key in allowed), key=lambda row: (float(row.get("popularity") or 0), float(row.get("rating") or 0), int(row.get("votes") or 0)), reverse=True)
 
     def list_item_details(self, tmdb_id, media_type="movie"):
         """Fetch only metadata Kodi can display directly on a title list item."""
@@ -163,18 +269,13 @@ class TMDBClient:
 
     def analyse_people(self, references, film_limit=15, detail_limit=4):
         """Build a bounded metadata profile without any AI interpretation."""
-        resolved = self.resolve_people(references, maximum=3)
+        resolved = self.resolve_people(references, maximum=6, strict=True)
         genre_weights, keyword_weights, company_weights, cast_weights = {}, {}, {}, {}
         source_movies = []
         seen_movies = set()
         for person in resolved:
             credits = self._get("/person/%s/movie_credits" % person["id"], {"language": "en-GB"})
-            if person.get("role") == "director":
-                rows = [row for row in credits.get("crew") or [] if str(row.get("job") or "").lower() == "director"]
-            elif person.get("role") == "crew":
-                rows = credits.get("crew") or []
-            else:
-                rows = credits.get("cast") or []
+            rows = self._role_credits(credits, person.get("role"))
             rows = [row for row in rows if isinstance(row, dict) and row.get("id") and row.get("title")]
             rows.sort(key=lambda row: (float(row.get("vote_average") or 0), int(row.get("vote_count") or 0), float(row.get("popularity") or 0)), reverse=True)
             representative = []
@@ -226,29 +327,85 @@ class TMDBClient:
             return ""
         return "https://image.tmdb.org/t/p/%s/%s" % (str(size or "w1280").strip("/"), value.lstrip("/"))
 
-    def recommendation_pool(self, reference_movies, limit=60):
-        collected = []
-        seen = set()
-        for reference in (reference_movies or [])[:3]:
-            if not isinstance(reference, dict) or not reference.get("title"):
-                continue
-            match = self.search_movie(reference.get("title"), reference.get("year"))
+    def recommendation_pool(self, reference_movies, limit=60, accept=None, diagnostics=None):
+        """Apply local filters before filling a bounded, shared result budget."""
+        wanted = max(1, min(100, int(limit or 60)))
+        references = [row for row in (reference_movies or [])[:3] if isinstance(row, dict) and row.get("title")]
+        sources, seen, collected, overflow = [], set(), [], []
+        for reference in references:
+            match = self.search_movie(reference["title"], reference.get("year"))
             movie_id = (match or {}).get("id")
-            if not movie_id:
+            year = str((match or {}).get("release_date") or "")[:4]
+            if not movie_id or (reference.get("year") and year != str(reference["year"])):
+                if diagnostics is not None:
+                    raise CatalogueError("TMDB could not find the reference film '%s'%s. Check its title/year or remove the reference tag." % (reference["title"], " (%s)" % reference["year"] if reference.get("year") else ""))
                 continue
-            data = self._get("/movie/%s/recommendations" % int(movie_id), {
-                "region": self.region, "page": 1,
-            })
-            for row in data.get("results") or []:
+            if diagnostics is not None:
+                diagnostics.setdefault("references", []).append({"title": match.get("title") or reference["title"], "year": int(year) if year.isdigit() else 0, "tmdb_id": movie_id})
+            if not any(source["id"] == movie_id for source in sources):
+                sources.append({"id": movie_id, "page": 0, "done": False})
+        def page_rows(source):
+            source["page"] += 1
+            data = self._get("/movie/%s/recommendations" % int(source["id"]), {"page": source["page"]})
+            rows = data.get("results") or []
+            source["done"] = not rows or source["page"] >= min(5, int(data.get("total_pages") or 1))
+            if diagnostics is not None:
+                diagnostics["pages"] = diagnostics.get("pages", 0) + 1
+            output = []
+            for row in rows:
+                if not isinstance(row, dict) or row.get("adult"):
+                    continue
                 compact = self._compact(row)
-                marker = (compact.get("title", "").casefold(), compact.get("year"))
-                if not compact.get("title") or marker in seen:
+                marker = str(compact.get("tmdb_id") or "")
+                if not marker or not compact.get("title") or marker in seen:
                     continue
                 seen.add(marker)
-                collected.append(compact)
-                if len(collected) >= limit:
-                    return collected
-        return collected
+                if accept is None or accept(compact):
+                    output.append(compact)
+            return output
+        for index, source in enumerate(sources):
+            allowance = (wanted - len(collected) + len(sources) - index - 1) // (len(sources) - index)
+            initial = len(collected)
+            while not source["done"] and len(collected) - initial < allowance:
+                for row in page_rows(source):
+                    if len(collected) - initial < allowance:
+                        collected.append(row)
+                    else:
+                        overflow.append(row)
+            if len(collected) >= wanted:
+                return collected[:wanted]
+        collected.extend(overflow[:wanted - len(collected)])
+        # A sparse second reference must not strand usable results from the first.
+        for source in sources:
+            while not source["done"] and len(collected) < wanted:
+                collected.extend(page_rows(source)[:wanted - len(collected)])
+        return collected[:wanted]
+
+    def history_movies(self, watched, rules, limit=100, accept=None):
+        """Resolve cached history through TMDB, with no linked Trakt requirement."""
+        output, seen, searches = [], set(), {}
+        for row in watched:
+            candidate = {"title": row.get("title"), "year": row.get("year"), "tmdb_id": row.get("tmdb_id"),
+                         "trakt_id": row.get("trakt_id"), "imdb_id": row.get("imdb_id")}
+            if not candidate["tmdb_id"]:
+                search_key = (self._title_key(candidate["title"]), candidate["year"])
+                if search_key not in searches:
+                    if len(searches) >= 100:
+                        raise CatalogueError("Keyword Matching reached its 100 history-title lookup limit. Narrow the viewing-history rule and try again.")
+                    searches[search_key] = self.search_movie(candidate["title"], candidate["year"])
+                match = searches[search_key]
+                if not match:
+                    continue
+                candidate.update(self._compact(match))
+            marker = str(candidate["tmdb_id"])
+            if marker in seen:
+                continue
+            seen.add(marker)
+            if (accept(candidate) if accept is not None else self.matches_filters(candidate, rules)):
+                output.append(candidate)
+            if len(output) >= max(1, min(100, int(limit))):
+                break
+        return output
 
     def similar_titles(self, reference, limit=60):
         """Return TMDB recommendations for one movie or whole TV show."""
@@ -280,40 +437,12 @@ class TMDBClient:
                 output.append(compact)
                 if len(output) >= wanted:
                     return output
-        return output
-
-    def person_credits(self, query, role="", limit=80):
-        people = self.search_people(query, limit=5)
-        if not people:
-            return []
-        person_id = people[0].get("id")
-        if not person_id:
-            return []
-        data = self._get("/person/%s/movie_credits" % int(person_id), {
-            "language": "en-GB",
-        })
-        rows = []
-        role = str(role or "").lower()
-        if role == "director":
-            rows = [row for row in data.get("crew") or [] if str(row.get("job") or "").lower() == "director"]
-        elif role == "cast":
-            rows = data.get("cast") or []
-        else:
-            rows = (data.get("cast") or []) + (data.get("crew") or [])
-        output = []
-        seen = set()
-        for row in rows:
-            compact = self._compact(row)
-            marker = compact.get("tmdb_id")
-            if marker and marker not in seen and compact.get("title"):
-                seen.add(marker)
-                output.append(compact)
-            if len(output) >= max(1, min(100, int(limit))):
+            if page >= int(data.get("total_pages") or 5):
                 break
         return output
 
-    def discover_movies(self, rules, limit=100, extra_params=None):
-        """Return a compact candidate pool using one or two TMDB discover pages."""
+    def discover_movies(self, rules, limit=100, extra_params=None, accept=None):
+        """Read at most five pages, applying local exclusions before the result cap."""
         rules = rules if isinstance(rules, dict) else {}
         sort_map = {
             "recent": "primary_release_date.desc",
@@ -327,11 +456,20 @@ class TMDBClient:
             "sort_by": sort_map.get(str(rules.get("sort") or "balanced"), "popularity.desc"),
         }
         if rules.get("genres"):
-            params["with_genres"] = ",".join(str(value) for value in rules["genres"])
+            params["with_genres"] = ("|" if rules.get("genre_match") == "any" else ",").join(str(value) for value in rules["genres"])
+        if rules.get("excluded_genres"):
+            params["without_genres"] = ",".join(str(value) for value in rules["excluded_genres"])
         if rules.get("year_min"):
             params["primary_release_date.gte"] = "%d-01-01" % int(rules["year_min"])
         if rules.get("year_max"):
             params["primary_release_date.lte"] = "%d-12-31" % int(rules["year_max"])
+        request = rules.get("request_rules") or {}
+        if request.get("window"):
+            from .list_request import date_window
+            from datetime import timedelta
+            start, end = date_window(request)
+            params["primary_release_date.gte"] = max(params.get("primary_release_date.gte", "0001-01-01"), start.isoformat())
+            params["primary_release_date.lte"] = min(params.get("primary_release_date.lte", "9999-12-31"), (end - timedelta(days=1)).isoformat())
         if rules.get("runtime_min"):
             params["with_runtime.gte"] = int(rules["runtime_min"])
         if rules.get("runtime_max"):
@@ -368,7 +506,7 @@ class TMDBClient:
         wanted = max(20, min(100, int(limit)))
         output = []
         seen = set()
-        pages = min(5, (wanted + 19) // 20)
+        pages = 5 if accept is not None else min(5, (wanted + 19) // 20)
         for page in range(1, pages + 1):
             params["page"] = page
             data = self._get("/discover/movie", params)
@@ -380,12 +518,15 @@ class TMDBClient:
                 marker = compact.get("tmdb_id")
                 if marker and marker not in seen and compact.get("title"):
                     seen.add(marker)
-                    output.append(compact)
+                    if accept is None or accept(compact):
+                        output.append(compact)
                 if len(output) >= wanted:
                     return output
+            if page >= int(data.get("total_pages") or 5):
+                break
         return output
 
-    def discover_shows(self, rules, limit=100):
+    def discover_shows(self, rules, limit=100, accept=None):
         """Return whole-show candidates from TMDB; seasons and episodes are never queried."""
         rules = rules if isinstance(rules, dict) else {}
         movie_to_tv_genres = {
@@ -405,11 +546,20 @@ class TMDBClient:
         }
         genres = [movie_to_tv_genres.get(int(value), int(value)) for value in rules.get("genres") or []]
         if genres:
-            params["with_genres"] = ",".join(str(value) for value in genres)
+            params["with_genres"] = ("|" if rules.get("genre_match") == "any" else ",").join(str(value) for value in genres)
+        if rules.get("excluded_genres"):
+            params["without_genres"] = ",".join(str(movie_to_tv_genres.get(int(value), int(value))) for value in rules["excluded_genres"])
         if rules.get("year_min"):
             params["first_air_date.gte"] = "%d-01-01" % int(rules["year_min"])
         if rules.get("year_max"):
             params["first_air_date.lte"] = "%d-12-31" % int(rules["year_max"])
+        request = rules.get("request_rules") or {}
+        if request.get("window"):
+            from .list_request import date_window
+            from datetime import timedelta
+            start, end = date_window(request)
+            params["first_air_date.gte"] = max(params.get("first_air_date.gte", "0001-01-01"), start.isoformat())
+            params["first_air_date.lte"] = min(params.get("first_air_date.lte", "9999-12-31"), (end - timedelta(days=1)).isoformat())
         if rules.get("rating_min"):
             params["vote_average.gte"] = float(rules["rating_min"])
             params["vote_count.gte"] = 20
@@ -418,22 +568,33 @@ class TMDBClient:
         if rules.get("country"):
             params["with_origin_country"] = str(rules["country"])
 
+        if rules.get("runtime_min"):
+            params["with_runtime.gte"] = int(rules["runtime_min"])
+        if rules.get("runtime_max"):
+            params["with_runtime.lte"] = int(rules["runtime_max"])
+
         wanted = max(20, min(100, int(limit)))
         output, seen = [], set()
-        for page in range(1, min(5, (wanted + 19) // 20) + 1):
+        for page in range(1, (5 if accept is not None else min(5, (wanted + 19) // 20)) + 1):
             params["page"] = page
             data = self._get("/discover/tv", params)
-            for row in data.get("results") or [] if isinstance(data, dict) else []:
+            rows = data.get("results") or [] if isinstance(data, dict) else []
+            if not rows:
+                break
+            for row in rows:
                 compact = self._compact_show(row)
                 marker = compact.get("tmdb_id")
                 if marker and marker not in seen and compact.get("title"):
                     seen.add(marker)
-                    output.append(compact)
+                    if accept is None or accept(compact):
+                        output.append(compact)
                 if len(output) >= wanted:
                     return output
+            if page >= int(data.get("total_pages") or 5):
+                break
         return output
 
-    def enriched_discovery_pool(self, rules, analysis, limit=100):
+    def enriched_discovery_pool(self, rules, analysis, limit=100, accept=None):
         """Discover across several loose metadata signals, then deduplicate."""
         rules = dict(rules or {})
         analysis = analysis or {}
@@ -464,7 +625,7 @@ class TMDBClient:
         per_variant = max(20, min(60, int(limit) // max(1, len(variants)) + 10))
         source_ids = {row.get("tmdb_id") for row in analysis.get("source_movies") or [] if row.get("tmdb_id")}
         for params in variants[:4]:
-            for row in self.discover_movies(rules, limit=per_variant, extra_params=params):
+            for row in self.discover_movies(rules, limit=per_variant, extra_params=params, accept=accept):
                 marker = row.get("tmdb_id")
                 if not marker or marker in seen or marker in source_ids:
                     continue
@@ -483,12 +644,15 @@ class TMDBClient:
         return {
             "title": str((row or {}).get("title") or (row or {}).get("original_title") or ""),
             "year": year,
+            "released": date,
             "tmdb_id": (row or {}).get("id"),
             "rating": (row or {}).get("vote_average"),
             "votes": (row or {}).get("vote_count"),
             "overview": str((row or {}).get("overview") or "")[:160],
             "popularity": (row or {}).get("popularity"),
-            "genre_ids": list((row or {}).get("genre_ids") or []),
+            "genre_ids": list((row or {}).get("genre_ids") or [genre["id"] for genre in (row or {}).get("genres") or [] if isinstance(genre, dict) and genre.get("id")]),
+            "runtime": (row or {}).get("runtime"),
+            "imdb_id": (row or {}).get("imdb_id"),
             "poster_path": str((row or {}).get("poster_path") or ""),
             "backdrop_path": str((row or {}).get("backdrop_path") or ""),
             "original_language": str((row or {}).get("original_language") or ""),
@@ -505,6 +669,7 @@ class TMDBClient:
         return {
             "title": str((row or {}).get("name") or (row or {}).get("original_name") or ""),
             "year": year, "tmdb_id": (row or {}).get("id"),
+            "released": date,
             "rating": (row or {}).get("vote_average"), "votes": (row or {}).get("vote_count"),
             "overview": str((row or {}).get("overview") or "")[:160],
             "popularity": (row or {}).get("popularity"),

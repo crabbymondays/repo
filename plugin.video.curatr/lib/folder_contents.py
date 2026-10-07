@@ -1,6 +1,7 @@
 import xbmcgui
 
 from .ui_theme import bold, skin_name
+from .action_icons import decorate_action
 
 
 _BACK_ACTIONS = {9, 10, 92}
@@ -52,7 +53,7 @@ class FolderContentsWindow(xbmcgui.WindowXMLDialog):
         item = xbmcgui.ListItem(label=str(row.get("label") or "Action"), offscreen=True)
         item.setProperty("CuratrDetail", str(row.get("detail") or ""))
         item.setProperty("CuratrDisabled", "true" if not row.get("enabled", True) else "false")
-        return item
+        return decorate_action(item, row)
 
     def onInit(self):
         try:

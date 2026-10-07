@@ -30,7 +30,7 @@ from lib.catalogue_clients import CatalogueError, MDBListClient, RatingResults
 def window(cls, *args):
     obj = object.__new__(cls)
     cls.__init__(obj, *args)
-    controls = {cid: FakeControl() for cid in (10, 11, 20, 21, 22, 23, 24, 25, 26, 27, 30, 31, 32, 33, 34, 100, 101, 102, 200, 201, 202, 203, 204, 300, 301, 302, 1020, 1022, 1023, 1024, 1025, 1026, 1027, 1100, 1101, 1102)}
+    controls = {cid: FakeControl() for cid in (10, 11, 20, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 100, 101, 102, 200, 201, 202, 203, 204, 300, 301, 302, 1020, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1100, 1101, 1102)}
     for cid, ctrl in controls.items():
         ctrl.control_id = cid
     obj.getControl = controls.__getitem__
@@ -639,8 +639,8 @@ class NavigationChecks(unittest.TestCase):
         self.assertFalse(controls[102].visible)
         self.assertFalse(controls[1102].visible)
         self.assertFalse(controls[204].visible)
-        self.assertTrue(controls[20].visible)
-        self.assertEqual(controls[20].label, dynamic.REFRESH_SUMMARY)
+        self.assertFalse(controls[20].visible)
+        self.assertEqual(controls[20].label, "")
         obj.onClick(101)
         self.assertEqual([controls[cid].label for cid in (200, 201, 202, 203, 204)], ["sources", "sort", "direction", "alternate_sources", "count"])
         self.assertTrue(controls[204].visible)
@@ -668,11 +668,523 @@ class NavigationChecks(unittest.TestCase):
             self.assertEqual(entries()[0]["key"], "2")
             execute("1", "remove")
             return None
-        with patch.object(dynamic_settings, "manage_collection", side_effect=manage):
+        def sources_window(*args):
+            obj = Mock(failed=False)
+            obj.doModal.side_effect = lambda: manage(*args)
+            return obj
+        with patch.object(dynamic_settings, "SourcesWindow", side_effect=sources_window):
             updated = dynamic_settings._edit_sources(curator, draft)
         self.assertEqual([s["id"] for s in updated["sources"]], ["2", "0"])
         self.assertEqual([s["id"] for s in original["sources"]], ["0", "1", "2"])
         curator._save_state.assert_not_called()
+
+
+class RequestAndEpisodeChecks(unittest.TestCase):
+    def test_history_and_schedules_do_not_pollute_catalogue_filters(self):
+        from lib.keyword_matcher import parse_prompt
+        from lib.list_request import parse_request
+        for phrase in ("crime films I haven't watched in the last 2 years", "crime films not watched in the last 2 months"):
+            rules = parse_prompt(phrase)
+            self.assertEqual(rules["history_mode"], "stale")
+            self.assertEqual((rules["year_min"], rules["year_max"]), (0, 0))
+            self.assertEqual(rules["request_rules"]["window"], "")
+        rules = parse_prompt("films similar to Up, update daily and hide watched items")
+        self.assertEqual(rules["reference_movies"], [{"title": "Up", "year": 0}])
+        self.assertEqual(rules["request_rules"]["refresh_hours"], 24)
+        self.assertEqual(parse_prompt("films by Stephen King I've seen twice")["person_query"], "Stephen King")
+        self.assertEqual(parse_request("films from my Kodi library")["source"], "")
+
+    def test_episode_source_cycles_and_date_editor_uses_an_editable_window(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import parse_prompt, confirmation_parts
+        obj = object.__new__(KeywordConfirmWindow)
+        obj.rules = parse_prompt("my episodes in next 45 days")
+        with patch("lib.keyword_confirm.xbmcgui.Dialog") as dialog:
+            for expected in ("kodi", "all", "trakt"):
+                obj._edit_part(next(p for p in confirmation_parts(obj.rules) if p["field"] == "episode_source"))
+                self.assertEqual(obj.rules["request_rules"]["source"], expected)
+            dialog.return_value.input.assert_not_called()
+            part = next(p for p in confirmation_parts(obj.rules) if p["field"] == "airing_window")
+            dialog.return_value.input.return_value = "next 45 days"
+            obj._edit_part(part)
+            self.assertEqual(dialog.return_value.input.call_args.kwargs["defaultt"], "next 45 days")
+            self.assertEqual(obj.rules["request_rules"]["window_days"], 45)
+
+    def test_episode_tags_can_be_removed_and_restored_from_plus(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import parse_prompt, confirmation_parts
+        from lib.list_request import validate_request
+        obj = object.__new__(KeywordConfirmWindow)
+        obj.rules = parse_prompt("my episodes in next 45 days refreshed every day")
+        original = copy.deepcopy(obj.rules["request_rules"])
+        for field in ("episode_source", "airing_window"):
+            part = next(p for p in confirmation_parts(obj.rules) if p["field"] == field)
+            obj._remove_part(part)
+            self.assertNotIn(field, [p["field"] for p in confirmation_parts(obj.rules)])
+            self.assertEqual(validate_request(obj.rules["request_rules"]), obj.rules["request_rules"])
+        with patch("lib.keyword_confirm.xbmcgui.Dialog") as dialog:
+            for label, value in (("Episode source", None), ("Airing window", "next 45 days")):
+                dialog.return_value.select.side_effect = lambda title, rows, label=label: rows.index(label)
+                dialog.return_value.input.return_value = value
+                obj._add_filter()
+            self.assertEqual(obj.rules["request_rules"], original)
+            self.assertEqual(dialog.return_value.input.call_count, 1)
+            dialog.return_value.select.side_effect = None
+            dialog.return_value.select.return_value = -1
+            obj._add_filter()
+            for label in ("Episode source", "Airing window", "Refresh schedule"):
+                self.assertNotIn(label, dialog.return_value.select.call_args.args[1])
+            self.assertNotIn("Actor", dialog.return_value.select.call_args.args[1])
+
+    def test_removing_all_episode_tags_survives_save_and_reopening(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import parse_prompt, confirmation_parts
+        prompt = "my episodes airing next 45 days refreshed every day"
+        rules = parse_prompt(prompt)
+        draft = {"prompt": prompt, "content_type": "episodes", "generation_method": "keyword",
+                 "request_rules": copy.deepcopy(rules["request_rules"]), "keyword_rules": rules,
+                 "regeneration_enabled": True, "regeneration_interval_hours": 24}
+        before = copy.deepcopy(draft)
+        def remove_tags(_path, _prompt, edited, **_kwargs):
+            obj = object.__new__(KeywordConfirmWindow)
+            obj.rules = edited
+            for part in confirmation_parts(edited): obj._remove_part(part)
+            return "create"
+        curator = fixture_curator()
+        with patch.object(core, "confirm_keyword_rules", side_effect=remove_tags):
+            updated = curator._edit_keyword_list_draft(draft)
+        self.assertIsNotNone(updated)
+        self.assertEqual(draft, before)
+        self.assertTrue(updated["regeneration_enabled"])
+        self.assertEqual(updated["regeneration_interval_hours"], 24)
+        curator._prepare_request_draft(updated)
+        reopened = curator._draft_keyword_rules(updated)
+        self.assertEqual(confirmation_parts(reopened), [])
+        self.assertGreater(reopened["confidence"], 0)
+        self.assertEqual(reopened["request_rules"]["content_type"], "episodes")
+        for field in ("source", "window"):
+            self.assertEqual(reopened["request_rules"][field], "")
+        self.assertEqual(reopened["request_rules"]["refresh_mode"], "on")
+
+    def test_cancelled_episode_tag_edits_keep_the_original_draft(self):
+        prompt = "my episodes airing next 45 days update daily"
+        rules = core.parse_prompt(prompt)
+        draft = {"prompt": prompt, "content_type": "episodes", "generation_method": "keyword",
+                 "request_rules": copy.deepcopy(rules["request_rules"]), "keyword_rules": rules,
+                 "regeneration_enabled": True}
+        before = copy.deepcopy(draft)
+        def cancel(_path, _prompt, edited, **_kwargs):
+            edited["request_rules"].update(source="", window="", window_days=0, refresh_mode="", refresh_hours=0)
+            return None
+        with patch.object(core, "confirm_keyword_rules", side_effect=cancel):
+            self.assertIsNone(fixture_curator()._edit_keyword_list_draft(draft))
+        self.assertEqual(draft, before)
+
+    def test_airing_window_inputs_preserve_existing_rules_on_invalid_or_cancelled_input(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import parse_prompt, confirmation_parts
+        obj = object.__new__(KeywordConfirmWindow)
+        obj.rules = parse_prompt("episodes in next 45 days update daily")
+        with patch("lib.keyword_confirm.xbmcgui.Dialog") as dialog:
+            part = next(p for p in confirmation_parts(obj.rules) if p["field"] == "airing_window")
+            for value in (None, "", "nonsense"):
+                before = copy.deepcopy(obj.rules)
+                dialog.return_value.input.return_value = value
+                obj._edit_part(part)
+                self.assertEqual(obj.rules, before)
+            dialog.return_value.input.return_value = "next calendar month"
+            obj._edit_part(next(p for p in confirmation_parts(obj.rules) if p["field"] == "airing_window"))
+            self.assertEqual(obj.rules["request_rules"]["window"], "next_calendar_month")
+
+    def test_inflected_refresh_wording_is_recognised_without_polluting_reference_titles(self):
+        from lib.keyword_matcher import parse_prompt
+        from lib.list_request import operational_request
+        examples = {"refreshed every day": 24, "refreshing daily": 24, "updated weekly": 168,
+                    "updating every two days": 48, "regenerated every 12 hours": 12}
+        for phrase, hours in examples.items():
+            rules = parse_prompt("films similar to Up, " + phrase)
+            self.assertEqual(rules["reference_movies"], [{"title": "Up", "year": 0}], phrase)
+            self.assertEqual(rules["request_rules"]["refresh_hours"], hours, phrase)
+            self.assertEqual((rules["year_min"], rules["year_max"]), (0, 0))
+            self.assertTrue(operational_request(phrase))
+
+    def test_episode_tags_use_the_standard_minus_plus_clicks_and_focus_navigation(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import parse_prompt, confirmation_parts
+        obj = object.__new__(KeywordConfirmWindow)
+        prompt = "My episodes releasing next refreshed every day"
+        KeywordConfirmWindow.__init__(obj, str(ROOT), prompt, parse_prompt(prompt), "", True, "Use Filters", True)
+        xml = ET.parse(ROOT / "resources/skins/Default/1080i/curatr-keyword-confirm.xml")
+        controls = {int(c.get("id")): FakeControl() for c in xml.iter("control") if c.get("id")}
+        obj.getControl = controls.__getitem__
+        obj.addControl = Mock()
+        obj.addControls = Mock()
+        obj.removeControls = Mock()
+        obj.setFocus = Mock()
+        obj.close = Mock()
+        obj.onInit()
+        self.assertNotEqual(obj.result, "fallback")
+        self.assertEqual(len(obj.filter_groups), 2)
+        for field in ("episode_source", "airing_window"):
+            parts = confirmation_parts(obj.rules)
+            index = next(i for i, p in enumerate(parts) if p["field"] == field)
+            minus = next(ident for ident, action in obj.control_actions.items() if action == ("remove", index))
+            obj.onClick(minus)
+            self.assertNotIn(field, [p["field"] for p in confirmation_parts(obj.rules)])
+        self.assertIn("all shows", controls[12].label)
+        self.assertIn("next 30 days", controls[12].label)
+        obj.onClick(obj.CREATE_ID)
+        self.assertEqual(obj.result, "create")
+        with patch("lib.keyword_confirm.xbmcgui.Dialog") as dialog:
+            dialog.return_value.select.side_effect = lambda title, rows: rows.index("Episode source")
+            plus = next(ident for ident, action in obj.control_actions.items() if action == ("add", -1))
+            obj.onClick(plus)
+        self.assertEqual(obj.rules["request_rules"]["source"], "trakt")
+        minus, label = obj.filter_groups[0]["controls"]
+        self.assertIs(minus.navigation[3], label)
+        self.assertIs(label.navigation[2], minus)
+        self.assertEqual(controls[100].xy[1] - (140 + controls[14].height), 40)
+
+    def test_refresh_schedule_is_not_a_keyword_filter_or_plus_option(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import confirmation_parts, format_rules, parse_prompt
+        for prompt in ("crime films", "drama TV shows", "my episodes"):
+            for schedule in ("", "update daily", "manual refresh"):
+                obj = object.__new__(KeywordConfirmWindow)
+                obj.rules = parse_prompt(prompt + " " + schedule)
+                self.assertNotIn("refresh", [p["field"] for p in confirmation_parts(obj.rules)])
+                self.assertNotIn("refresh", format_rules(obj.rules).casefold())
+                with patch("lib.keyword_confirm.xbmcgui.Dialog") as dialog:
+                    dialog.return_value.select.return_value = -1
+                    obj._add_filter()
+                    self.assertNotIn("Refresh schedule", dialog.return_value.select.call_args.args[1])
+        self.assertEqual(parse_prompt("update daily")["confidence"], 0)
+
+    def test_keyword_filter_edits_preserve_custom_behavior_refresh_settings(self):
+        from lib.keyword_matcher import parse_prompt
+        prompt = "crime episodes next 45 days update daily"
+        for enabled in (True, False):
+            rules = parse_prompt(prompt)
+            draft = {"prompt": prompt, "content_type": "episodes", "generation_method": "keyword",
+                     "keyword_rules": rules, "request_rules": copy.deepcopy(rules["request_rules"]),
+                     "regeneration_enabled": enabled, "regeneration_interval_hours": 37}
+            before = copy.deepcopy(draft)
+            def edit_filters(_path, _prompt, edited, **_kwargs):
+                edited["request_rules"].update(window="next_days", window_days=7)
+                return "create"
+            with patch.object(core, "confirm_keyword_rules", side_effect=edit_filters):
+                updated = fixture_curator()._edit_keyword_list_draft(draft)
+            self.assertEqual(draft, before)
+            self.assertIs(updated["regeneration_enabled"], enabled)
+            self.assertEqual(updated["regeneration_interval_hours"], 37)
+            self.assertEqual(updated["request_rules"]["window_days"], 7)
+
+    def test_new_keyword_request_can_seed_the_behavior_refresh_schedule(self):
+        draft = {"prompt": "crime episodes", "generation_method": "keyword", "content_type": "episodes",
+                 "regeneration_enabled": False, "regeneration_interval_hours": 37}
+        with patch.object(core, "confirm_keyword_rules", side_effect=("edit", "create")), patch.object(core.xbmcgui, "Dialog") as dialog:
+            dialog.return_value.input.return_value = "crime episodes refreshed every two days"
+            updated = fixture_curator()._edit_keyword_list_draft(draft)
+        self.assertTrue(updated["regeneration_enabled"])
+        self.assertEqual(updated["regeneration_interval_hours"], 48)
+
+    def test_removed_episode_constraints_use_the_default_public_window(self):
+        from datetime import date
+        from lib import episode_lists
+        from lib.list_request import date_window, validate_request
+        with tempfile.TemporaryDirectory() as profile:
+            curator = self.episode_curator(profile)
+            curator._has_oauth = Mock(return_value=False)
+            curator.trakt.calendar_shows.return_value = [self.episode()]
+            request = validate_request({"content_type": "episodes", "hide_watched": False})
+            with patch.object(episode_lists, "date_window", side_effect=lambda value: date_window(value, date(2026, 10, 5))):
+                rows, window = episode_lists.generate(curator, request, {}, 20)
+            self.assertEqual([row["episode"] for row in rows], [1])
+            curator.trakt.calendar_shows.assert_called_once()
+            self.assertFalse(curator.trakt.calendar_shows.call_args.kwargs["personal"])
+            self.assertLessEqual(curator.trakt.calendar_shows.call_args.args[1], 33)
+            self.assertEqual(window["start"], "2026-10-05")
+            self.assertEqual(window["end"], "2026-11-03")
+            self.assertEqual(request["source"], "")
+            self.assertEqual(request["window"], "")
+
+    def test_stale_history_uses_timezone_aware_elapsed_time(self):
+        from datetime import datetime, timezone
+        from lib.episode_lists import history_matches
+        now = datetime(2026, 10, 5, 12, tzinfo=timezone.utc)
+        rules = {"history_mode": "stale", "history_days": 1}
+        self.assertTrue(history_matches(1, "2026-10-04T14:00:00+02:00", rules, now))
+        self.assertFalse(history_matches(1, "2026-10-04T12:01:00Z", rules, now))
+        self.assertFalse(history_matches(0, "2020-01-01T00:00:00Z", rules, now))
+        self.assertFalse(history_matches(1, "invalid", rules, now))
+
+    def test_history_language_and_display_roundtrip(self):
+        from lib.keyword_matcher import parse_prompt, confirmation_parts
+        examples = {"unwatched": "never", "not watched yet": "never", "not watched before": "never",
+                    "not watched in the last two years": "stale", "last seen 6 weeks ago": "stale",
+                    "seen twice": "plays", "watched at most 3 times": "plays", "watched before": "watched",
+                    "including watched items": "include"}
+        for phrase, mode in examples.items():
+            rules = parse_prompt(phrase)
+            self.assertEqual(rules["history_mode"], mode, phrase)
+            part = next(p for p in confirmation_parts(rules) if p["field"] == "history")
+            edited = parse_prompt(part["connector"] + " " + part["text"])
+            for key in ("history_mode", "history_days", "history_plays", "history_comparison", "exclude_watched"):
+                self.assertEqual(rules[key], edited[key], (phrase, key))
+
+    def test_history_add_keeps_false_and_invalid_input_keeps_existing_rules(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import parse_prompt
+        for phrase in ("not watched in the last 2 years", "seen twice", "nonsense"):
+            obj = object.__new__(KeywordConfirmWindow)
+            obj.rules = parse_prompt("crime")
+            original = copy.deepcopy(obj.rules)
+            with patch("lib.keyword_confirm.xbmcgui.Dialog") as dialog:
+                dialog.return_value.select.side_effect = lambda title, rows: rows.index("Viewing history")
+                dialog.return_value.input.return_value = phrase
+                obj._add_filter()
+                if phrase == "nonsense":
+                    self.assertEqual(obj.rules, original)
+                    dialog.return_value.ok.assert_called_once()
+                else:
+                    self.assertFalse(obj.rules["exclude_watched"])
+                    self.assertTrue(obj.rules["history_mode"])
+
+    def test_history_edit_does_not_erase_never_watched(self):
+        from lib.keyword_confirm import KeywordConfirmWindow
+        from lib.keyword_matcher import parse_prompt, confirmation_parts
+        obj = object.__new__(KeywordConfirmWindow)
+        obj.rules = parse_prompt("never watched")
+        part = next(p for p in confirmation_parts(obj.rules) if p["field"] == "history")
+        with patch("lib.keyword_confirm.xbmcgui.Dialog") as dialog:
+            dialog.return_value.input.return_value = part["text"]
+            obj._edit_part(part)
+        self.assertEqual(obj.rules["history_mode"], "never")
+
+    def test_request_interpretation_is_cached_and_manual_schedule_wins(self):
+        from lib.list_request import parse_request
+        curator = fixture_curator()
+        curator.ai = Mock()
+        prompt = "make me a list of my episodes airing in the next month, update daily and hide watched items"
+        curator.ai.interpret_list_request.return_value = parse_request(prompt)
+        draft = {"prompt": prompt, "generation_method": "ai", "content_type": "movies"}
+        curator._prepare_request_draft(draft)
+        self.assertEqual(draft["content_type"], "episodes")
+        self.assertEqual(draft["regeneration_interval_hours"], 24)
+        draft["regeneration_interval_hours"] = 37
+        curator._prepare_request_draft(draft)
+        self.assertEqual(draft["regeneration_interval_hours"], 37)
+        curator.ai.interpret_list_request.assert_called_once_with(prompt)
+
+    def test_episode_date_windows_cross_years_and_leap_months(self):
+        from datetime import date
+        from lib.list_request import date_window, parse_request, validate_request
+        self.assertEqual(date_window(parse_request("episodes during next month"), date(2026, 12, 20)), (date(2027, 1, 1), date(2027, 2, 1)))
+        self.assertEqual(date_window(parse_request("episodes during next calendar month"), date(2028, 1, 10)), (date(2028, 2, 1), date(2028, 3, 1)))
+        self.assertEqual(date_window(parse_request("episodes in the next month"), date(2026, 12, 20)), (date(2026, 12, 20), date(2027, 1, 19)))
+        with self.assertRaises(ValueError): validate_request({"window_days": 1000})
+
+    def episode_curator(self, profile):
+        curator = fixture_curator()
+        curator.profile_dir = profile
+        curator.addon = FakeAddon(profile)
+        curator.state.update(access_token="test", trakt_username="fixture")
+        curator._preference_history_mode = Mock(return_value="trakt")
+        curator.trakt = Mock(token_store={"created_at": 1})
+        curator.trakt.watched_shows.return_value = []
+        return curator
+
+    @staticmethod
+    def episode(number=1, aired="2026-10-06T12:00:00Z", ident=100):
+        return {"first_aired": aired, "episode": {"title": "Episode", "season": 1, "number": number, "ids": {"trakt": ident, "tmdb": 900 + ident}},
+                "show": {"title": "Series", "year": 2020, "ids": {"trakt": 1, "tmdb": 20}, "genres": ["science-fiction"]}}
+
+    def test_calendar_chunks_dedup_and_episode_watch_identity(self):
+        from datetime import date
+        from lib import episode_lists
+        from lib.list_request import parse_request
+        with tempfile.TemporaryDirectory() as profile:
+            curator = self.episode_curator(profile)
+            curator.trakt.calendar_shows.return_value = [self.episode(), self.episode(), self.episode(2, ident=101), self.episode(3, "2027-01-01T12:00:00Z", 102)]
+            curator.trakt.watched_shows.return_value = [{"show": {"title": "Series", "year": 2020, "ids": {"trakt": 1}}, "seasons": [{"number": 1, "episodes": [{"number": 1, "plays": 1}]}]}]
+            with patch.object(episode_lists, "date_window", return_value=(date(2026, 10, 5), date(2026, 12, 1))):
+                items, _ = episode_lists.generate(curator, parse_request("my episodes in next 60 days hide watched"), {"genre_labels": ["Sci-Fi"]}, 50)
+            self.assertEqual([row["episode"] for row in items], [2])
+            self.assertEqual(items[0]["ids"]["tmdb"], 1001)
+            self.assertEqual(items[0]["show_ids"]["tmdb"], 20)
+            self.assertGreaterEqual(curator.trakt.calendar_shows.call_count, 2)
+            self.assertTrue(all(call.args[1] <= 33 for call in curator.trakt.calendar_shows.call_args_list))
+            curator.trakt.watched_shows.assert_called_once()
+
+    def test_calendar_failure_keeps_saved_list_and_empty_window_is_valid(self):
+        from datetime import date
+        from lib import episode_lists
+        from lib.list_request import parse_request
+        with tempfile.TemporaryDirectory() as profile:
+            curator = self.episode_curator(profile)
+            curator.trakt.calendar_shows.side_effect = RuntimeError("Offline")
+            original = {"local_id": "keep", "name": "Episodes", "movies": [{"title": "Keep"}], "content_type": "episodes"}
+            with patch.object(episode_lists, "date_window", return_value=(date(2026, 10, 5), date(2026, 10, 10))):
+                with self.assertRaises(RuntimeError):
+                    curator._generate_episode_and_write("Episodes", "my episodes", 20, parse_request("my episodes"), {}, "keyword", managed_record=original, sync_to_trakt=False)
+            self.assertEqual(original["movies"], [{"title": "Keep"}])
+            curator._store_managed_record.assert_not_called()
+        with tempfile.TemporaryDirectory() as profile:
+            curator = self.episode_curator(profile)
+            curator.trakt.calendar_shows.return_value = []
+            record = curator._generate_episode_and_write("Episodes", "my episodes", 20, parse_request("my episodes update daily"), {}, "keyword", sync_to_trakt=False, persist=False)
+            self.assertEqual(record["movies"], [])
+            curator.save_list_preview({"record": record})
+            curator._store_managed_record.assert_called_once()
+
+    def test_episode_refresh_never_reinterprets_with_ai(self):
+        from lib.list_request import parse_request
+        curator = fixture_curator()
+        curator.ai = Mock()
+        record = {"local_id": "keep", "name": "Episodes", "prompt": "my episodes update daily", "content_type": "episodes", "generation_method": "ai", "request_rules": parse_request("my episodes update daily"), "count": 20}
+        curator._managed_record_by_id = Mock(return_value=record)
+        curator._generate_episode_and_write = Mock(return_value=dict(record, movies=[]))
+        curator.refresh_list("keep", silent=True)
+        curator._generate_episode_and_write.assert_called_once()
+        curator.ai.interpret_list_request.assert_not_called()
+        curator.ai.recommend.assert_not_called()
+
+    def test_library_episodes_use_series_aliases_and_episode_specific_exclusions(self):
+        from datetime import date
+        from lib import episode_lists
+        from lib.list_request import parse_request
+        with tempfile.TemporaryDirectory() as profile:
+            curator = self.episode_curator(profile)
+            curator._preference_history_mode.return_value = "kodi"
+            curator._kodi_json_rpc = Mock(side_effect=lambda method, params: {
+                "tvshows": [{"tvshowid": 7, "title": "Series", "year": 2020, "uniqueid": {"tmdb": "20"}}]
+            } if method.endswith("GetTVShows") else {"episodes": [{"tvshowid": 7, "season": 1, "episode": 1, "playcount": 3, "lastplayed": "2024-01-01 12:00:00"}]})
+            curator.trakt.calendar_shows.return_value = [self.episode(1, "2026-10-03T12:00:00Z", 100), self.episode(2, "2026-10-03T13:00:00Z", 101), self.episode(3, "2026-10-03T14:00:00Z", 102)]
+            curator.state["hidden_movies"] = [{"media_type": "movie", "trakt_id": 100}, {"media_type": "episode", "trakt_id": 101}]
+            with patch.object(episode_lists, "date_window", return_value=(date(2026, 10, 1), date(2026, 10, 5))):
+                watched, _ = episode_lists.generate(curator, parse_request("episodes from my Kodi library include watched"), {"history_mode": "plays", "history_comparison": "exact", "history_plays": 3}, 20)
+                self.assertEqual([row["episode"] for row in watched], [1])
+                unseen, _ = episode_lists.generate(curator, parse_request("episodes from my Kodi library hide watched"), {}, 20)
+                self.assertEqual([row["episode"] for row in unseen], [3])
+            curator.trakt.watched_shows.assert_not_called()
+            self.assertTrue(all(not call.kwargs["personal"] for call in curator.trakt.calendar_shows.call_args_list))
+
+    def test_explicit_manual_episode_refresh_overrides_the_global_default(self):
+        from lib.list_request import parse_request
+        curator = fixture_curator()
+        curator._default_regeneration_enabled = Mock(return_value=True)
+        with patch.object(core, "generate_episodes", return_value=([], {})):
+            record = curator._generate_episode_and_write("Episodes", "episodes manual refresh", 20, parse_request("episodes manual refresh"), {}, "keyword", sync_to_trakt=False, persist=False)
+        self.assertFalse(record["regeneration_enabled"])
+
+    def test_missing_trakt_history_is_not_treated_as_unwatched(self):
+        from lib.episode_lists import watch_history
+        curator = fixture_curator()
+        curator._preference_history_mode = Mock(return_value="trakt")
+        curator._has_oauth = Mock(return_value=False)
+        curator._public_username = Mock(return_value="")
+        with self.assertRaisesRegex(RuntimeError, "watch history is not connected"):
+            watch_history(curator)
+
+    def test_dynamic_sources_hide_newly_watched_episodes_without_mutating_saved_items(self):
+        from lib.episode_lists import show_tokens
+        curator = fixture_curator()
+        curator.profile_dir = fixtures.TEST_PROFILE.name
+        episode = {"title": "Pilot", "ids": {"trakt": 100}, "show_ids": {"trakt": 1}, "showtitle": "Series", "season": 1, "episode": 1, "media_type": "episode"}
+        saved = {"local_id": "source", "request_rules": {"hide_watched": True}, "movies": [episode]}
+        before = copy.deepcopy(saved)
+        curator._managed_record_by_id = Mock(return_value=saved)
+        history = {(token, 1, 1): (1, "") for token in show_tokens({"ids": {"trakt": 1}})}
+        with patch("lib.episode_lists.watch_history", return_value=history):
+            result = dynamic.load(curator, {"sources": [{"type": "curatr_list", "list_id": "source", "name": "Episodes"}]})
+        self.assertEqual(result["items"], [])
+        self.assertEqual(saved, before)
+
+    def test_episode_library_playback_and_empty_lists_preserve_episode_identity(self):
+        with patch.object(sys, "argv", ["plugin://plugin.video.curatr/", "1", ""]):
+            p = importlib.import_module("plugin")
+        episode = {"title": "Pilot", "ids": {"trakt": 100, "tmdb": 200}, "show_ids": {"tmdb": 20}, "showtitle": "Series", "season": 1, "episode": 2, "media_type": "episode"}
+        with patch.object(p, "_library_items", side_effect=lambda kind: [{"tvshowid": 7, "title": "Series", "uniqueid": {"tmdb": "20"}}] if kind == "show" else [{"tvshowid": 7, "season": 1, "episode": 1, "file": "/wrong.mkv"}, {"tvshowid": 7, "season": 1, "episode": 2, "file": "/right.mkv"}]):
+            self.assertEqual(p._library_target(episode, "episode"), "/right.mkv")
+        with patch.object(p, "_library_target") as library:
+            self.assertEqual(p._player_target(dict(episode, first_aired="2099-01-01T12:00:00Z")), ("", False, None))
+            library.assert_not_called()
+        curator = fixture_curator()
+        curator.trakt = Mock()
+        curator._managed_record_by_id = Mock(return_value={"content_type": "episodes", "movies": [], "trakt_id": 3})
+        self.assertEqual(p._movie_rows_for_list(curator, "empty"), [])
+        curator.trakt.list_items.assert_not_called()
+
+    def test_episode_sync_uses_episode_ids_and_clears_old_episodes(self):
+        curator = fixture_curator()
+        from lib.trakt import TraktClient
+        curator.trakt = Mock()
+        curator.trakt._unique_int_ids = TraktClient._unique_int_ids
+        curator.trakt.list_items.return_value = [{"movie": {"ids": {"trakt": 10}}}, {"episode": {"ids": {"trakt": 100}}}]
+        curator._sync_list_items("remote", [10], [], [101])
+        curator.trakt.add_episodes.assert_called_once_with("remote", {101})
+        curator.trakt.remove_episodes.assert_called_once_with("remote", {100})
+        curator.trakt.add_movies.assert_not_called()
+        curator.trakt.remove_movies.assert_not_called()
+
+    def test_episode_player_uses_series_ids_and_preserves_coordinates(self):
+        from lib.player_registry import PlayerRegistry
+        registry = object.__new__(PlayerRegistry)
+        player = {"plugin": "plugin.video.example", "play_episode": "plugin://plugin.video.example/?id={tmdb_id}&season={season}&episode={episode}", "open_show": "plugin://plugin.video.example/?show={tmdb_id}"}
+        movie = {"media_type": "episode", "title": "Episode", "showtitle": "Series", "ids": {"tmdb": 999}, "show_ids": {"tmdb": 20}, "season": 0, "episode": 2}
+        self.assertEqual(registry.build_url(player, movie), "plugin://plugin.video.example/?id=20&season=0&episode=2")
+        player.pop("play_episode")
+        self.assertEqual(registry.build_url(player, movie), "plugin://plugin.video.example/?show=20")
+
+    def test_episode_metadata_never_queries_movie_details(self):
+        from lib.metadata_cache import MetadataCache
+        with tempfile.TemporaryDirectory() as profile:
+            cache = MetadataCache(FakeAddon(profile))
+            tmdb = Mock(api_key="test")
+            item = {"media_type": "episode", "title": "Episode", "ids": {"tmdb": 999}, "season": 1, "episode": 2}
+            before = copy.deepcopy(item)
+            cache.enrich([item], tmdb)
+            tmdb.list_item_details.assert_not_called()
+            self.assertEqual(item, before)
+
+    def test_dynamic_preview_loads_two_sources_and_back_always_closes(self):
+        with tempfile.TemporaryDirectory() as profile:
+            curator = fixture_curator()
+            curator.profile_dir = profile
+            curator._managed_record_by_id = Mock(side_effect=lambda ident: {"movies": [{"title": ident, "ids": {"tmdb": ident}}]})
+            draft = dynamic.normalise({"name": "Combined", "sources": [{"type": "curatr_list", "list_id": str(i)} for i in (1, 2)]})
+            result = dynamic.load(curator, draft)
+            self.assertEqual(len(result["items"]), 2)
+            rows = [dict(row, art={}) for row in result["items"]]
+            with patch.object(dynamic_settings, "prepare_items", return_value=rows), patch.object(dynamic_settings, "PreviewWindow") as preview:
+                preview.return_value.failed = False
+                dynamic_settings._preview(curator, draft)
+                self.assertEqual(len(preview.call_args.args[4]()), 2)
+                preview.return_value.doModal.assert_called_once()
+                preview.return_value.close.assert_called_once()
+            obj = object.__new__(dynamic_settings.PreviewWindow)
+            obj.close = Mock()
+            obj.onAction(Mock(getId=lambda: 92))
+            obj.close.assert_called_once()
+            self.assertNotEqual(obj.XML_FILENAME, dynamic_settings.CollectionManagerWindow.XML_FILENAME)
+
+    def test_empty_dynamic_preview_is_explained_without_opening_a_modal(self):
+        curator = fixture_curator()
+        with patch.object(dynamic_settings.xbmcgui, "Dialog") as dialog, patch.object(dynamic_settings, "PreviewWindow") as preview:
+            dynamic_settings._preview(curator, {"name": "Empty", "sources": []})
+            dialog.return_value.ok.assert_called_once()
+            preview.assert_not_called()
+        with patch.object(dynamic_settings.xbmcgui, "Dialog") as dialog, patch.object(dynamic_settings.dynamic, "load", return_value={"items": [], "warnings": ["Source unavailable"]}), patch.object(dynamic_settings, "PreviewWindow") as preview:
+            dynamic_settings._preview(curator, {"name": "Empty", "sources": [{"type": "curatr_list", "list_id": "1"}]})
+            self.assertIn("Source unavailable", dialog.return_value.ok.call_args.args[1])
+            preview.assert_not_called()
+
+    def test_watch_snapshot_preserves_more_than_dynamic_source_limit(self):
+        with tempfile.TemporaryDirectory() as profile:
+            cache = dynamic.SourceCache(profile, max_items=20000)
+            rows = [{"id": index} for index in range(2500)]
+            self.assertEqual(len(cache.get("episodes", lambda: rows)[0]), 2500)
+            self.assertEqual(len(cache.get("episodes", Mock(side_effect=RuntimeError))[0]), 2500)
 
 
 if __name__ == "__main__":

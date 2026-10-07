@@ -7,7 +7,8 @@ import tempfile
 import xbmcvfs
 
 from .bundled_art import components
-from .ui_theme import BACKGROUND_COLOURS, background_colour
+from .colours import BACKGROUND_COLOURS
+from .ui_theme import background_colour, sheen_colour
 
 
 MAX_CUSTOM_BYTES = 12 * 1024 * 1024
@@ -27,11 +28,12 @@ def current_choice(addon, state=None):
 def appearance_signature(addon, state=None):
     state = state if isinstance(state, dict) else {}
     choice = current_choice(addon, state)
+    sheen = sheen_colour(addon)
     if choice == "custom":
         source = str(state.get("menu_background_source") or "")
         if source and xbmcvfs.exists(source):
-            return choice, source
-    return choice, background_colour(addon, choice)
+            return choice, source, sheen
+    return choice, background_colour(addon, choice), sheen
 
 
 def _gradient_source(addon, colour):
