@@ -21,7 +21,7 @@
             <website>https://crabbymondays.github.io/repo/</website>
         </extension>
     </addon>
-    <addon id="plugin.video.curatr" name="curatr" version="1.0.27" provider-name="crabbymondays">
+    <addon id="plugin.video.curatr" name="curatr" version="1.0.42" provider-name="crabbymondays">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" />
@@ -60,7 +60,7 @@
             </assets>
             <source>https://github.com/crabbymondays/repo</source>
             <website>https://crabbymondays.github.io/repo/</website>
-            <news>curatr 1.0.27 updates the add-on icon and gives Dynamic Lists its own layer-group icon. Player settings use clearer Movie Player and Series Player labels. Home widgets carry executable action targets directly. Theme shading is concentrated at the edges and also appears on colour swatches, with a smaller rounded background preview.</news>
+            <news>curatr 1.0.42 applies keyword filters and personal exclusions before filling result budgets, checks complete creator credits and keeps history constraints alongside other filters. Explicit writer/director roles, runtime, country, release windows and sorting are enforced. Empty results explain all-versus-any genres, missing references and exclusions. Service failures retain the draft. Connector spacing is balanced; existing finishes and layouts are retained.</news>
         </extension>
     </addon>
 </addons>
